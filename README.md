@@ -61,7 +61,7 @@ The `Dockerfile` also works on other platforms: Fly.io, Railway, or any VPS.
 cd backend && pytest
 ```
 
-## Features (stages 1–4)
+## Features (stages 1–5)
 - Accounts: sign-up, login, admin/user roles, Free / Pro / Premium plans with enforced limits.
 - Candlestick charts with volume and 1D / 1W / 1M timeframes.
 - Multiple watchlists (create, rename, color, delete; live price and daily change).
@@ -80,6 +80,17 @@ cd backend && pytest
   21-day EMA reclaims, RS line new highs, Bull/Bear Score thresholds and custom price levels.
   Checked in the background every 5 minutes (or on demand with **Check now**), deduplicated per bar,
   with in-app notifications plus optional email and Telegram. Pro and Premium only.
+- **Portfolios**: multiple portfolios built from a buy/sell ledger (average-cost method, fees, fractional shares).
+  Market value, daily change, unrealized and realized P/L, dividends received, and time-weighted performance
+  for 1W / 1M / 3M / 6M / YTD / 1Y / all-time or a custom date range, compared with the S&P 500.
+- **Automatic portfolio profile**: from the tickers you hold, each portfolio is classified as Aggressive Growth,
+  Growth, Momentum, Conservative, Dividend Income, Value, Blue Chip, Defensive, Small & Mid Cap, Speculative,
+  Balanced or sector-concentrated, including combinations (e.g. "Dividend Income + Conservative"), with a
+  1–5 risk level, style scores, sector allocation and plain-English insights. The portfolio list shows each
+  portfolio's profile at a glance.
+- **Model portfolios**: ten ready-made mixes (Aggressive Growth, Tech Innovation, Momentum Leaders refreshed from
+  the live scanner, Quality Growth, Blue Chip Core, Balanced, Value, Dividend Income, Defensive, Conservative),
+  created in one click for any amount.
 - Admin panel: stats, change plan/role, deactivate accounts. The account matching `ADMIN_EMAIL` is promoted
   to administrator on sign-up or on its next login.
 
@@ -97,7 +108,6 @@ service such as cron-job.org.
 Create a class in `backend/engine/strategies/builtin.py` (or a new module imported there) decorated with `@register`. It shows up automatically in the chart's strategy list.
 
 ## Roadmap
-5. Portfolios with automatic classification
 6. Full ticker page + PDF report
 7. Market tools (earnings, Fed, pre/after-hours, screener, gainers)
 8. Journal, Trade Review, backtesting, ML

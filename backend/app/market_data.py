@@ -43,3 +43,36 @@ def quote(symbol: str) -> dict:
         "volume": int(df["volume"].iloc[-1]),
         "date": df.index[-1].strftime("%Y-%m-%d"),
     }
+
+
+_slow_cache: dict[tuple, tuple[float, object]] = {}
+_SLOW_TTL = 12 * 3600
+
+
+def _slow(kind: str, symbol: str, loader):
+    key = (settings.data_provider, kind, symbol.upper())
+    now = time.monotonic()
+    with _lock:
+        hit = _slow_cache.get(key)
+        if hit and now - hit[0] < _SLOW_TTL:
+            return hit[1]
+    value = loader()
+    with _lock:
+        _slow_cache[key] = (now, value)
+    return value
+
+
+def fundamentals(symbol: str) -> dict:
+    """Fundamentals change slowly; cached for 12 hours."""
+    return _slow("fundamentals", symbol, lambda: get_provider(settings.data_provider).fundamentals(symbol.upper()))
+
+
+def dividends(symbol: str) -> pd.Series:
+    return _slow("dividends", symbol, lambda: get_provider(settings.data_provider).dividends(symbol.upper()))
+
+
+def close_on(symbol: str, day) -> float | None:
+    """Closing price on `day`, or the last close before it."""
+    c = history(symbol)["close"]
+    c = c[c.index <= pd.Timestamp(day)]
+    return float(c.iloc[-1]) if len(c) else None

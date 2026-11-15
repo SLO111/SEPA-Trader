@@ -22,6 +22,17 @@ class DataProvider(ABC):
     @abstractmethod
     def history(self, symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame: ...
 
+    def fundamentals(self, symbol: str) -> dict:
+        """Market cap ($B), P/E, dividend yield (%), EPS growth (%), sector, name."""
+        from .fundamentals import reference
+
+        meta = SYMBOLS.get(symbol.upper(), {})
+        return {"name": meta.get("name", symbol.upper()), "sector": meta.get("sector", "Other"), **reference(symbol)}
+
+    def dividends(self, symbol: str) -> pd.Series:
+        """Per-share cash dividends indexed by ex-dividend date."""
+        return pd.Series(dtype=float)
+
 
 def _resample(df: pd.DataFrame, interval: str) -> pd.DataFrame:
     if interval == "1d":
@@ -42,6 +53,15 @@ class SyntheticProvider(DataProvider):
     def history(self, symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
         return _resample(_synthetic_daily(symbol.upper(), years, date.today()), interval)
 
+    def dividends(self, symbol: str) -> pd.Series:
+        """Quarterly demo dividends consistent with the reference dividend yield."""
+        y = (self.fundamentals(symbol).get("dividend_yield") or 0) / 100
+        if y <= 0:
+            return pd.Series(dtype=float)
+        close = self.history(symbol)["close"]
+        dates = close.index[30::63]
+        return pd.Series([round(float(close.loc[d]) * y / 4, 4) for d in dates], index=dates, name="dividends")
+
 
 @lru_cache(maxsize=512)
 def _synthetic_daily(symbol: str, years: int, end: date) -> pd.DataFrame:
@@ -50,8 +70,12 @@ def _synthetic_daily(symbol: str, years: int, end: date) -> pd.DataFrame:
     days = pd.bdate_range(end=end, periods=int(252 * years))
     n = len(days)
 
+    # Daily volatility consistent with the stock's reference beta (riskier stocks swing more).
+    from .fundamentals import reference
+
+    beta = reference(symbol).get("beta")
+    base_vol = 0.004 + 0.010 * beta if beta else rng.uniform(0.011, 0.032)
     # Market regimes: up/down/sideways periods with different volatility.
-    base_vol = rng.uniform(0.011, 0.032)
     drift = np.empty(n)
     vol = np.empty(n)
     i = 0
@@ -95,6 +119,42 @@ class YFinanceProvider(DataProvider):
         df = df.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
         df.index = pd.DatetimeIndex(df.index.tz_localize(None).normalize(), name="date")
         return _resample(df, interval)
+
+    def fundamentals(self, symbol: str) -> dict:
+        import yfinance as yf
+
+        base = super().fundamentals(symbol)
+        try:
+            info = yf.Ticker(symbol).info or {}
+        except Exception:
+            return base
+        cap = info.get("marketCap")
+        div = info.get("trailingAnnualDividendYield")  # a fraction, e.g. 0.027
+        growth = info.get("earningsGrowth")  # a fraction
+        live = {
+            "name": info.get("shortName") or base["name"],
+            "sector": info.get("sector") or base["sector"],
+            "market_cap_b": round(cap / 1e9, 1) if cap else base["market_cap_b"],
+            "pe": round(info["trailingPE"], 1) if info.get("trailingPE") else base["pe"],
+            "dividend_yield": round(div * 100, 2) if div is not None else base["dividend_yield"],
+            "eps_growth": round(growth * 100, 1) if growth is not None else base["eps_growth"],
+            "beta": round(info["beta"], 2) if info.get("beta") is not None else base["beta"],
+        }
+        if info.get("quoteType") == "ETF":
+            live["etf"] = True
+        return {**base, **live}
+
+    def dividends(self, symbol: str) -> pd.Series:
+        import yfinance as yf
+
+        try:
+            s = yf.Ticker(symbol).dividends
+        except Exception:
+            return pd.Series(dtype=float)
+        if s is None or s.empty:
+            return pd.Series(dtype=float)
+        s.index = pd.DatetimeIndex(s.index.tz_localize(None).normalize())
+        return s.astype(float)
 
 
 _PROVIDERS: dict[str, type[DataProvider]] = {"synthetic": SyntheticProvider, "yfinance": YFinanceProvider}

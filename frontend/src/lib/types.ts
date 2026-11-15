@@ -144,3 +144,66 @@ export type NotifySettings = {
   email_available: boolean;
   telegram_available: boolean;
 };
+
+export type ProfileKey =
+  | "aggressive" | "growth" | "momentum" | "conservative" | "dividend" | "value"
+  | "blue_chip" | "defensive" | "small_cap" | "speculative" | "balanced" | "concentrated";
+
+export type ClassificationBrief = { primary: ProfileKey | null; label: string; secondary: ProfileKey[]; risk_level: number | null };
+
+export type Classification = ClassificationBrief & {
+  scores: { key: ProfileKey; label: string; description: string; score: number }[];
+  insights: string[];
+  sectors: { sector: string; weight: number }[];
+};
+
+export type PortfolioSummary = {
+  id: number;
+  name: string;
+  description: string;
+  template_id: string | null;
+  created_at: string;
+  positions_count: number;
+  value: number;
+  cost: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number | null;
+  realized_pnl: number;
+  day_change: number;
+  day_change_pct: number | null;
+  classification: ClassificationBrief;
+  symbols: string[];
+};
+
+export type Holding = {
+  symbol: string; name: string; sector: string; shares: number; avg_cost: number; price: number; value: number; cost: number;
+  pnl: number; pnl_pct: number | null; day_change: number; day_change_pct: number; weight: number;
+  beta: number | null; dividend_yield: number | null; pe: number | null;
+};
+
+export type PortfolioTxn = { id: number; date: string; symbol: string; side: "buy" | "sell"; shares: number; price: number; fees: number };
+
+export type PortfolioDetail = Omit<PortfolioSummary, "classification"> & {
+  classification: Classification;
+  positions: Holding[];
+  dividends: { date: string; symbol: string; per_share: number; shares: number; amount: number }[];
+  dividends_total: number;
+  transactions: PortfolioTxn[];
+};
+
+export type Performance = {
+  period: string;
+  start?: string;
+  end?: string;
+  series: { time: string; portfolio: number; benchmark?: number }[];
+  portfolio_return: number | null;
+  benchmark_return: number | null;
+  start_value: number;
+  end_value: number;
+  pnl: number;
+};
+
+export type PortfolioTemplate = {
+  id: string; name: string; profile: ProfileKey; risk: number; description: string; symbols: string[];
+  detected: { label: string; risk_level: number | null; dividend_yield: number | null };
+};
