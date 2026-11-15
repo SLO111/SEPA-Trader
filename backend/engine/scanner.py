@@ -7,7 +7,7 @@ from typing import Callable
 import pandas as pd
 
 from . import move_detector as md
-from .data.universe import SYMBOLS
+from .data.universe import SYMBOLS, stock_symbols
 from .sepa import rs_raw, rs_ratings, trend_template
 from .vcp import detect_vcp
 
@@ -15,7 +15,7 @@ BENCHMARK = "SPY"
 
 
 def scan_universe(history: Callable[[str], pd.DataFrame], symbols: list[str] | None = None) -> list[dict]:
-    symbols = symbols or [s for s, m in SYMBOLS.items() if m["sector"] != "ETF"]
+    symbols = symbols or stock_symbols()
     try:
         bench = history(BENCHMARK)
     except Exception:

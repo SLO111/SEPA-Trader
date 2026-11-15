@@ -47,6 +47,11 @@ REFERENCE: dict[str, dict] = {
     "GE": {"market_cap_b": 300, "pe": 45, "dividend_yield": 0.4, "eps_growth": 25, "beta": 1.2},
     "SPY": {"market_cap_b": None, "pe": 26, "dividend_yield": 1.2, "eps_growth": 8, "beta": 1.0, "etf": True},
     "QQQ": {"market_cap_b": None, "pe": 33, "dividend_yield": 0.5, "eps_growth": 12, "beta": 1.15, "etf": True},
+    "DIA": {"market_cap_b": None, "pe": 23, "dividend_yield": 1.6, "eps_growth": 6, "beta": 0.9, "etf": True},
+    "IWM": {"market_cap_b": None, "pe": 18, "dividend_yield": 1.2, "eps_growth": 5, "beta": 1.2, "etf": True},
+    "TLT": {"market_cap_b": None, "pe": None, "dividend_yield": 4.3, "eps_growth": None, "beta": 0.25, "etf": True},
+    "HYG": {"market_cap_b": None, "pe": None, "dividend_yield": 5.8, "eps_growth": None, "beta": 0.3, "etf": True},
+    "LQD": {"market_cap_b": None, "pe": None, "dividend_yield": 4.4, "eps_growth": None, "beta": 0.2, "etf": True},
 }
 
 EMPTY = {"market_cap_b": None, "pe": None, "dividend_yield": 0.0, "eps_growth": None, "beta": None}

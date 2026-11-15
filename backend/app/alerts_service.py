@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from engine.data.universe import SYMBOLS
+from engine.data.universe import stock_symbols
 from engine.triggers import evaluate
 
 from . import market_data, notify
@@ -29,7 +29,7 @@ def rule_symbols(db: Session, rule: AlertRule) -> list[str]:
     if rule.scope == "watchlist":
         wl = db.get(Watchlist, rule.watchlist_id) if rule.watchlist_id else None
         return [i.symbol for i in wl.items] if wl and wl.user_id == rule.user_id else []
-    return [s for s, m in SYMBOLS.items() if m["sector"] != "ETF"]
+    return stock_symbols()
 
 
 def _params(rule: AlertRule) -> dict:

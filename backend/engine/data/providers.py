@@ -39,6 +39,15 @@ class DataProvider(ABC):
 
         return synthetic_company(symbol, self.history(symbol), self.dividends(symbol))
 
+    def earnings(self, symbol: str) -> dict:
+        """{"next_date", "next_eps_estimate", "history": [{date, eps_estimate, eps_actual, surprise_pct}]} (newest first)."""
+        e = self.company(symbol)["earnings"]
+        return {"next_date": e.get("next_date"), "next_eps_estimate": None, "history": e.get("history", [])}
+
+    def extended_hours(self, symbols: list[str]) -> list[dict]:
+        """Pre-market / after-hours quotes. Needs live intraday data; the base provider has none."""
+        return []
+
 
 def _resample(df: pd.DataFrame, interval: str) -> pd.DataFrame:
     if interval == "1d":
@@ -59,6 +68,8 @@ class SyntheticProvider(DataProvider):
     def history(self, symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
         if not known_symbol(symbol):
             raise LookupError(f"No demo data for {symbol.upper()}")  # never invent prices for unknown tickers
+        if symbol.upper() == "^VIX":
+            return _resample(_synthetic_vix(years, date.today()), interval)
         return _resample(_synthetic_daily(symbol.upper(), years, date.today()), interval)
 
     def dividends(self, symbol: str) -> pd.Series:
@@ -111,6 +122,14 @@ def _synthetic_daily(symbol: str, years: int, end: date) -> pd.DataFrame:
     )
 
 
+def _synthetic_vix(years: int, end: date) -> pd.DataFrame:
+    """Demo VIX: the S&P 500 proxy's 20-day realized volatility, scaled like the real index (~12-40)."""
+    spy = _synthetic_daily("SPY", years, end)
+    rv = spy["close"].pct_change().rolling(20, min_periods=5).std() * np.sqrt(252) * 100
+    vix = (rv * 0.9 + 4).bfill().clip(lower=9)
+    return pd.DataFrame({"open": vix, "high": vix * 1.04, "low": vix * 0.96, "close": vix, "volume": 0.0}, index=spy.index)
+
+
 class YFinanceProvider(DataProvider):
     """Free real data from Yahoo Finance (delayed). Fine for personal use and development;
     paying users require a provider with a commercial license."""
@@ -156,6 +175,67 @@ class YFinanceProvider(DataProvider):
         from .company import yfinance_company
 
         return yfinance_company(symbol, self.history(symbol), self.dividends(symbol))
+
+    def earnings(self, symbol: str) -> dict:
+        import yfinance as yf
+
+        out = {"next_date": None, "next_eps_estimate": None, "history": []}
+        try:
+            ed = yf.Ticker(symbol).earnings_dates
+        except Exception:
+            return out
+        if ed is None or ed.empty:
+            return out
+        ed = ed.copy()
+        ed.index = ed.index.tz_localize(None) if ed.index.tz else ed.index
+        now = pd.Timestamp.now()
+        future = ed[ed.index > now].sort_index()
+        if len(future):
+            out["next_date"] = future.index[0].strftime("%Y-%m-%d")
+            est = future["EPS Estimate"].iloc[0]
+            out["next_eps_estimate"] = None if pd.isna(est) else float(est)
+        past = ed[(ed.index <= now) & ed["Reported EPS"].notna()].sort_index(ascending=False).head(8)
+        num = lambda v: None if pd.isna(v) else float(v)
+        out["history"] = [{"date": i.strftime("%Y-%m-%d"), "eps_estimate": num(r.get("EPS Estimate")), "eps_actual": num(r.get("Reported EPS")),
+                           "surprise_pct": num(r.get("Surprise(%)"))} for i, r in past.iterrows()]
+        return out
+
+    def extended_hours(self, symbols: list[str]) -> list[dict]:
+        """Latest pre-market or after-hours price vs. the relevant regular-session close (one batched download)."""
+        import yfinance as yf
+        from zoneinfo import ZoneInfo
+
+        et = ZoneInfo("America/New_York")
+        data = yf.download(symbols, period="5d", interval="5m", prepost=True, group_by="ticker", progress=False, auto_adjust=False, threads=True)
+        out = []
+        for s in symbols:
+            try:
+                d = (data[s] if len(symbols) > 1 else data).dropna(subset=["Close"])
+            except KeyError:
+                continue
+            if d.empty:
+                continue
+            idx = d.index.tz_convert(et) if d.index.tz else d.index.tz_localize("UTC").tz_convert(et)
+            d = d.set_axis(idx)
+            minutes = idx.hour * 60 + idx.minute
+            regular = d[(minutes >= 570) & (minutes < 960)]
+            if regular.empty:
+                continue
+            last_ts = idx[-1]
+            last_min = last_ts.hour * 60 + last_ts.minute
+            if last_min >= 960:  # after hours: vs. today's regular close
+                session, ref = "after_hours", float(regular[regular.index.date == last_ts.date()]["Close"].iloc[-1]) if (regular.index.date == last_ts.date()).any() else float(regular["Close"].iloc[-1])
+            elif last_min < 570:  # pre-market: vs. the previous regular close
+                session, ref = "pre_market", float(regular[regular.index.date < last_ts.date()]["Close"].iloc[-1])
+            else:
+                continue  # regular session: nothing extended to show
+            price = float(d["Close"].iloc[-1])
+            ext = d[d.index.date == last_ts.date()]
+            ext = ext[(ext.index.hour * 60 + ext.index.minute) >= 960] if session == "after_hours" else ext[(ext.index.hour * 60 + ext.index.minute) < 570]
+            out.append({"symbol": s, "session": session, "price": round(price, 2), "reference_close": round(ref, 2),
+                        "change": round(price - ref, 2), "change_pct": round((price / ref - 1) * 100, 2),
+                        "volume": int(ext["Volume"].sum()) if len(ext) else 0, "time": last_ts.strftime("%Y-%m-%d %H:%M ET")})
+        return out
 
     def dividends(self, symbol: str) -> pd.Series:
         import yfinance as yf

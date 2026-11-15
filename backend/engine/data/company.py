@@ -97,12 +97,21 @@ def synthetic_company(symbol: str, history: pd.DataFrame, dividends: pd.Series) 
                 row[k] = round(v, 4 if k == "eps" else 0)
     out["financials"] = {"annual": annual, "quarterly": quarterly}
 
+    # Companies report 3-6 weeks after the quarter ends.
+    report_lag = int(rng.integers(21, 42))
     hist = []
     for q in quarterly[:8]:
+        reported = pd.Timestamp(q["period"]) + pd.Timedelta(days=report_lag)
+        if reported > pd.Timestamp(date.today()):
+            continue
         est = q["eps"] * rng.uniform(0.9, 1.02)
-        hist.append({"date": q["period"], "eps_estimate": round(est, 2), "eps_actual": round(q["eps"], 2),
+        hist.append({"date": reported.strftime("%Y-%m-%d"), "eps_estimate": round(est, 2), "eps_actual": round(q["eps"], 2),
                      "surprise_pct": round((q["eps"] / est - 1) * 100, 1) if est else None})
-    next_date = (pd.Timestamp(date.today()) + pd.Timedelta(days=int(rng.integers(7, 80)))).strftime("%Y-%m-%d")
+    next_q_end = last_q_end + pd.offsets.QuarterEnd(1)
+    next_report = next_q_end + pd.Timedelta(days=report_lag)
+    if next_report <= pd.Timestamp(date.today()):
+        next_report = pd.Timestamp(date.today()) + pd.Timedelta(days=int(rng.integers(3, 20)))
+    next_date = next_report.strftime("%Y-%m-%d")
     out["earnings"] = {"next_date": next_date, "history": hist}
 
     last = annual[0]

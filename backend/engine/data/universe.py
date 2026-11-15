@@ -39,7 +39,20 @@ SYMBOLS: dict[str, dict] = {
     "GE": {"name": "GE Aerospace", "sector": "Industrials", "exchange": "NYSE"},
     "SPY": {"name": "SPDR S&P 500 ETF", "sector": "ETF", "exchange": "NYSE Arca"},
     "QQQ": {"name": "Invesco QQQ Trust", "sector": "ETF", "exchange": "NASDAQ"},
+    "DIA": {"name": "SPDR Dow Jones Industrial Average ETF", "sector": "ETF", "exchange": "NYSE Arca"},
+    "IWM": {"name": "iShares Russell 2000 ETF", "sector": "ETF", "exchange": "NYSE Arca"},
+    "TLT": {"name": "iShares 20+ Year Treasury Bond ETF", "sector": "ETF", "exchange": "NASDAQ"},
+    "HYG": {"name": "iShares iBoxx High Yield Corporate Bond ETF", "sector": "ETF", "exchange": "NYSE Arca"},
+    "LQD": {"name": "iShares iBoxx Investment Grade Corporate Bond ETF", "sector": "ETF", "exchange": "NYSE Arca"},
+    "^VIX": {"name": "CBOE Volatility Index", "sector": "Index", "exchange": "CBOE"},
 }
+
+NON_STOCK_SECTORS = {"ETF", "Index"}
+
+
+def stock_symbols() -> list[str]:
+    """Individual stocks only (no ETFs or indices): the universe for scans, screens and breadth."""
+    return [s for s, m in SYMBOLS.items() if m["sector"] not in NON_STOCK_SECTORS]
 
 
 def search(query: str, limit: int = 10) -> list[dict]:

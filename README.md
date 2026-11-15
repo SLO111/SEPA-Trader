@@ -61,7 +61,7 @@ The `Dockerfile` also works on other platforms: Fly.io, Railway, or any VPS.
 cd backend && pytest
 ```
 
-## Features (stages 1–6)
+## Features (stages 1–7)
 - Accounts: sign-up, login, admin/user roles, Free / Pro / Premium plans with enforced limits.
 - Candlestick charts with volume and 1D / 1W / 1M timeframes.
 - Multiple watchlists (create, rename, color, delete; live price and daily change).
@@ -99,6 +99,18 @@ cd backend && pytest
   SEPA checklist, financials, earnings, analyst ratings and peers. See `docs/sample-report.pdf` (demo data).
 - In demo mode (`DATA_PROVIDER=synthetic`) company data is generated and clearly labeled; news, named holders
   and insider trades are only shown with a live data provider.
+- **Markets page**:
+  - Overview: S&P 500, Nasdaq 100, Dow, Russell 2000 and VIX; top gainers / losers / most active; market breadth;
+    sector rotation with emerging themes; market leaders.
+  - **Fear & Greed index**: SEPA Trader's own sentiment gauge (0 = extreme fear, 100 = extreme greed) built from six
+    components (market momentum, stock price strength, breadth, volatility, safe-haven demand, junk-bond demand),
+    each scored against its own last 12 months, with a 1-year history and previous close / week / month / year.
+  - Earnings calendar: upcoming reports (90 days) and recent results with EPS surprise and the price reaction.
+  - Pre-market and after-hours movers (live data provider only).
+  - Fed monitor: target range, effective rate, next FOMC meeting, Treasury yields and the yield curve, a
+    market-implied outlook (estimated from T-bill yields) and decision history, from FRED.
+  - Screener (Pro/Premium): presets for undervalued, growth at a reasonable price, high dividend, SEPA leaders,
+    near 52-week highs, oversold and momentum, plus filters for sector, market cap, P/E, yield, RS and trend.
 - Admin panel: stats, change plan/role, deactivate accounts. The account matching `ADMIN_EMAIL` is promoted
   to administrator on sign-up or on its next login.
 
@@ -116,7 +128,6 @@ service such as cron-job.org.
 Create a class in `backend/engine/strategies/builtin.py` (or a new module imported there) decorated with `@register`. It shows up automatically in the chart's strategy list.
 
 ## Roadmap
-7. Market tools (earnings, Fed, pre/after-hours, screener, gainers)
 8. Journal, Trade Review, backtesting, ML
 9. Stripe payments
 

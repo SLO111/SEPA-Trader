@@ -81,3 +81,37 @@ def close_on(symbol: str, day) -> float | None:
 def company(symbol: str) -> dict:
     """Company overview (profile, financials, analysts, ...); cached for 12 hours."""
     return _slow("company", symbol, lambda: get_provider(settings.data_provider).company(symbol.upper()))
+
+
+def earnings(symbol: str) -> dict:
+    return _slow("earnings", symbol, lambda: get_provider(settings.data_provider).earnings(symbol.upper()))
+
+
+_fast_cache: dict[str, tuple[float, object]] = {}
+
+
+def _fast(key: str, ttl: float, loader):
+    now = time.monotonic()
+    with _lock:
+        hit = _fast_cache.get(key)
+        if hit and now - hit[0] < ttl:
+            return hit[1]
+    value = loader()
+    with _lock:
+        _fast_cache[key] = (now, value)
+    return value
+
+
+def extended_hours(symbols: list[str]) -> list[dict]:
+    """Pre-market / after-hours quotes, refreshed every 5 minutes."""
+    key = f"{settings.data_provider}:ext:{','.join(sorted(symbols))}"
+    return _fast(key, 300, lambda: get_provider(settings.data_provider).extended_hours(symbols))
+
+
+def fed() -> dict:
+    """Fed rate monitor data (FRED), refreshed every 6 hours. Demo data in synthetic mode."""
+    from engine.data import fed as fedmod
+
+    if settings.data_provider == "synthetic":
+        return _fast("fed:demo", 6 * 3600, fedmod.demo)
+    return _fast("fed:live", 6 * 3600, fedmod.live)

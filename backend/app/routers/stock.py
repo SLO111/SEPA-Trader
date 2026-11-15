@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
-from engine.data.universe import SYMBOLS
+from engine.data.universe import NON_STOCK_SECTORS, SYMBOLS
 from engine.report import build_pdf, period_returns, takeaways, verdict
 from engine.scanner import sepa_report
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/stock", tags=["stock"])
 
 def _peers(symbol: str, sector: str) -> list[dict]:
     rs = {r["symbol"]: r["rs_rating"] for r in cached_scan()}
-    candidates = [s for s, m in SYMBOLS.items() if m["sector"] == sector and s != symbol and m["sector"] != "ETF"]
+    candidates = [s for s, m in SYMBOLS.items() if m["sector"] == sector and s != symbol and m["sector"] not in NON_STOCK_SECTORS]
     rows = []
     for s in candidates:
         try:
