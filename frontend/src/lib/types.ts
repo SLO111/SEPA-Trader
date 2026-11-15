@@ -207,3 +207,36 @@ export type PortfolioTemplate = {
   id: string; name: string; profile: ProfileKey; risk: number; description: string; symbols: string[];
   detected: { label: string; risk_level: number | null; dividend_yield: number | null };
 };
+
+export type FinRow = Record<string, number | string | null> & { period: string };
+
+export type Company = {
+  symbol: string; name: string; sector: string; industry: string; exchange: string; currency: string; demo: boolean;
+  profile: { description: string; website: string | null; employees: number | null; headquarters: string | null };
+  stats: { market_cap_b?: number | null; shares_outstanding_m?: number | null; beta?: number | null; week52_high?: number | null; week52_low?: number | null; avg_volume?: number | null; eps_ttm?: number | null };
+  valuation: { pe?: number | null; forward_pe?: number | null; peg?: number | null; ps?: number | null; pb?: number | null; ev_ebitda?: number | null };
+  profitability: { gross_margin?: number | null; operating_margin?: number | null; net_margin?: number | null; roe?: number | null; roa?: number | null; revenue_growth?: number | null; eps_growth?: number | null };
+  health: { cash_b?: number | null; debt_b?: number | null; debt_to_equity?: number | null; current_ratio?: number | null };
+  dividends: { yield: number | null; annual: number | null; payout_ratio: number | null; ex_date: string | null; history: { date: string; amount: number }[] };
+  financials: { annual: FinRow[]; quarterly: FinRow[] };
+  earnings: { next_date: string | null; history: { date: string; eps_estimate: number | null; eps_actual: number | null; surprise_pct: number | null }[] };
+  analysts: { rating: string | null; score: number | null; counts: Record<string, number>; total: number; target_mean: number | null; target_high: number | null; target_low: number | null; upside_pct: number | null } | null;
+  ownership: {
+    institutional_pct: number | null; insider_pct: number | null;
+    top_holders: { name: string; pct: number | null; shares: number | null; value: number | null }[];
+    insider_transactions: { date: string | null; insider: string; position: string; transaction: string; shares: number | null; value: number | null }[];
+  };
+  news: { title: string; url: string; publisher: string | null; published: string | null }[];
+};
+
+export type Peer = { symbol: string; name: string; price: number; change_pct: number; market_cap_b: number | null; pe: number | null; dividend_yield: number | null; rs_rating: number | null };
+
+export type StockData = {
+  company: Company;
+  quote: Quote;
+  returns: Record<string, number | null>;
+  sepa: SepaReport;
+  peers: Peer[];
+  takeaways: { tone: "positive" | "negative" | "neutral"; text: string }[];
+  verdict: string;
+};

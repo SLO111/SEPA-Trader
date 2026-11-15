@@ -76,3 +76,8 @@ def close_on(symbol: str, day) -> float | None:
     c = history(symbol)["close"]
     c = c[c.index <= pd.Timestamp(day)]
     return float(c.iloc[-1]) if len(c) else None
+
+
+def company(symbol: str) -> dict:
+    """Company overview (profile, financials, analysts, ...); cached for 12 hours."""
+    return _slow("company", symbol, lambda: get_provider(settings.data_provider).company(symbol.upper()))

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import SymbolSearch from "./SymbolSearch";
 import { useAuth } from "@/lib/auth";
 
 const NAV = [
@@ -91,6 +92,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
           )}
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
+          <SymbolSearch />
           <span className={`rounded px-2 py-0.5 text-xs font-medium ${PLAN_STYLE[user.plan]}`}>{user.limits.label}</span>
           <span className="hidden text-muted sm:inline">{user.name || user.email}</span>
           <button

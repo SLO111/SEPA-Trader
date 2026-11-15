@@ -98,8 +98,12 @@ function ChartWorkspace() {
             Lists
           </button>
           <div className="flex items-baseline gap-2">
-            <h1 className="text-lg font-semibold">{data?.symbol ?? symbol}</h1>
-            <span className="hidden text-sm text-muted sm:inline">{data?.name}</span>
+            <Link href={`/stock?s=${encodeURIComponent(symbol)}`} className="text-lg font-semibold hover:text-accent" title="Company overview">
+              {data?.symbol ?? symbol}
+            </Link>
+            <Link href={`/stock?s=${encodeURIComponent(symbol)}`} className="hidden text-sm text-muted hover:text-text sm:inline">
+              {data?.name}
+            </Link>
             <span className="text-xs text-muted">{data?.exchange}</span>
           </div>
           {q?.price !== undefined && (

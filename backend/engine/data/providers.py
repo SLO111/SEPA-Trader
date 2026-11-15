@@ -33,6 +33,12 @@ class DataProvider(ABC):
         """Per-share cash dividends indexed by ex-dividend date."""
         return pd.Series(dtype=float)
 
+    def company(self, symbol: str) -> dict:
+        """Full company overview for the ticker page (see engine/data/company.py)."""
+        from .company import synthetic_company
+
+        return synthetic_company(symbol, self.history(symbol), self.dividends(symbol))
+
 
 def _resample(df: pd.DataFrame, interval: str) -> pd.DataFrame:
     if interval == "1d":
@@ -51,6 +57,8 @@ class SyntheticProvider(DataProvider):
     name = "synthetic"
 
     def history(self, symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
+        if not known_symbol(symbol):
+            raise LookupError(f"No demo data for {symbol.upper()}")  # never invent prices for unknown tickers
         return _resample(_synthetic_daily(symbol.upper(), years, date.today()), interval)
 
     def dividends(self, symbol: str) -> pd.Series:
@@ -143,6 +151,11 @@ class YFinanceProvider(DataProvider):
         if info.get("quoteType") == "ETF":
             live["etf"] = True
         return {**base, **live}
+
+    def company(self, symbol: str) -> dict:
+        from .company import yfinance_company
+
+        return yfinance_company(symbol, self.history(symbol), self.dividends(symbol))
 
     def dividends(self, symbol: str) -> pd.Series:
         import yfinance as yf

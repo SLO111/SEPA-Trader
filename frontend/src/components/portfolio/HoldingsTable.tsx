@@ -27,7 +27,7 @@ export default function HoldingsTable({ rows }: { rows: Holding[] }) {
               {rows.map((r) => (
                 <tr key={r.symbol} className="border-t border-line">
                   <td className="px-4 py-2">
-                    <Link href={`/chart?s=${encodeURIComponent(r.symbol)}`} className="font-medium hover:text-accent">
+                    <Link href={`/stock?s=${encodeURIComponent(r.symbol)}`} className="font-medium hover:text-accent">
                       {r.symbol}
                     </Link>
                     <div className="max-w-[180px] truncate text-xs text-muted">{r.sector}</div>

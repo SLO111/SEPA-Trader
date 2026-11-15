@@ -61,7 +61,7 @@ The `Dockerfile` also works on other platforms: Fly.io, Railway, or any VPS.
 cd backend && pytest
 ```
 
-## Features (stages 1–5)
+## Features (stages 1–6)
 - Accounts: sign-up, login, admin/user roles, Free / Pro / Premium plans with enforced limits.
 - Candlestick charts with volume and 1D / 1W / 1M timeframes.
 - Multiple watchlists (create, rename, color, delete; live price and daily change).
@@ -91,6 +91,14 @@ cd backend && pytest
 - **Model portfolios**: ten ready-made mixes (Aggressive Growth, Tech Innovation, Momentum Leaders refreshed from
   the live scanner, Quality Growth, Blue Chip Core, Balanced, Value, Dividend Income, Defensive, Conservative),
   created in one click for any amount.
+- **Ticker page** (search any symbol from the header): price chart and period returns, an automated summary with
+  positive/negative takeaways, key statistics (valuation, margins, growth, balance sheet), SEPA analysis,
+  company profile and peers; plus tabs for annual/quarterly financials, earnings (estimates vs. actuals),
+  dividends, analyst ratings and price targets, ownership and insider trades, and news.
+- **PDF report** for any company (Premium): summary, price chart with 50/200-day SMAs, key statistics, returns,
+  SEPA checklist, financials, earnings, analyst ratings and peers. See `docs/sample-report.pdf` (demo data).
+- In demo mode (`DATA_PROVIDER=synthetic`) company data is generated and clearly labeled; news, named holders
+  and insider trades are only shown with a live data provider.
 - Admin panel: stats, change plan/role, deactivate accounts. The account matching `ADMIN_EMAIL` is promoted
   to administrator on sign-up or on its next login.
 
@@ -108,7 +116,6 @@ service such as cron-job.org.
 Create a class in `backend/engine/strategies/builtin.py` (or a new module imported there) decorated with `@register`. It shows up automatically in the chart's strategy list.
 
 ## Roadmap
-6. Full ticker page + PDF report
 7. Market tools (earnings, Fed, pre/after-hours, screener, gainers)
 8. Journal, Trade Review, backtesting, ML
 9. Stripe payments

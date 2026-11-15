@@ -121,7 +121,9 @@ function Scanner() {
                 rows.map((r) => (
                   <tr key={r.symbol} onClick={() => router.push(`/chart?s=${encodeURIComponent(r.symbol)}`)} className="cursor-pointer border-t border-line hover:bg-panel/70">
                     <td className="px-4 py-2.5">
-                      <div className="font-medium">{r.symbol}</div>
+                      <Link href={`/stock?s=${encodeURIComponent(r.symbol)}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-accent">
+                        {r.symbol}
+                      </Link>
                       <div className="max-w-[200px] truncate text-xs text-muted">{r.name}</div>
                     </td>
                     <td className="tabular px-4 py-2.5 text-right">{r.price.toFixed(2)}</td>

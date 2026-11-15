@@ -49,3 +49,22 @@ export const post = <T>(path: string, body: unknown) => api<T>(path, { method: "
 export const patch = <T>(path: string, body: unknown) => api<T>(path, { method: "PATCH", body: JSON.stringify(body) });
 export const del = <T>(path: string) => api<T>(path, { method: "DELETE" });
 export const put = <T>(path: string, body: unknown) => api<T>(path, { method: "PUT", body: JSON.stringify(body) });
+
+/** Download an authenticated file (e.g. a PDF report) and save it with the server-provided name. */
+export async function download(path: string, fallbackName: string) {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${BASE}${path}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, typeof data.detail === "string" ? data.detail : "Download failed");
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
