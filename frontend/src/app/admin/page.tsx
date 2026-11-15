@@ -6,7 +6,12 @@ import { api, patch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
-type Stats = { total_users: number; by_plan: Record<string, number> };
+type Stats = {
+  total_users: number; by_plan: Record<string, number>; new_users_30d: number; mrr: number; arr: number; active_subscriptions: number;
+  past_due: number; canceling: number; revenue_30d: number; failed_payments_30d: number; churned_30d: number;
+  recent_payments: { date: string; email: string | null; amount: number; currency: string; status: string }[];
+};
+const money = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 function AdminPanel() {
   const { user: me } = useAuth();
@@ -33,7 +38,11 @@ function AdminPanel() {
 
   const tiles = stats
     ? [
-        { label: "Users", value: stats.total_users },
+        { label: "MRR", value: money(stats.mrr), sub: `ARR ${money(stats.arr)}` },
+        { label: "Revenue (30 days)", value: money(stats.revenue_30d), sub: `${stats.failed_payments_30d} failed payment${stats.failed_payments_30d === 1 ? "" : "s"}` },
+        { label: "Active subscriptions", value: stats.active_subscriptions, sub: `${stats.past_due} past due · ${stats.canceling} canceling` },
+        { label: "Churned (30 days)", value: stats.churned_30d, sub: "Subscriptions canceled" },
+        { label: "Users", value: stats.total_users, sub: `+${stats.new_users_30d} in 30 days` },
         { label: "Free", value: stats.by_plan.free },
         { label: "Pro", value: stats.by_plan.pro },
         { label: "Premium", value: stats.by_plan.premium },
@@ -49,9 +58,27 @@ function AdminPanel() {
             <div key={t.label} className="rounded-xl border border-line bg-panel p-4">
               <div className="text-xs text-muted">{t.label}</div>
               <div className="tabular mt-1 text-2xl font-semibold">{t.value}</div>
+              {"sub" in t && t.sub && <div className="text-xs text-muted">{t.sub}</div>}
             </div>
           ))}
         </div>
+        {stats && stats.recent_payments.length > 0 && (
+          <div className="mb-8 overflow-x-auto rounded-xl border border-line">
+            <h2 className="px-4 pt-3 font-semibold">Recent payments</h2>
+            <table className="mt-2 w-full text-sm">
+              <tbody>
+                {stats.recent_payments.map((p, i) => (
+                  <tr key={i} className="border-t border-line">
+                    <td className="tabular px-4 py-2 text-muted">{new Date(p.date).toLocaleDateString("en-US")}</td>
+                    <td className="px-4 py-2">{p.email ?? "—"}</td>
+                    <td className="tabular px-4 py-2 text-right">{money(p.amount)}</td>
+                    <td className={`px-4 py-2 text-right ${p.status === "paid" ? "text-up" : "text-down"}`}>{p.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         {error && <p className="mb-4 rounded-md bg-down/10 px-3 py-2 text-sm text-down">{error}</p>}
         <div className="overflow-x-auto rounded-xl border border-line">
           <table className="w-full text-sm">
@@ -60,6 +87,7 @@ function AdminPanel() {
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Plan</th>
+                <th className="px-4 py-3">Subscription</th>
                 <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3">Active</th>
                 <th className="px-4 py-3">Created</th>
@@ -76,6 +104,11 @@ function AdminPanel() {
                       <option value="pro">Pro</option>
                       <option value="premium">Premium</option>
                     </select>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs">
+                    <span className={u.subscription_status === "active" ? "text-up" : u.subscription_status === "past_due" ? "text-down" : "text-muted"}>
+                      {u.subscription_status && u.subscription_status !== "none" ? u.subscription_status : "—"}
+                    </span>
                   </td>
                   <td className="px-4 py-2.5">
                     <select

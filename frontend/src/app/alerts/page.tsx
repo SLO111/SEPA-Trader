@@ -152,7 +152,7 @@ function AlertsWorkspace() {
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
                   <p className="font-medium text-amber-300">Alerts are available on the Pro and Premium plans.</p>
                   <p className="mt-1 text-muted">Get notified about breakouts, unusual volume, gaps and warning signs on your watchlists or the entire market.</p>
-                  <Link href="/#pricing" className="mt-3 inline-block text-accent hover:underline">
+                  <Link href="/billing" className="mt-3 inline-block text-accent hover:underline">
                     See plans
                   </Link>
                 </div>

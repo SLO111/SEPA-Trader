@@ -24,6 +24,7 @@ export type User = {
   limits: PlanLimits;
   created_at: string;
   is_active?: boolean;
+  subscription_status?: string | null;
 };
 
 export type Watchlist = { id: number; name: string; color: string; symbols: string[] };

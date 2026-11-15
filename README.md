@@ -55,13 +55,29 @@ Every `git push` to `main` redeploys automatically.
 
 The `Dockerfile` also works on other platforms: Fly.io, Railway, or any VPS.
 
+### Enabling payments (Stripe)
+
+1. Create an account at https://stripe.com and stay in **Test mode** while you try it out.
+2. **Product catalog → Add product**: create *Pro* with two recurring prices ($29/month, $290/year) and
+   *Premium* with two ($59/month, $590/year). Copy each price ID (`price_...`).
+3. **Developers → API keys**: copy the secret key (`sk_test_...`).
+4. **Developers → Webhooks → Add endpoint**: URL `https://<your-app>/api/billing/webhook`, events
+   `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`. Copy the signing secret (`whsec_...`).
+5. **Settings → Billing → Customer portal**: enable it, and allow switching between your products.
+6. Set the environment variables (Render → Environment): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+   `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_PREMIUM_MONTHLY`,
+   `STRIPE_PRICE_PREMIUM_YEARLY` and `APP_URL` (your app's public URL).
+7. Test with card `4242 4242 4242 4242`, any future date and any CVC. When everything works, repeat steps 2–6
+   in Live mode with live keys.
+
 ### Tests
 
 ```bash
 cd backend && pytest
 ```
 
-## Features (stages 1–8)
+## Features (stages 1–9)
 - Accounts: sign-up, login, admin/user roles, Free / Pro / Premium plans with enforced limits.
 - Candlestick charts with volume and 1D / 1W / 1M timeframes.
 - Multiple watchlists (create, rename, color, delete; live price and daily change).
@@ -123,7 +139,11 @@ cd backend && pytest
   - Machine-learning layer: a gradient-boosting model on the same factors, tested walk-forward (trained only on
     data before each test window) and compared with the rule score by AUC and top-10 hit rate.
   - Strategy backtests for the BUY/SELL bots vs. buy & hold: return, CAGR, max drawdown, win rate and trades.
-- Admin panel: stats, change plan/role, deactivate accounts. The account matching `ADMIN_EMAIL` is promoted
+- **Subscriptions with Stripe**: Free / Pro / Premium, monthly or yearly. Stripe Checkout for payment, the
+  Stripe Customer Portal to switch plans, update the card or cancel, and signed webhooks that keep each user's
+  plan in sync (failed payments keep access while Stripe retries; ended subscriptions return to Free).
+- Admin panel: MRR / ARR, revenue and failed payments in the last 30 days, active, past-due and canceling
+  subscriptions, churn, recent payments, users with subscription status; change plan/role, deactivate accounts. The account matching `ADMIN_EMAIL` is promoted
   to administrator on sign-up or on its next login.
 
 ### Email and Telegram notifications (optional)
@@ -140,6 +160,5 @@ service such as cron-job.org.
 Create a class in `backend/engine/strategies/builtin.py` (or a new module imported there) decorated with `@register`. It shows up automatically in the chart's strategy list.
 
 ## Roadmap
-9. Stripe payments
 
 > For educational purposes only. Not financial advice.

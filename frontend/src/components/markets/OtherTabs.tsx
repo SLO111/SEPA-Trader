@@ -379,7 +379,7 @@ export function ScreenerTab({ allowed }: { allowed: boolean }) {
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
         <h2 className="font-semibold">Stock screener</h2>
         <p className="mt-1 text-sm text-muted">Find undervalued stocks, growth at a reasonable price, high dividends, SEPA leaders and more. Available on the Pro and Premium plans.</p>
-        <Link href="/#pricing" className="mt-3 inline-block text-sm text-accent hover:underline">See plans</Link>
+        <Link href="/billing" className="mt-3 inline-block text-sm text-accent hover:underline">See plans</Link>
       </div>
     );
   }

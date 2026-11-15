@@ -94,7 +94,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
           <SymbolSearch />
-          <span className={`rounded px-2 py-0.5 text-xs font-medium ${PLAN_STYLE[user.plan]}`}>{user.limits.label}</span>
+          <Link href="/billing" title="Plans & billing" className={`rounded px-2 py-0.5 text-xs font-medium hover:opacity-80 ${PLAN_STYLE[user.plan]}`}>{user.limits.label}</Link>
           <span className="hidden text-muted sm:inline">{user.name || user.email}</span>
           <button
             onClick={() => {

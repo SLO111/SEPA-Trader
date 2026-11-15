@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     # Telegram notifications (optional): token from @BotFather.
     telegram_bot_token: str = ""
+    # Payments (Stripe). Billing is disabled until STRIPE_SECRET_KEY is set.
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_pro_monthly: str = ""
+    stripe_price_pro_yearly: str = ""
+    stripe_price_premium_monthly: str = ""
+    stripe_price_premium_yearly: str = ""
+    # Public URL of the app, used for Stripe redirect links.
+    app_url: str = "http://localhost:3000"
 
 
 settings = Settings()

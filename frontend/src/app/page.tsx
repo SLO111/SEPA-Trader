@@ -80,7 +80,7 @@ export default function Home() {
             </div>
           ))}
         </div>
-        <p className="mt-4 text-xs text-muted">Prices are indicative. Online payments will be enabled in a later release.</p>
+        <p className="mt-4 text-xs text-muted">Prices in USD. Pay yearly and get 2 months free. Cancel anytime.</p>
       </section>
 
       <footer className="border-t border-line py-6 text-center text-xs text-muted">

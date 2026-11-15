@@ -54,6 +54,13 @@ PLANS: dict[str, dict] = {
 }
 
 
+# List prices shown in the app (USD). The amount actually charged is the Stripe price configured for each plan.
+PRICES = {
+    "pro": {"monthly": 29, "yearly": 290},
+    "premium": {"monthly": 59, "yearly": 590},
+}
+
+
 def limits_for(user) -> dict:
     # Administrators get full access regardless of plan.
     if user.role == "admin":

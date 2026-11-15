@@ -231,7 +231,7 @@ function Backtest() {
         <div className="max-w-md rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 text-center">
           <h1 className="text-lg font-semibold">Backtesting</h1>
           <p className="mt-2 text-sm text-muted">Validate the Move Detector on historical data and test chart strategies against buy &amp; hold. Available on the Premium plan.</p>
-          <Link href="/#pricing" className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">See plans</Link>
+          <Link href="/billing" className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">See plans</Link>
         </div>
       </div>
     );
