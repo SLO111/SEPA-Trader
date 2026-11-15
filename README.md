@@ -39,6 +39,22 @@ Deschide http://localhost:3000 și creează-ți cont **cu emailul pus la `ADMIN_
 - `DATA_PROVIDER=synthetic`: date demo generate local, fără internet (NU sunt prețuri reale).
 - Pentru utilizatori plătitori va fi nevoie de un furnizor cu licență comercială (ex. Polygon, FMP).
 
+## Publicare online gratuită (Render.com)
+
+GitHub Pages găzduiește doar site-uri statice, iar aplicația are și server Python și bază de date. De aceea folosim **Render.com**, care are plan gratuit și se leagă direct de repository-ul de GitHub.
+
+1. Intră pe https://render.com/deploy?repo=https://github.com/SLO111/SEPA-Trader și autentifică-te cu contul de GitHub.
+2. Render citește `render.yaml` și propune: serviciul web `sepa-trader` (Docker) și baza de date `sepa-trader-db` (PostgreSQL).
+3. La `ADMIN_EMAIL` pune emailul tău, apoi apasă **Apply** / **Deploy Blueprint**.
+4. După build (5–10 minute), aplicația e disponibilă la `https://sepa-trader.onrender.com` (sau un nume asemănător, afișat în Render).
+5. Creează-ți cont în aplicație cu emailul pus la `ADMIN_EMAIL`: contul acela devine administrator.
+
+La fiecare `git push` pe `main`, Render republică automat aplicația.
+
+**Limitele planului gratuit:** serviciul „adoarme” după 15 minute fără vizitatori, iar prima deschidere durează apoi ~1 minut. Baza de date PostgreSQL gratuită expiră după 30 de zile; pentru utilizare reală treci pe un plan plătit (~7$/lună) sau folosești o bază de date externă gratuită (ex. Neon) prin `DATABASE_URL`.
+
+Imaginea Docker (`Dockerfile`) merge și pe alte platforme: Fly.io, Railway, un VPS.
+
 ### Teste
 
 ```bash

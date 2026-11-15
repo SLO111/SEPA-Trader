@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     # "synthetic" (date demo, fara internet) sau "yfinance" (date reale gratuite, cu intarziere)
     data_provider: str = "synthetic"
     cors_origins: str = "http://localhost:3000"
+    # Folderul cu frontend-ul exportat static (in Docker). Daca exista, e servit la "/".
+    static_dir: str = "static"
 
 
 settings = Settings()

@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import Base, engine
@@ -22,3 +25,9 @@ for r in (auth.router, watchlists.router, market.router, sepa.router, admin.rout
 @app.get("/api/health")
 def health():
     return {"status": "ok", "data_provider": settings.data_provider}
+
+
+# Frontend-ul (export static Next.js), montat ultimul ca sa nu acopere rutele /api.
+_static = Path(settings.static_dir)
+if _static.is_dir():
+    app.mount("/", StaticFiles(directory=_static, html=True), name="frontend")

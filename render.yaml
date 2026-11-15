@@ -1,0 +1,26 @@
+# Blueprint Render.com: o aplicatie web (Docker) + o baza de date PostgreSQL, ambele pe planul gratuit.
+databases:
+  - name: sepa-trader-db
+    plan: free
+    databaseName: sepa
+    user: sepa
+
+services:
+  - type: web
+    name: sepa-trader
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sepa-trader-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false # Render te intreaba la configurare: pune emailul tau
+      - key: DATA_PROVIDER
+        value: yfinance
