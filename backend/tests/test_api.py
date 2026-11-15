@@ -40,11 +40,16 @@ def test_candles_and_all_strategies(client, register):
     assert r.status_code == 200
     data = r.json()
     assert len(data["candles"]) > 500 and data["name"] == "NVIDIA Corp."
-    for sid in REGISTRY:
+    for sid, cls in REGISTRY.items():
         res = client.post("/api/strategies/run", headers=h, json={"symbol": "NVDA", "strategies": [{"id": sid}]})
+        if cls.requires:  # cont Free => blocat
+            assert res.status_code == 403, sid
+            continue
         assert res.status_code == 200, sid
         out = res.json()[sid]
-        assert out["lines"] or out["markers"], sid
+        assert set(out) == {"lines", "histograms", "markers", "levels"}, sid
+        if sid not in ("vcp", "trendlines"):  # pot fi goale legitim
+            assert out["lines"] or out["markers"], sid
 
 
 def test_admin(client, register):

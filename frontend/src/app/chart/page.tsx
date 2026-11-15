@@ -1,8 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
+import SepaStrip from "@/components/SepaStrip";
 import StrategyPanel from "@/components/StrategyPanel";
 import WatchlistPanel from "@/components/WatchlistPanel";
 import { api, post } from "@/lib/api";
@@ -30,7 +32,8 @@ function loadActive(): ActiveStrategy[] {
 
 function ChartWorkspace() {
   const { user } = useAuth();
-  const [symbol, setSymbol] = useState("AAPL");
+  const params = useSearchParams();
+  const [symbol, setSymbol] = useState((params.get("s") ?? "AAPL").toUpperCase());
   const [interval, setIntervalId] = useState("1d");
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [defs, setDefs] = useState<StrategyDef[]>([]);
@@ -42,9 +45,14 @@ function ChartWorkspace() {
   const max = user?.limits.max_strategies_on_chart ?? 3;
 
   useEffect(() => {
-    setActive(loadActive().slice(0, max));
-    api<StrategyDef[]>("/api/strategies").then(setDefs).catch(() => {});
-  }, [max]);
+    api<StrategyDef[]>("/api/strategies")
+      .then((ds) => {
+        setDefs(ds);
+        const allowed = new Set(ds.filter((d) => !d.requires || user?.limits[d.requires as keyof typeof user.limits]).map((d) => d.id));
+        setActive(loadActive().filter((a) => allowed.has(a.id)).slice(0, max));
+      })
+      .catch(() => {});
+  }, [max, user]);
 
   useEffect(() => {
     setError("");
@@ -118,6 +126,7 @@ function ChartWorkspace() {
             </button>
           </div>
         </div>
+        <SepaStrip symbol={symbol} />
         {error && <div className="bg-down/10 px-4 py-2 text-sm text-down">{error}</div>}
         <div className="min-h-0 flex-1">{data && <PriceChart candles={data.candles} overlays={overlays} />}</div>
         <div className="border-t border-line px-4 py-1.5 text-[11px] text-muted">
@@ -127,7 +136,7 @@ function ChartWorkspace() {
       </section>
 
       <aside className={`${panel === "strat" ? "absolute inset-y-0 right-0 z-30 flex" : "hidden"} w-80 shrink-0 flex-col border-l border-line bg-panel xl:static xl:flex`}>
-        <StrategyPanel defs={defs} active={active} onChange={setActive} max={max} />
+        <StrategyPanel defs={defs} active={active} onChange={setActive} max={max} features={user?.limits ?? {}} />
       </aside>
     </div>
   );
@@ -136,7 +145,9 @@ function ChartWorkspace() {
 export default function ChartPage() {
   return (
     <AppShell>
-      <ChartWorkspace />
+      <Suspense fallback={null}>
+        <ChartWorkspace />
+      </Suspense>
     </AppShell>
   );
 }

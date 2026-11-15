@@ -9,7 +9,7 @@ const NAV = [
   { href: "/chart", label: "Charturi" },
   { href: "#", label: "Portofolii", soon: true },
   { href: "#", label: "Piață", soon: true },
-  { href: "#", label: "Move Detector", soon: true },
+  { href: "/scanner", label: "Move Detector" },
   { href: "#", label: "Alerte", soon: true },
   { href: "#", label: "Jurnal", soon: true },
 ];

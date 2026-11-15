@@ -8,9 +8,10 @@ type Props = {
   active: ActiveStrategy[];
   onChange: (next: ActiveStrategy[]) => void;
   max: number;
+  features: Record<string, unknown>;
 };
 
-export default function StrategyPanel({ defs, active, onChange, max }: Props) {
+export default function StrategyPanel({ defs, active, onChange, max, features }: Props) {
   const [q, setQ] = useState("");
   const activeMap = useMemo(() => new Map(active.map((a) => [a.id, a])), [active]);
 
@@ -57,13 +58,15 @@ export default function StrategyPanel({ defs, active, onChange, max }: Props) {
             <h3 className="px-3 pb-1 text-[11px] uppercase tracking-wide text-muted">{cat}</h3>
             {items.map((d) => {
               const a = activeMap.get(d.id);
-              const disabled = !a && atLimit;
+              const planLocked = !!d.requires && !features[d.requires];
+              const disabled = (!a && atLimit) || planLocked;
               return (
                 <div key={d.id} className={`px-3 py-1.5 ${a ? "bg-panel-2/70" : ""}`}>
                   <label className={`flex items-start gap-2 text-sm ${disabled ? "opacity-40" : "cursor-pointer"}`} title={d.description}>
                     <input type="checkbox" checked={!!a} disabled={disabled} onChange={() => toggle(d)} className="mt-0.5 accent-blue-500" />
                     <span>
                       {d.name}
+                      {planLocked && <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">PRO</span>}
                       {d.description && <span className="block text-xs text-muted">{d.description}</span>}
                     </span>
                   </label>

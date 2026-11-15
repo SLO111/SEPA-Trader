@@ -45,6 +45,7 @@ class Strategy:
     category: ClassVar[str]  # "Medii mobile" | "Oscilatoare" | "Volatilitate" | "Semnale (boți)" | "SEPA"
     description: ClassVar[str] = ""
     params: ClassVar[list[Param]] = []
+    requires: ClassVar[str | None] = None  # functie de plan necesara (ex. "move_detector")
 
     def resolve_params(self, raw: dict[str, Any] | None) -> dict[str, float]:
         raw = raw or {}
@@ -59,7 +60,7 @@ class Strategy:
             out[p.key] = int(v) if p.type == "int" else v
         return out
 
-    def compute(self, df: pd.DataFrame, params: dict[str, float]) -> StrategyResult:
+    def compute(self, df: pd.DataFrame, params: dict[str, float], bench: pd.DataFrame | None = None) -> StrategyResult:
         raise NotImplementedError
 
     @classmethod
@@ -70,6 +71,7 @@ class Strategy:
             "category": cls.category,
             "description": cls.description,
             "params": [p.__dict__ for p in cls.params],
+            "requires": cls.requires,
         }
 
 

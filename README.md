@@ -45,7 +45,7 @@ Deschide http://localhost:3000 și creează-ți cont **cu emailul pus la `ADMIN_
 cd backend && pytest
 ```
 
-## Ce e gata (etapele 1–2)
+## Ce e gata (etapele 1–3)
 - Conturi: înregistrare, login, roluri admin/utilizator, planuri Free / Pro / Premium cu limite.
 - Charturi cu lumânări, volum și timeframe-uri 1Z / 1S / 1L.
 - Liste multiple de tickere (creezi, redenumești, colorezi, ștergi; prețuri și variații).
@@ -53,12 +53,20 @@ cd backend && pytest
   SMA 50/100/200, SMA 50/150/200 (SEPA), SMA la alegere, EMA 10/21, Bollinger, RSI, MACD,
   Bot crossover (BUY/SELL), Bot revenire RSI.
 - Panou de administrator: statistici, schimbare plan/rol, dezactivare conturi.
+- **Analiză SEPA** pe fiecare ticker (banda de sub chart): RS Rating 1–99, Trend Template (8 criterii),
+  detectare VCP cu pivot, stop și risc.
+- **Strategii SEPA pe chart:** Trend Template (marcaje intrare/ieșire), VCP + pivot, trend lines automate,
+  Move Detector (istoricul scorurilor Bull/Bear).
+- **Move Detector (stratul 1)**: Bull Score și Bear Score 0–100, cu explicația fiecărui factor:
+  compresie de volatilitate, volum/acumulare, trend, forță relativă, apropiere de pivot, regim de piață;
+  respectiv trend deteriorat, zile de distribuție, slăbiciune relativă, climax, breakout eșuat.
+- **Scanner** (pagina Move Detector): toată piața sortată după Bull / Bear / RS, cu filtre Trend Template 8/8 și VCP.
+  Disponibil doar în planurile Pro și Premium.
 
 ### Cum adaugi o strategie nouă
 Creezi o clasă în `backend/engine/strategies/builtin.py` (sau într-un fișier nou importat acolo), decorată cu `@register`. Apare automat în lista de pe pagina de chart.
 
 ## Urmează
-3. Trend Template, VCP, trend lines + **Move Detector** (Setup Score) + scanner
 4. Alerte în timp real (breakout, volum neobișnuit, gap-uri, avertismente)
 5. Portofolii cu clasificare automată
 6. Pagina completă de ticker + raport PDF

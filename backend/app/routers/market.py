@@ -81,8 +81,16 @@ def run(body: RunIn, user: User = Depends(current_user)):
     unknown = [s.id for s in body.strategies if s.id not in REGISTRY]
     if unknown:
         raise HTTPException(400, f"Strategii necunoscute: {', '.join(unknown)}")
+    limits = limits_for(user)
+    locked = [REGISTRY[s.id].name for s in body.strategies if REGISTRY[s.id].requires and not limits.get(REGISTRY[s.id].requires)]
+    if locked:
+        raise HTTPException(403, f"Disponibil doar în planurile Pro și Premium: {', '.join(locked)}")
     try:
         df = market_data.history(body.symbol, body.interval)
     except Exception:
         raise HTTPException(404, f"Nu am gasit date pentru {body.symbol.upper()}")
-    return {s.id: run_strategy(s.id, df, s.params) for s in body.strategies}
+    try:
+        bench = market_data.history("SPY", body.interval)
+    except Exception:
+        bench = None
+    return {s.id: run_strategy(s.id, df, s.params, bench) for s in body.strategies}

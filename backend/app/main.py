@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import Base, engine
-from .routers import admin, auth, market, watchlists
+from .routers import admin, auth, market, sepa, watchlists
 
 Base.metadata.create_all(engine)
 
@@ -15,7 +15,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for r in (auth.router, watchlists.router, market.router, admin.router):
+for r in (auth.router, watchlists.router, market.router, sepa.router, admin.router):
     app.include_router(r)
 
 

@@ -49,7 +49,7 @@ export type CandlesResponse = {
 
 export type StrategyParam = { key: string; label: string; default: number; min: number; max: number; step: number; type: "int" | "float" };
 
-export type StrategyDef = { id: string; name: string; category: string; description: string; params: StrategyParam[] };
+export type StrategyDef = { id: string; name: string; category: string; description: string; params: StrategyParam[]; requires: string | null };
 
 export type Point = { time: string; value: number; color?: string };
 
@@ -61,3 +61,39 @@ export type StrategyOutput = {
 };
 
 export type ActiveStrategy = { id: string; params: Record<string, number> };
+
+export type Factor = { key: string; label: string; value: number; weight: number; contribution: number };
+export type ScoreBlock = { score: number | null; label: string; factors: Factor[] };
+
+export type SepaReport = {
+  symbol: string;
+  rs_rating: number | null;
+  trend_template: { criteria: { label: string; passed: boolean }[]; passed_count: number; all_passed: boolean };
+  vcp: {
+    detected: boolean;
+    reason?: string;
+    contractions: { start: string; end: string; high: number; low: number; depth_pct: number }[];
+    pivot?: number;
+    stop?: number;
+    risk_pct?: number;
+    distance_pct?: number;
+    checks?: Record<string, boolean>;
+  };
+  move_detector: { bull: ScoreBlock; bear: ScoreBlock } | null;
+};
+
+export type ScanRow = {
+  symbol: string;
+  name: string;
+  sector: string;
+  price: number;
+  change_pct: number;
+  rs_rating: number | null;
+  template_passed: number;
+  vcp: boolean;
+  pivot: number | null;
+  pivot_distance_pct: number | null;
+  bull_score: number;
+  bear_score: number;
+  signals: string[];
+};
