@@ -1,0 +1,58 @@
+from engine.strategies import REGISTRY
+
+
+def test_register_login_me(client, register):
+    h, user = register("ana@test.ro")
+    assert user["plan"] == "free" and user["role"] == "user"
+    r = client.post("/api/auth/login", json={"email": "ana@test.ro", "password": "parola123"})
+    assert r.status_code == 200
+    assert client.get("/api/auth/me", headers=h).json()["email"] == "ana@test.ro"
+    assert client.post("/api/auth/login", json={"email": "ana@test.ro", "password": "gresit00"}).status_code == 401
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_free_plan_limits(client, register):
+    h, _ = register("free@test.ro")
+    wls = client.get("/api/watchlists", headers=h).json()
+    assert len(wls) == 1 and wls[0]["symbols"][0] == "AAPL"
+    # free: o singura lista
+    assert client.post("/api/watchlists", headers=h, json={"name": "A doua"}).status_code == 403
+    # free: max 10 simboluri (are deja 5)
+    wl = wls[0]["id"]
+    for s in ["GOOGL", "TSLA", "AMD", "NFLX", "CRM"]:
+        assert client.post(f"/api/watchlists/{wl}/items", headers=h, json={"symbol": s}).status_code == 200
+    assert client.post(f"/api/watchlists/{wl}/items", headers=h, json={"symbol": "KO"}).status_code == 403
+    # free: max 3 strategii
+    body = {"symbol": "AAPL", "strategies": [{"id": i} for i in list(REGISTRY)[:4]]}
+    assert client.post("/api/strategies/run", headers=h, json=body).status_code == 403
+
+
+def test_watchlist_isolation(client, register):
+    h1, _ = register("u1@test.ro")
+    h2, _ = register("u2@test.ro")
+    wl = client.get("/api/watchlists", headers=h1).json()[0]["id"]
+    assert client.delete(f"/api/watchlists/{wl}", headers=h2).status_code == 404
+
+
+def test_candles_and_all_strategies(client, register):
+    h, _ = register("chart@test.ro")
+    r = client.get("/api/market/candles/NVDA", headers=h)
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["candles"]) > 500 and data["name"] == "NVIDIA Corp."
+    for sid in REGISTRY:
+        res = client.post("/api/strategies/run", headers=h, json={"symbol": "NVDA", "strategies": [{"id": sid}]})
+        assert res.status_code == 200, sid
+        out = res.json()[sid]
+        assert out["lines"] or out["markers"], sid
+
+
+def test_admin(client, register):
+    ha, admin = register("admin@test.ro")
+    hu, user = register("client@test.ro")
+    assert admin["role"] == "admin"
+    assert client.get("/api/admin/users", headers=hu).status_code == 403
+    r = client.patch(f"/api/admin/users/{user['id']}", headers=ha, json={"plan": "pro"})
+    assert r.status_code == 200 and r.json()["plan"] == "pro"
+    assert client.post("/api/watchlists", headers=hu, json={"name": "Lista 2"}).status_code == 200
+    assert client.get("/api/admin/stats", headers=ha).json()["total_users"] >= 2
