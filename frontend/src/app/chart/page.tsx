@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -121,6 +122,13 @@ function ChartWorkspace() {
                 {i.label}
               </button>
             ))}
+            <Link
+              href={`/alerts?symbol=${encodeURIComponent(symbol)}`}
+              title={`Create an alert for ${symbol}`}
+              className="ml-2 rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-text"
+            >
+              🔔 Alert
+            </Link>
             <button onClick={() => setPanel(panel === "strat" ? "none" : "strat")} className="ml-2 rounded border border-line px-2 py-1 text-xs text-muted xl:hidden">
               Strategies
             </button>

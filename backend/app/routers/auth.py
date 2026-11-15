@@ -25,6 +25,13 @@ class LoginIn(BaseModel):
     password: str
 
 
+def ensure_admin(user: User, db: Session) -> None:
+    """Promote the account matching ADMIN_EMAIL, even if it was created before ADMIN_EMAIL was set."""
+    if user.email == settings.admin_email.lower().strip() and user.role != "admin":
+        user.role = "admin"
+        db.commit()
+
+
 def user_out(u: User) -> dict:
     return {
         "id": u.id,
@@ -46,7 +53,7 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
         email=email,
         name=body.name.strip(),
         password_hash=hash_password(body.password),
-        role="admin" if email == settings.admin_email.lower() else "user",
+        role="admin" if email == settings.admin_email.lower().strip() else "user",
     )
     wl = Watchlist(name="Favorites", position=0)
     wl.items = [WatchlistItem(symbol=s, position=i) for i, s in enumerate(DEFAULT_SYMBOLS)]
@@ -63,9 +70,11 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(401, "Incorrect email or password")
     if not user.is_active:
         raise HTTPException(403, "This account has been deactivated")
+    ensure_admin(user, db)
     return {"token": create_token(user.id), "user": user_out(user)}
 
 
 @router.get("/me")
-def me(user: User = Depends(current_user)):
+def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    ensure_admin(user, db)
     return user_out(user)

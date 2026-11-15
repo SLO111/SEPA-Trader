@@ -5,6 +5,7 @@ _db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite:///{_db.name}"
 os.environ["DATA_PROVIDER"] = "synthetic"
 os.environ["ADMIN_EMAIL"] = "admin@test.ro"
+os.environ["ALERT_CHECK_SECONDS"] = "0"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

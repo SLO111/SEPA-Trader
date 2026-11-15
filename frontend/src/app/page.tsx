@@ -49,7 +49,7 @@ export default function Home() {
           <Link href={user ? "/chart" : "/register"} className="rounded-md bg-accent px-5 py-2.5 font-medium text-white hover:bg-blue-500">
             {user ? "Go to charts" : "Create a free account"}
           </Link>
-          <a href="#preturi" className="rounded-md border border-line px-5 py-2.5 text-muted hover:text-text">See plans</a>
+          <a href="#pricing" className="rounded-md border border-line px-5 py-2.5 text-muted hover:text-text">See plans</a>
         </div>
       </section>
 
@@ -62,7 +62,7 @@ export default function Home() {
         ))}
       </section>
 
-      <section id="preturi" className="mx-auto max-w-6xl px-4 pb-24">
+      <section id="pricing" className="mx-auto max-w-6xl px-4 pb-24">
         <h2 className="mb-8 text-2xl font-bold">Plans</h2>
         <div className="grid gap-4 md:grid-cols-3">
           {PLANS.map((p) => (

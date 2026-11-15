@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 const NAV = [
@@ -10,7 +11,7 @@ const NAV = [
   { href: "#", label: "Portfolios", soon: true },
   { href: "#", label: "Markets", soon: true },
   { href: "/scanner", label: "Move Detector" },
-  { href: "#", label: "Alerts", soon: true },
+  { href: "/alerts", label: "Alerts" },
   { href: "#", label: "Journal", soon: true },
 ];
 
@@ -33,6 +34,19 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const load = () => api<{ count: number }>("/api/alerts/unread-count").then((r) => setUnread(r.count)).catch(() => {});
+    load();
+    const id = setInterval(load, 60_000);
+    window.addEventListener("alerts-changed", load);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("alerts-changed", load);
+    };
+  }, [user]);
 
   useEffect(() => {
     if (loading) return;
@@ -61,6 +75,9 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
                 className={`whitespace-nowrap rounded px-3 py-1.5 ${pathname.startsWith(n.href) ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
               >
                 {n.label}
+                {n.href === "/alerts" && unread > 0 && (
+                  <span className="tabular ml-1.5 rounded-full bg-down px-1.5 py-0.5 text-[10px] font-semibold text-white">{unread > 99 ? "99+" : unread}</span>
+                )}
               </Link>
             ),
           )}

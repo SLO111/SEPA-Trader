@@ -61,7 +61,7 @@ The `Dockerfile` also works on other platforms: Fly.io, Railway, or any VPS.
 cd backend && pytest
 ```
 
-## Features (stages 1–3)
+## Features (stages 1–4)
 - Accounts: sign-up, login, admin/user roles, Free / Pro / Premium plans with enforced limits.
 - Candlestick charts with volume and 1D / 1W / 1M timeframes.
 - Multiple watchlists (create, rename, color, delete; live price and daily change).
@@ -75,13 +75,28 @@ cd backend && pytest
   and trend breakdown, distribution days, relative weakness, climax, failed breakout.
 - **Scanner** (Move Detector page): the whole market ranked by Bull / Bear / RS, with Trend Template 8/8 and VCP filters.
   Pro and Premium only.
-- Admin panel: stats, change plan/role, deactivate accounts.
+- **Alerts (Move Detector layer 2)**: rules on a single symbol, a watchlist or the entire market, for
+  breakouts above the pivot on volume, unusual volume, gaps up/down, 50-day MA breaks, failed breakouts,
+  21-day EMA reclaims, RS line new highs, Bull/Bear Score thresholds and custom price levels.
+  Checked in the background every 5 minutes (or on demand with **Check now**), deduplicated per bar,
+  with in-app notifications plus optional email and Telegram. Pro and Premium only.
+- Admin panel: stats, change plan/role, deactivate accounts. The account matching `ADMIN_EMAIL` is promoted
+  to administrator on sign-up or on its next login.
+
+### Email and Telegram notifications (optional)
+Set these environment variables (locally in `backend/.env`, on Render under **Environment**):
+- Email: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`.
+- Telegram: create a bot with [@BotFather](https://t.me/BotFather) and set `TELEGRAM_BOT_TOKEN`.
+  Each user enters their chat ID on the Alerts page.
+
+On Render's free plan the service sleeps after 15 minutes without traffic, which also pauses background
+alert checks. To keep it awake, ping `https://<your-app>.onrender.com/api/health` every 10 minutes with a free
+service such as cron-job.org.
 
 ### Adding a new strategy
 Create a class in `backend/engine/strategies/builtin.py` (or a new module imported there) decorated with `@register`. It shows up automatically in the chart's strategy list.
 
 ## Roadmap
-4. Real-time alerts (breakouts, unusual volume, gaps, warnings) + email/Telegram notifications
 5. Portfolios with automatic classification
 6. Full ticker page + PDF report
 7. Market tools (earnings, Fed, pre/after-hours, screener, gainers)

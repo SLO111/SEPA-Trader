@@ -97,3 +97,50 @@ export type ScanRow = {
   bear_score: number;
   signals: string[];
 };
+
+export type Severity = "bull" | "bear" | "info";
+
+export type AlertItem = {
+  id: number;
+  rule_id: number | null;
+  symbol: string;
+  type: string;
+  type_label: string;
+  severity: Severity;
+  title: string;
+  message: string;
+  data: Record<string, number>;
+  bar_date: string;
+  read: boolean;
+  created_at: string;
+};
+
+export type EventType = { id: string; label: string; severity: Severity; description: string };
+
+export type EventCatalog = { events: EventType[]; defaults: string[]; channels: { app: boolean; email: boolean; telegram: boolean } };
+
+export type Channel = "app" | "email" | "telegram";
+
+export type AlertRule = {
+  id: number;
+  name: string;
+  scope: "symbol" | "watchlist" | "universe";
+  symbol: string | null;
+  watchlist_id: number | null;
+  events: string[];
+  price_level: number | null;
+  bull_threshold: number;
+  bear_threshold: number;
+  channels: Channel[];
+  active: boolean;
+  created_at: string;
+};
+
+export type NotifySettings = {
+  email: string;
+  email_enabled: boolean;
+  telegram_enabled: boolean;
+  telegram_chat_id: string;
+  email_available: boolean;
+  telegram_available: boolean;
+};

@@ -1,3 +1,6 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -5,12 +8,41 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .db import Base, engine
-from .routers import admin, auth, market, sepa, watchlists
+from .alerts_service import check_rules
+from .db import Base, SessionLocal, engine
+from .routers import admin, alerts, auth, market, sepa, watchlists
 
 Base.metadata.create_all(engine)
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+log = logging.getLogger("sepa")
+
+
+def _run_checks() -> int:
+    with SessionLocal() as db:
+        return len(check_rules(db))
+
+
+async def _alert_loop(interval: int) -> None:
+    """Periodically evaluate every user's alert rules in a worker thread."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            n = await asyncio.to_thread(_run_checks)
+            if n:
+                log.info("Alert check created %d alerts", n)
+        except Exception:
+            log.exception("Alert check failed")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    task = asyncio.create_task(_alert_loop(settings.alert_check_seconds)) if settings.alert_check_seconds > 0 else None
+    yield
+    if task:
+        task.cancel()
+
+
+app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
@@ -18,7 +50,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for r in (auth.router, watchlists.router, market.router, sepa.router, admin.router):
+for r in (auth.router, watchlists.router, market.router, sepa.router, alerts.router, admin.router):
     app.include_router(r)
 
 

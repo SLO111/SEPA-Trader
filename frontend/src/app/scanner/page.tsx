@@ -42,7 +42,7 @@ function Scanner() {
         <div className="max-w-md rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 text-center">
           <h1 className="text-lg font-semibold">Move Detector</h1>
           <p className="mt-2 text-sm text-muted">{locked}</p>
-          <Link href="/#preturi" className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">See plans</Link>
+          <Link href="/#pricing" className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">See plans</Link>
         </div>
       </div>
     );
