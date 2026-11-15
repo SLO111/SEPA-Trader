@@ -1,5 +1,5 @@
-"""Detectarea pattern-ului VCP (Volatility Contraction Pattern): corectii succesive tot mai mici,
-cu volum in scadere, care se termina aproape de un pivot (punctul de cumparare la breakout)."""
+"""VCP (Volatility Contraction Pattern) detection: successively smaller pullbacks on declining
+volume, ending near a pivot (the buy point on a breakout)."""
 
 from __future__ import annotations
 
@@ -11,15 +11,15 @@ from .swings import zigzag
 def detect_vcp(df: pd.DataFrame, lookback: int = 130, swing_pct: float = 0.04) -> dict:
     d = df.iloc[-lookback:]
     if len(d) < 40:
-        return {"detected": False, "reason": "Istoric insuficient", "contractions": []}
+        return {"detected": False, "reason": "Not enough history", "contractions": []}
     high, low, vol = d["high"].to_numpy(), d["low"].to_numpy(), d["volume"].to_numpy()
     swings, trend, pending = zigzag(high, low, swing_pct)
     pts = swings + ([pending] if pending is not None else [])
 
-    # Baza incepe la cel mai inalt varf din fereastra.
+    # The base starts at the highest peak in the window.
     highs = [s for s in pts if s.kind == "H"]
     if not highs:
-        return {"detected": False, "reason": "Nicio bază identificată", "contractions": []}
+        return {"detected": False, "reason": "No base identified", "contractions": []}
     top = max(highs, key=lambda s: s.price)
     pts = [s for s in pts if s.idx >= top.idx]
 
@@ -40,7 +40,7 @@ def detect_vcp(df: pd.DataFrame, lookback: int = 130, swing_pct: float = 0.04) -
 
     result = {"detected": False, "contractions": contractions}
     if len(contractions) < 2:
-        result["reason"] = "Mai puțin de 2 contracții"
+        result["reason"] = "Fewer than 2 contractions"
         return result
 
     depths = [c["depth_pct"] for c in contractions]
@@ -61,17 +61,17 @@ def detect_vcp(df: pd.DataFrame, lookback: int = 130, swing_pct: float = 0.04) -
             "distance_pct": round(dist, 1),
             "volume_dryup": bool(vol_dry),
             "checks": {
-                "Contracții descrescătoare": decreasing,
-                "Prima corecție între 8% și 45%": first_ok,
-                "Ultima contracție sub 12%": last_tight,
-                "Volum în scădere": vol_dry,
-                "Prețul aproape de pivot (≤ 5% sub, ≤ 3% peste)": -3 <= dist <= 5,
+                "Contractions getting smaller": decreasing,
+                "First pullback between 8% and 45%": first_ok,
+                "Last contraction under 12%": last_tight,
+                "Volume drying up": vol_dry,
+                "Price near pivot (≤ 5% below, ≤ 3% above)": -3 <= dist <= 5,
             },
         }
     )
     result["detected"] = bool(decreasing and first_ok and last_tight and dist >= -3 and dist <= 15)
     if not result["detected"]:
-        result["reason"] = "Contracțiile nu respectă tiparul VCP"
+        result["reason"] = "Contractions do not fit the VCP pattern"
     for c in contractions:
         c.pop("avg_volume")
     return result

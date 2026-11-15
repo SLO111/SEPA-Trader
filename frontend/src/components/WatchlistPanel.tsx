@@ -25,7 +25,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Eroare");
+      setError(e instanceof Error ? e.message : "Error");
     }
   };
 
@@ -74,7 +74,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
 
   const createList = () =>
     run(async () => {
-      const name = prompt("Numele listei noi:");
+      const name = prompt("New watchlist name:");
       if (!name?.trim()) return;
       const w = await post<Watchlist>("/api/watchlists", { name, color: COLORS[lists.length % COLORS.length] });
       setLists((ls) => [...ls, w]);
@@ -84,7 +84,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
   const renameList = () =>
     run(async () => {
       setMenuOpen(false);
-      const name = active && prompt("Nume nou:", active.name);
+      const name = active && prompt("New name:", active.name);
       if (active && name?.trim()) replaceList(await patch<Watchlist>(`/api/watchlists/${active.id}`, { name }));
     });
 
@@ -96,7 +96,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
   const deleteList = () =>
     run(async () => {
       setMenuOpen(false);
-      if (!active || !confirm(`Ștergi lista „${active.name}”?`)) return;
+      if (!active || !confirm(`Delete the watchlist "${active.name}"?`)) return;
       await del(`/api/watchlists/${active.id}`);
       const rest = lists.filter((l) => l.id !== active.id);
       setLists(rest);
@@ -118,22 +118,22 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
             </button>
           ))}
         </div>
-        <button onClick={createList} title="Listă nouă" className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text">
+        <button onClick={createList} title="New watchlist" className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text">
           +
         </button>
         <div className="relative">
-          <button onClick={() => setMenuOpen((o) => !o)} title="Opțiuni listă" className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text">
+          <button onClick={() => setMenuOpen((o) => !o)} title="Watchlist options" className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text">
             ⋯
           </button>
           {menuOpen && active && (
             <div className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-line bg-panel-2 p-1 text-sm shadow-xl">
-              <button onClick={renameList} className="block w-full rounded px-2 py-1.5 text-left hover:bg-line">Redenumește</button>
+              <button onClick={renameList} className="block w-full rounded px-2 py-1.5 text-left hover:bg-line">Rename</button>
               <div className="flex gap-1 px-2 py-1.5">
                 {COLORS.map((c) => (
-                  <button key={c} onClick={() => recolorList(c)} className="h-4 w-4 rounded-full" style={{ background: c }} aria-label={`Culoare ${c}`} />
+                  <button key={c} onClick={() => recolorList(c)} className="h-4 w-4 rounded-full" style={{ background: c }} aria-label={`Color ${c}`} />
                 ))}
               </div>
-              <button onClick={deleteList} className="block w-full rounded px-2 py-1.5 text-left text-down hover:bg-line">Șterge lista</button>
+              <button onClick={deleteList} className="block w-full rounded px-2 py-1.5 text-left text-down hover:bg-line">Delete watchlist</button>
             </div>
           )}
         </div>
@@ -144,7 +144,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addSymbol(hits[0]?.symbol ?? query)}
-          placeholder="Adaugă simbol (ex. AAPL)"
+          placeholder="Add symbol (e.g. AAPL)"
           className="w-full rounded border border-line bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent"
         />
         {hits.length > 0 && (
@@ -162,9 +162,9 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
       {error && <div className="border-b border-line bg-down/10 px-3 py-2 text-xs text-down">{error}</div>}
 
       <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
-        <span>Simbol</span>
-        <span className="text-right">Preț</span>
-        <span className="w-14 text-right">Var.</span>
+        <span>Symbol</span>
+        <span className="text-right">Price</span>
+        <span className="w-14 text-right">Chg.</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {active?.symbols.map((s) => {
@@ -184,7 +184,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
                     removeSymbol(s);
                   }}
                   className="invisible text-xs text-muted hover:text-down group-hover:visible"
-                  aria-label={`Elimină ${s}`}
+                  aria-label={`Remove ${s}`}
                 >
                   ✕
                 </button>
@@ -196,7 +196,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
             </div>
           );
         })}
-        {active && active.symbols.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">Lista e goală. Adaugă un simbol mai sus.</p>}
+        {active && active.symbols.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">This watchlist is empty. Add a symbol above.</p>}
       </div>
     </div>
   );

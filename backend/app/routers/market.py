@@ -24,7 +24,7 @@ def candles(symbol: str, interval: str = "1d", years: int = Query(3, ge=1, le=10
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception:
-        raise HTTPException(404, f"Nu am gasit date pentru {symbol.upper()}")
+        raise HTTPException(404, f"No data found for {symbol.upper()}")
     rows = [
         {
             "time": ts.strftime("%Y-%m-%d"),
@@ -53,7 +53,7 @@ def quotes(symbols: str = Query(max_length=2000), user: User = Depends(current_u
         try:
             out.append(market_data.quote(s))
         except Exception:
-            out.append({"symbol": s, "error": "fara date"})
+            out.append({"symbol": s, "error": "no data"})
     return out
 
 
@@ -77,18 +77,18 @@ class RunIn(BaseModel):
 def run(body: RunIn, user: User = Depends(current_user)):
     limit = limits_for(user)["max_strategies_on_chart"]
     if len(body.strategies) > limit:
-        raise HTTPException(403, f"Planul tau permite maximum {limit} strategii pe chart.")
+        raise HTTPException(403, f"Your plan allows up to {limit} strategies on a chart.")
     unknown = [s.id for s in body.strategies if s.id not in REGISTRY]
     if unknown:
-        raise HTTPException(400, f"Strategii necunoscute: {', '.join(unknown)}")
+        raise HTTPException(400, f"Unknown strategies: {', '.join(unknown)}")
     limits = limits_for(user)
     locked = [REGISTRY[s.id].name for s in body.strategies if REGISTRY[s.id].requires and not limits.get(REGISTRY[s.id].requires)]
     if locked:
-        raise HTTPException(403, f"Disponibil doar în planurile Pro și Premium: {', '.join(locked)}")
+        raise HTTPException(403, f"Available on Pro and Premium plans only: {', '.join(locked)}")
     try:
         df = market_data.history(body.symbol, body.interval)
     except Exception:
-        raise HTTPException(404, f"Nu am gasit date pentru {body.symbol.upper()}")
+        raise HTTPException(404, f"No data found for {body.symbol.upper()}")
     try:
         bench = market_data.history("SPY", body.interval)
     except Exception:

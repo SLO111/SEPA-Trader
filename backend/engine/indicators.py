@@ -1,4 +1,4 @@
-"""Indicatori tehnici, vectorizati cu pandas. Toate functiile folosesc doar date trecute (fara look-ahead)."""
+"""Technical indicators, vectorized with pandas. All functions use past data only (no look-ahead)."""
 
 import numpy as np
 import pandas as pd
@@ -44,7 +44,7 @@ def atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
 
 
 def crossovers(fast: pd.Series, slow: pd.Series) -> tuple[pd.Series, pd.Series]:
-    """(cross_up, cross_down) ca serii booleene: fast trece peste / sub slow pe bara curenta."""
+    """(cross_up, cross_down) as boolean series: fast crosses above / below slow on the current bar."""
     above = fast > slow
     prev = above.shift(1, fill_value=False)
     valid = fast.notna() & slow.notna() & fast.shift().notna() & slow.shift().notna()

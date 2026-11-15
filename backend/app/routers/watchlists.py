@@ -32,7 +32,7 @@ def wl_out(w: Watchlist) -> dict:
 def _get_owned(db: Session, user: User, wl_id: int) -> Watchlist:
     w = db.get(Watchlist, wl_id)
     if w is None or w.user_id != user.id:
-        raise HTTPException(404, "Lista nu exista")
+        raise HTTPException(404, "Watchlist not found")
     return w
 
 
@@ -45,7 +45,7 @@ def list_watchlists(user: User = Depends(current_user)):
 def create_watchlist(body: WatchlistIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     limit = limits_for(user)["max_watchlists"]
     if len(user.watchlists) >= limit:
-        raise HTTPException(403, f"Planul tau permite maximum {limit} liste. Fa upgrade pentru mai multe.")
+        raise HTTPException(403, f"Your plan allows up to {limit} watchlist(s). Upgrade to create more.")
     w = Watchlist(user_id=user.id, name=body.name.strip(), color=body.color, position=len(user.watchlists))
     db.add(w)
     db.commit()
@@ -77,11 +77,11 @@ def add_item(wl_id: int, body: ItemIn, user: User = Depends(current_user), db: S
         return wl_out(w)
     limit = limits_for(user)["max_symbols_per_watchlist"]
     if len(w.items) >= limit:
-        raise HTTPException(403, f"Planul tau permite maximum {limit} simboluri pe lista.")
+        raise HTTPException(403, f"Your plan allows up to {limit} symbols per watchlist.")
     try:
         market_data.history(symbol)
     except Exception:
-        raise HTTPException(404, f"Nu am gasit date pentru {symbol}")
+        raise HTTPException(404, f"No data found for {symbol}")
     w.items.append(WatchlistItem(symbol=symbol, position=len(w.items)))
     db.commit()
     return wl_out(w)

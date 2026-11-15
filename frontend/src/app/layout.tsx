@@ -4,12 +4,12 @@ import { AuthProvider } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "SEPA Trader",
-  description: "Platformă de analiză și trading pe acțiuni",
+  description: "Stock analysis and trading platform",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ro">
+    <html lang="en">
       <body>
         <AuthProvider>{children}</AuthProvider>
       </body>

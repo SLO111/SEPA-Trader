@@ -30,7 +30,7 @@ def current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    unauthorized = HTTPException(status.HTTP_401_UNAUTHORIZED, "Autentificare necesara")
+    unauthorized = HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
     if creds is None:
         raise unauthorized
     try:
@@ -45,5 +45,5 @@ def current_user(
 
 def admin_user(user: User = Depends(current_user)) -> User:
     if user.role != "admin":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Doar pentru administrator")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrators only")
     return user

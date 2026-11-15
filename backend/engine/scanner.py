@@ -1,4 +1,4 @@
-"""Scanner: trece prin tot universul si calculeaza Trend Template, RS Rating, VCP si Move Detector."""
+"""Scanner: runs through the whole universe computing Trend Template, RS Rating, VCP and Move Detector."""
 
 from __future__ import annotations
 
@@ -45,11 +45,11 @@ def scan_universe(history: Callable[[str], pd.DataFrame], symbols: list[str] | N
         if vcp["detected"]:
             signals.append("VCP")
         if vcp.get("pivot") and 0 <= vcp.get("distance_pct", 99) <= 5:
-            signals.append("Aproape de pivot")
+            signals.append("Near pivot")
         if rs is not None and rs >= 90:
-            signals.append("Lider RS")
+            signals.append("RS leader")
         if an["bear"]["score"] and an["bear"]["score"] >= 60:
-            signals.append("Risc de scădere")
+            signals.append("Downside risk")
         rows.append(
             {
                 "symbol": s,

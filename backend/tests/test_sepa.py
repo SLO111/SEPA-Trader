@@ -16,7 +16,7 @@ def test_vcp_detected_with_correct_pivot():
     assert v["detected"], v
     depths = [c["depth_pct"] for c in v["contractions"]]
     assert len(depths) >= 3 and depths == sorted(depths, reverse=True)
-    assert 96 <= v["pivot"] <= 98.5  # varful ultimei contractii
+    assert 96 <= v["pivot"] <= 98.5  # the peak of the last contraction
     assert v["stop"] < v["pivot"] and v["volume_dryup"]
 
 
@@ -75,7 +75,7 @@ def test_scan_api_plan_gating(client, register):
 
 def test_scan_api_pro(client, register):
     ha, _ = register("admin2@test.ro")
-    # trecem utilizatorul pe planul Pro direct in baza de date
+    # move the user to the Pro plan directly in the database
     from app.db import SessionLocal
     from app.models import User
 

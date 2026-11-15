@@ -39,9 +39,9 @@ def users(_: User = Depends(admin_user), db: Session = Depends(get_db)):
 def update_user(user_id: int, body: UserPatch, me: User = Depends(admin_user), db: Session = Depends(get_db)):
     u = db.get(User, user_id)
     if u is None:
-        raise HTTPException(404, "Utilizator inexistent")
+        raise HTTPException(404, "User not found")
     if u.id == me.id and (body.role == "user" or body.is_active is False):
-        raise HTTPException(400, "Nu iti poti scoate singur drepturile de administrator")
+        raise HTTPException(400, "You cannot remove your own administrator rights")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(u, field, value)
     db.commit()

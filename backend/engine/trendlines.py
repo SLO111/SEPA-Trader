@@ -1,4 +1,4 @@
-"""Trend lines automate: rezistenta prin ultimele doua varfuri, suport prin ultimele doua minime."""
+"""Automatic trend lines: resistance through the last two peaks, support through the last two troughs."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ def auto_trendlines(df: pd.DataFrame, lookback: int = 250, swing_pct: float = 0.
     d = df.iloc[-lookback:]
     swings, _, _ = zigzag(d["high"].to_numpy(), d["low"].to_numpy(), swing_pct)
     lines = []
-    for kind, name, color in (("H", "Rezistență", "#f87171"), ("L", "Suport", "#4ade80")):
+    for kind, name, color in (("H", "Resistance", "#f87171"), ("L", "Support", "#4ade80")):
         pts = [s for s in swings if s.kind == kind][-2:]
         if len(pts) < 2:
             continue

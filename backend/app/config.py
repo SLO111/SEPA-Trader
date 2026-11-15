@@ -6,14 +6,14 @@ class Settings(BaseSettings):
 
     app_name: str = "SEPA Trader"
     database_url: str = "sqlite:///./sepa.db"
-    jwt_secret: str = "dev-secret-schimba-in-productie-cu-o-cheie-lunga"
+    jwt_secret: str = "dev-secret-change-me-in-production-use-a-long-key"
     jwt_expire_minutes: int = 60 * 24 * 7
-    # Contul cu acest email devine administrator la inregistrare.
+    # The account registered with this email becomes an administrator.
     admin_email: str = "admin@sepa.local"
-    # "synthetic" (date demo, fara internet) sau "yfinance" (date reale gratuite, cu intarziere)
+    # "synthetic" (offline demo data) or "yfinance" (free real data, delayed)
     data_provider: str = "synthetic"
     cors_origins: str = "http://localhost:3000"
-    # Folderul cu frontend-ul exportat static (in Docker). Daca exista, e servit la "/".
+    # Folder with the statically exported frontend (in Docker). Served at "/" if present.
     static_dir: str = "static"
 
 

@@ -15,14 +15,14 @@ def test_free_plan_limits(client, register):
     h, _ = register("free@test.ro")
     wls = client.get("/api/watchlists", headers=h).json()
     assert len(wls) == 1 and wls[0]["symbols"][0] == "AAPL"
-    # free: o singura lista
+    # free: a single watchlist
     assert client.post("/api/watchlists", headers=h, json={"name": "A doua"}).status_code == 403
-    # free: max 10 simboluri (are deja 5)
+    # free: max 10 symbols (already has 5)
     wl = wls[0]["id"]
     for s in ["GOOGL", "TSLA", "AMD", "NFLX", "CRM"]:
         assert client.post(f"/api/watchlists/{wl}/items", headers=h, json={"symbol": s}).status_code == 200
     assert client.post(f"/api/watchlists/{wl}/items", headers=h, json={"symbol": "KO"}).status_code == 403
-    # free: max 3 strategii
+    # free: max 3 strategies
     body = {"symbol": "AAPL", "strategies": [{"id": i} for i in list(REGISTRY)[:4]]}
     assert client.post("/api/strategies/run", headers=h, json=body).status_code == 403
 
@@ -42,13 +42,13 @@ def test_candles_and_all_strategies(client, register):
     assert len(data["candles"]) > 500 and data["name"] == "NVIDIA Corp."
     for sid, cls in REGISTRY.items():
         res = client.post("/api/strategies/run", headers=h, json={"symbol": "NVDA", "strategies": [{"id": sid}]})
-        if cls.requires:  # cont Free => blocat
+        if cls.requires:  # Free account => locked
             assert res.status_code == 403, sid
             continue
         assert res.status_code == 200, sid
         out = res.json()[sid]
         assert set(out) == {"lines", "histograms", "markers", "levels"}, sid
-        if sid not in ("vcp", "trendlines"):  # pot fi goale legitim
+        if sid not in ("vcp", "trendlines"):  # may legitimately be empty
             assert out["lines"] or out["markers"], sid
 
 

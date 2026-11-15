@@ -1,4 +1,4 @@
-from . import builtin, sepa_strategies  # noqa: F401  (inregistreaza strategiile)
+from . import builtin, sepa_strategies  # noqa: F401  (registers the strategies)
 from .base import REGISTRY, Strategy, StrategyResult
 
 

@@ -1,4 +1,4 @@
-"""Detectare de swing-uri (varfuri si minime) prin algoritmul ZigZag."""
+"""Swing detection (peaks and troughs) using the ZigZag algorithm."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ import numpy as np
 class Swing:
     idx: int
     price: float
-    kind: str  # "H" (varf) | "L" (minim)
+    kind: str  # "H" (peak) | "L" (trough)
 
 
 def zigzag(high: np.ndarray, low: np.ndarray, pct: float) -> tuple[list[Swing], str | None, Swing | None]:
-    """Intoarce (swing-uri confirmate, directia curenta, extremul piciorului curent neconfirmat).
+    """Return (confirmed swings, current direction, unconfirmed extreme of the current leg).
 
-    Un varf e confirmat cand pretul scade cu `pct` sub el; un minim, cand pretul urca cu `pct` peste el.
-    Foloseste doar date pana la bara curenta, deci nu are look-ahead la nivel de confirmare.
+    A peak is confirmed once price drops `pct` below it; a trough once price rises `pct` above it.
+    Uses only data up to the current bar, so confirmations have no look-ahead.
     """
     n = len(high)
     swings: list[Swing] = []

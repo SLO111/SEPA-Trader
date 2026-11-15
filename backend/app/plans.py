@@ -1,4 +1,4 @@
-"""Limitele fiecarui plan de abonament (feature flags). O singura sursa de adevar."""
+"""Subscription plan limits (feature flags). Single source of truth."""
 
 UNLIMITED = 10**9
 
@@ -46,7 +46,7 @@ PLANS: dict[str, dict] = {
 
 
 def limits_for(user) -> dict:
-    # Administratorul are acces complet indiferent de plan.
+    # Administrators get full access regardless of plan.
     if user.role == "admin":
         return PLANS["premium"]
     return PLANS.get(user.plan, PLANS["free"])

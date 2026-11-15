@@ -1,4 +1,4 @@
-"""Generatoare de serii construite artificial, cu tipare cunoscute, pentru teste."""
+"""Generators of artificial price series with known patterns, for tests."""
 
 import numpy as np
 import pandas as pd
@@ -26,13 +26,13 @@ def _leg(a: float, b: float, n: int) -> np.ndarray:
 
 
 def vcp_stock() -> pd.DataFrame:
-    """Uptrend de un an, apoi baza cu contractii 25% -> 13% -> 6%, volum in scadere, pretul sub pivot."""
+    """One-year uptrend, then a base with 25% -> 13% -> 6% contractions on declining volume, price just below the pivot."""
     up = np.geomspace(40, 100, 300)
     base = np.concatenate(
         [
             _leg(100, 75, 15), _leg(75, 98, 20),   # C1: -25%
             _leg(98, 85.3, 10), _leg(85.3, 97, 15),  # C2: ~-13%
-            _leg(97, 91.2, 6), _leg(91.2, 95.5, 6),  # C3: ~-6%, aproape de pivot
+            _leg(97, 91.2, 6), _leg(91.2, 95.5, 6),  # C3: ~-6%, near the pivot
         ]
     )
     close = np.concatenate([up, base])
@@ -41,7 +41,7 @@ def vcp_stock() -> pd.DataFrame:
 
 
 def downtrend_stock() -> pd.DataFrame:
-    """Un an de crestere, apoi prabusire cu volum mare in zilele de scadere."""
+    """One year of gains, then a sell-off with heavy volume on down days."""
     rng = np.random.default_rng(7)
     close = np.concatenate([np.geomspace(50, 120, 280), np.geomspace(120, 70, 90)])
     close = close * (1 + rng.normal(0, 0.006, len(close)))

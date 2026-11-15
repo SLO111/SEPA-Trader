@@ -25,7 +25,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
       else await register(email, password, name);
       router.replace("/chart");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Eroare");
+      setError(err instanceof Error ? err.message : "Error");
     } finally {
       setBusy(false);
     }
@@ -40,10 +40,10 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
           <Logo />
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-xl border border-line bg-panel p-6">
-          <h1 className="text-lg font-semibold">{isLogin ? "Intră în cont" : "Creează cont gratuit"}</h1>
+          <h1 className="text-lg font-semibold">{isLogin ? "Log in to your account" : "Create a free account"}</h1>
           {!isLogin && (
             <label className="block text-sm">
-              <span className="mb-1 block text-muted">Nume</span>
+              <span className="mb-1 block text-muted">Name</span>
               <input value={name} onChange={(e) => setName(e.target.value)} className={field} autoComplete="name" />
             </label>
           )}
@@ -52,7 +52,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
             <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={field} autoComplete="email" />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-muted">Parolă {!isLogin && "(minim 8 caractere)"}</span>
+            <span className="mb-1 block text-muted">Password {!isLogin && "(at least 8 characters)"}</span>
             <input
               type="password"
               required
@@ -65,12 +65,12 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
           </label>
           {error && <p className="rounded-md bg-down/10 px-3 py-2 text-sm text-down">{error}</p>}
           <button disabled={busy} className="w-full rounded-md bg-accent py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-60">
-            {busy ? "Se procesează…" : isLogin ? "Intră" : "Creează cont"}
+            {busy ? "Please wait…" : isLogin ? "Log in" : "Create account"}
           </button>
           <p className="text-center text-sm text-muted">
-            {isLogin ? "Nu ai cont? " : "Ai deja cont? "}
+            {isLogin ? "Don't have an account? " : "Already have an account? "}
             <Link href={isLogin ? "/register" : "/login"} className="text-accent hover:underline">
-              {isLogin ? "Înregistrează-te" : "Intră"}
+              {isLogin ? "Sign up" : "Log in"}
             </Link>
           </p>
         </form>

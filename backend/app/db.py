@@ -6,7 +6,7 @@ from .config import settings
 
 
 def _normalize(url: str) -> str:
-    # Render/Heroku dau "postgres://" sau "postgresql://"; SQLAlchemy are nevoie de driverul psycopg.
+    # Render/Heroku provide "postgres://" or "postgresql://"; SQLAlchemy needs the psycopg driver.
     for prefix in ("postgres://", "postgresql://"):
         if url.startswith(prefix):
             return "postgresql+psycopg://" + url[len(prefix):]

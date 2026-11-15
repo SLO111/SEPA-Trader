@@ -1,4 +1,4 @@
-"""Furnizori de date de piata. Toate intorc un DataFrame cu index de date si coloanele
+"""Market data providers. All return a DataFrame with a date index and the columns
 open, high, low, close, volume (lowercase)."""
 
 from __future__ import annotations
@@ -34,8 +34,8 @@ def _resample(df: pd.DataFrame, interval: str) -> pd.DataFrame:
 
 
 class SyntheticProvider(DataProvider):
-    """Date demo deterministe (acelasi simbol => aceleasi date), pentru dezvoltare fara internet.
-    NU sunt preturi reale."""
+    """Deterministic demo data (same symbol => same data) for offline development.
+    These are NOT real prices."""
 
     name = "synthetic"
 
@@ -50,7 +50,7 @@ def _synthetic_daily(symbol: str, years: int, end: date) -> pd.DataFrame:
     days = pd.bdate_range(end=end, periods=int(252 * years))
     n = len(days)
 
-    # Regimuri de piata: perioade de trend sus/jos/lateral, cu volatilitate diferita.
+    # Market regimes: up/down/sideways periods with different volatility.
     base_vol = rng.uniform(0.011, 0.032)
     drift = np.empty(n)
     vol = np.empty(n)
@@ -80,8 +80,8 @@ def _synthetic_daily(symbol: str, years: int, end: date) -> pd.DataFrame:
 
 
 class YFinanceProvider(DataProvider):
-    """Date reale gratuite de la Yahoo Finance (cu intarziere). Bun pentru uz personal si dezvoltare;
-    pentru utilizatori platitori e nevoie de un furnizor cu licenta comerciala."""
+    """Free real data from Yahoo Finance (delayed). Fine for personal use and development;
+    paying users require a provider with a commercial license."""
 
     name = "yfinance"
 
@@ -91,7 +91,7 @@ class YFinanceProvider(DataProvider):
         start = date.today() - timedelta(days=int(365.25 * years) + 5)
         df = yf.Ticker(symbol).history(start=start.isoformat(), interval="1d", auto_adjust=True)
         if df.empty:
-            raise LookupError(f"Nu exista date pentru {symbol}")
+            raise LookupError(f"No data available for {symbol}")
         df = df.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
         df.index = pd.DatetimeIndex(df.index.tz_localize(None).normalize(), name="date")
         return _resample(df, interval)
@@ -104,7 +104,7 @@ def get_provider(name: str) -> DataProvider:
     try:
         return _PROVIDERS[name]()
     except KeyError:
-        raise ValueError(f"Furnizor necunoscut: {name}. Optiuni: {', '.join(_PROVIDERS)}")
+        raise ValueError(f"Unknown provider: {name}. Options: {', '.join(_PROVIDERS)}")
 
 
 def known_symbol(symbol: str) -> bool:

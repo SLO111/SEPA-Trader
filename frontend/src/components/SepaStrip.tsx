@@ -59,7 +59,7 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
         <Chip label="Trend Template" value={`${tt.passed_count}/8`} tone={tt.all_passed ? "text-up" : tt.passed_count <= 3 ? "text-down" : "text-amber-300"} />
         <Chip
           label="VCP"
-          value={v.detected ? `da · pivot ${v.pivot} (${v.distance_pct! > 0 ? "-" : "+"}${Math.abs(v.distance_pct!)}%)` : "nu"}
+          value={v.detected ? `yes · pivot ${v.pivot} (${v.distance_pct! > 0 ? "-" : "+"}${Math.abs(v.distance_pct!)}%)` : "no"}
           tone={v.detected ? "text-up" : "text-muted"}
         />
         {md ? (
@@ -70,7 +70,7 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
         ) : (
           <Chip label="Move Detector" value="Pro" tone="text-amber-300" />
         )}
-        <span className="ml-auto text-xs text-muted">{open ? "Ascunde ▲" : "Detalii ▼"}</span>
+        <span className="ml-auto text-xs text-muted">{open ? "Hide ▲" : "Details ▼"}</span>
       </button>
 
       {open && (
@@ -87,7 +87,7 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
             </ul>
             <h4 className="mb-2 mt-5 text-sm font-semibold">VCP</h4>
             {v.contractions.length > 0 && (
-              <p className="mb-2 text-xs text-muted">Contracții: {v.contractions.map((c) => `−${c.depth_pct}%`).join(" → ")}</p>
+              <p className="mb-2 text-xs text-muted">Contractions: {v.contractions.map((c) => `−${c.depth_pct}%`).join(" → ")}</p>
             )}
             {v.checks ? (
               <ul className="space-y-1.5 text-xs">
@@ -103,19 +103,19 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
             )}
             {v.pivot && (
               <p className="tabular mt-2 text-xs">
-                Pivot <b>{v.pivot}</b> · Stop <b>{v.stop}</b> · Risc {v.risk_pct}%
+                Pivot <b>{v.pivot}</b> · Stop <b>{v.stop}</b> · Risk {v.risk_pct}%
               </p>
             )}
           </div>
           {md ? (
             <>
-              <Factors title="Bull Score: potențial de creștere" block={md.bull} kind="bull" />
-              <Factors title="Bear Score: risc de scădere" block={md.bear} kind="bear" />
+              <Factors title="Bull Score: upside potential" block={md.bull} kind="bull" />
+              <Factors title="Bear Score: downside risk" block={md.bear} kind="bear" />
             </>
           ) : (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm md:col-span-2">
-              <p className="font-medium text-amber-300">Move Detector este disponibil în planurile Pro și Premium.</p>
-              <p className="mt-1 text-muted">Primești scorurile Bull/Bear cu explicația pe factori și scanner-ul care caută în toată piața acțiunile pregătite pentru o mișcare majoră.</p>
+              <p className="font-medium text-amber-300">Move Detector is available on the Pro and Premium plans.</p>
+              <p className="mt-1 text-muted">Get Bull/Bear scores with a per-factor breakdown, plus a scanner that searches the whole market for stocks set up for a major move.</p>
             </div>
           )}
         </div>

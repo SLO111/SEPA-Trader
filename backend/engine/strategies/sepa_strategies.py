@@ -1,4 +1,4 @@
-"""Strategii SEPA si Move Detector pentru chart."""
+"""SEPA and Move Detector strategies for the chart."""
 
 import pandas as pd
 
@@ -14,7 +14,7 @@ class TrendTemplateStrategy(Strategy):
     id = "trend_template"
     name = "Trend Template (SEPA)"
     category = "SEPA"
-    description = "Mediile 50/150/200 și marcaje în zilele în care acțiunea intră sau iese din Trend Template (criteriile 1–7)."
+    description = "The 50/150/200-day MAs plus markers on days the stock enters or exits the Trend Template (criteria 1–7)."
     params = []
 
     def compute(self, df, p, bench=None):
@@ -39,8 +39,8 @@ class VcpStrategy(Strategy):
     id = "vcp"
     name = "VCP + pivot"
     category = "SEPA"
-    description = "Detectează contracțiile de volatilitate; afișează pivotul (punctul de breakout) și stop-ul sugerat."
-    params = [Param("lookback", "Fereastră (zile)", 130, 40, 300), Param("swing", "Swing %", 4, 2, 15)]
+    description = "Detects volatility contractions and shows the pivot (breakout point) and suggested stop."
+    params = [Param("lookback", "Lookback (days)", 130, 40, 300), Param("swing", "Swing %", 4, 2, 15)]
 
     def compute(self, df, p, bench=None):
         v = detect_vcp(df, int(p["lookback"]), p["swing"] / 100)
@@ -65,10 +65,10 @@ class VcpStrategy(Strategy):
 @register
 class TrendlinesStrategy(Strategy):
     id = "trendlines"
-    name = "Trend lines automate"
+    name = "Automatic trend lines"
     category = "SEPA"
-    description = "Linie de rezistență prin ultimele două vârfuri și de suport prin ultimele două minime."
-    params = [Param("lookback", "Fereastră (zile)", 250, 60, 750), Param("swing", "Swing %", 6, 2, 20)]
+    description = "Resistance through the last two peaks and support through the last two troughs."
+    params = [Param("lookback", "Lookback (days)", 250, 60, 750), Param("swing", "Swing %", 6, 2, 20)]
 
     def compute(self, df, p, bench=None):
         lines = auto_trendlines(df, int(p["lookback"]), p["swing"] / 100)
@@ -80,7 +80,7 @@ class MoveDetectorStrategy(Strategy):
     id = "move_detector"
     name = "Move Detector (Bull / Bear Score)"
     category = "SEPA"
-    description = "Scorul zilnic 0–100 pentru potențialul unei mișcări majore în sus (verde) sau în jos (roșu)."
+    description = "Daily 0–100 score for the potential of a major move up (green) or down (red)."
     requires = "move_detector"
     params = []
 

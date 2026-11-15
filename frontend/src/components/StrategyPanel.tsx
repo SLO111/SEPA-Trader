@@ -39,7 +39,7 @@ export default function StrategyPanel({ defs, active, onChange, max, features }:
     <div className="flex h-full flex-col">
       <div className="border-b border-line p-3">
         <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">Strategii & indicatori</h2>
+          <h2 className="text-sm font-semibold">Strategies & indicators</h2>
           <span className="tabular text-xs text-muted">
             {active.length}/{max >= 1e6 ? "∞" : max} active
           </span>
@@ -47,10 +47,10 @@ export default function StrategyPanel({ defs, active, onChange, max, features }:
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Caută strategie…"
+          placeholder="Search strategies…"
           className="w-full rounded border border-line bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent"
         />
-        {atLimit && max < 1e6 && <p className="mt-2 text-xs text-amber-300">Ai atins limita planului. Fă upgrade pentru mai multe strategii simultan.</p>}
+        {atLimit && max < 1e6 && <p className="mt-2 text-xs text-amber-300">You&apos;ve reached your plan&apos;s limit. Upgrade to use more strategies at once.</p>}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-4">
         {grouped.map(([cat, items]) => (
@@ -93,7 +93,7 @@ export default function StrategyPanel({ defs, active, onChange, max, features }:
             })}
           </section>
         ))}
-        {grouped.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">Nicio strategie găsită.</p>}
+        {grouped.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">No strategies found.</p>}
       </div>
     </div>
   );

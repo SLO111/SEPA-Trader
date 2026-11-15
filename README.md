@@ -1,30 +1,30 @@
 # SEPA Trader
 
-Platformă de analiză și trading pe acțiuni: charturi, liste de tickere, strategii suprapuse, conturi cu abonament și panou de administrator. Urmează portofoliile, Move Detector, alertele, uneltele de piață și plățile.
+A stock analysis and trading platform: charts, watchlists, strategy overlays, SEPA analysis (Trend Template, VCP, RS Rating), the **Move Detector** algorithm with a market-wide scanner, subscription plans and an admin panel. Alerts, portfolios, market tools and payments are next.
 
 ```
-backend/    API Python (FastAPI) + engine/ (date, indicatori, strategii)
-frontend/   aplicația web (Next.js + TypeScript + TradingView Lightweight Charts)
+backend/    Python API (FastAPI) + engine/ (data, indicators, strategies, SEPA, Move Detector)
+frontend/   web app (Next.js + TypeScript + TradingView Lightweight Charts)
 ```
 
-## Cum pornești aplicația pe calculatorul tău
+## Running locally
 
-Ai nevoie de **Python 3.11+** și **Node.js 20+**.
+You need **Python 3.11+** and **Node.js 20+**.
 
-### 1. Backend (într-un terminal)
+### 1. Backend (in one terminal)
 
 ```bash
 cd backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate    |   Mac/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # apoi pune emailul tău la ADMIN_EMAIL
+cp .env.example .env        # then set ADMIN_EMAIL to your email
 uvicorn app.main:app --reload --port 8000
 ```
 
-Documentația API interactivă: http://localhost:8000/docs
+Interactive API docs: http://localhost:8000/docs
 
-### 2. Frontend (în alt terminal)
+### 2. Frontend (in another terminal)
 
 ```bash
 cd frontend
@@ -32,63 +32,60 @@ npm install
 npm run dev
 ```
 
-Deschide http://localhost:3000 și creează-ți cont **cu emailul pus la `ADMIN_EMAIL`**: contul acela devine administrator.
+Open http://localhost:3000 and sign up **with the email you set as `ADMIN_EMAIL`**. That account becomes the administrator.
 
-### Date de piață
-- `DATA_PROVIDER=yfinance`: prețuri reale de la Yahoo Finance, gratuite, cu întârziere. Potrivit pentru uz personal.
-- `DATA_PROVIDER=synthetic`: date demo generate local, fără internet (NU sunt prețuri reale).
-- Pentru utilizatori plătitori va fi nevoie de un furnizor cu licență comercială (ex. Polygon, FMP).
+### Market data
+- `DATA_PROVIDER=yfinance`: real prices from Yahoo Finance, free and delayed. Suitable for personal use.
+- `DATA_PROVIDER=synthetic`: locally generated demo data, no internet needed (NOT real prices).
+- Serving paying users requires a provider with a commercial license (e.g. Polygon, FMP).
 
-## Publicare online gratuită (Render.com)
+## Deploying for free (Render.com)
 
-GitHub Pages găzduiește doar site-uri statice, iar aplicația are și server Python și bază de date. De aceea folosim **Render.com**, care are plan gratuit și se leagă direct de repository-ul de GitHub.
+GitHub Pages only hosts static sites, and this app also has a Python server and a database. **Render.com** has a free plan and connects directly to the GitHub repository.
 
-1. Intră pe https://render.com/deploy?repo=https://github.com/SLO111/SEPA-Trader și autentifică-te cu contul de GitHub.
-2. Render citește `render.yaml` și propune: serviciul web `sepa-trader` (Docker) și baza de date `sepa-trader-db` (PostgreSQL).
-3. La `ADMIN_EMAIL` pune emailul tău, apoi apasă **Apply** / **Deploy Blueprint**.
-4. După build (5–10 minute), aplicația e disponibilă la `https://sepa-trader.onrender.com` (sau un nume asemănător, afișat în Render).
-5. Creează-ți cont în aplicație cu emailul pus la `ADMIN_EMAIL`: contul acela devine administrator.
+1. Open https://render.com/deploy?repo=https://github.com/SLO111/SEPA-Trader and sign in with GitHub.
+2. Render reads `render.yaml` and proposes the `sepa-trader` web service (Docker) and the `sepa-trader-db` database (PostgreSQL).
+3. Enter your email for `ADMIN_EMAIL`, then click **Deploy Blueprint**.
+4. After the build (5–10 minutes), the app is live at `https://sepa-trader.onrender.com` (or a similar URL shown in Render).
+5. Sign up in the app with the `ADMIN_EMAIL` address to get administrator access.
 
-La fiecare `git push` pe `main`, Render republică automat aplicația.
+Every `git push` to `main` redeploys automatically.
 
-**Limitele planului gratuit:** serviciul „adoarme” după 15 minute fără vizitatori, iar prima deschidere durează apoi ~1 minut. Baza de date PostgreSQL gratuită expiră după 30 de zile; pentru utilizare reală treci pe un plan plătit (~7$/lună) sau folosești o bază de date externă gratuită (ex. Neon) prin `DATABASE_URL`.
+**Free plan limits:** the service sleeps after 15 minutes without visitors, and the first request afterwards takes about a minute. The free PostgreSQL database expires after 30 days; for real use, upgrade (~$7/month) or point `DATABASE_URL` at an external free database (e.g. Neon).
 
-Imaginea Docker (`Dockerfile`) merge și pe alte platforme: Fly.io, Railway, un VPS.
+The `Dockerfile` also works on other platforms: Fly.io, Railway, or any VPS.
 
-### Teste
+### Tests
 
 ```bash
 cd backend && pytest
 ```
 
-## Ce e gata (etapele 1–3)
-- Conturi: înregistrare, login, roluri admin/utilizator, planuri Free / Pro / Premium cu limite.
-- Charturi cu lumânări, volum și timeframe-uri 1Z / 1S / 1L.
-- Liste multiple de tickere (creezi, redenumești, colorezi, ștergi; prețuri și variații).
-- Panou cu toate strategiile, activabile câte vrei deodată, fiecare cu parametri proprii:
-  SMA 50/100/200, SMA 50/150/200 (SEPA), SMA la alegere, EMA 10/21, Bollinger, RSI, MACD,
-  Bot crossover (BUY/SELL), Bot revenire RSI.
-- Panou de administrator: statistici, schimbare plan/rol, dezactivare conturi.
-- **Analiză SEPA** pe fiecare ticker (banda de sub chart): RS Rating 1–99, Trend Template (8 criterii),
-  detectare VCP cu pivot, stop și risc.
-- **Strategii SEPA pe chart:** Trend Template (marcaje intrare/ieșire), VCP + pivot, trend lines automate,
-  Move Detector (istoricul scorurilor Bull/Bear).
-- **Move Detector (stratul 1)**: Bull Score și Bear Score 0–100, cu explicația fiecărui factor:
-  compresie de volatilitate, volum/acumulare, trend, forță relativă, apropiere de pivot, regim de piață;
-  respectiv trend deteriorat, zile de distribuție, slăbiciune relativă, climax, breakout eșuat.
-- **Scanner** (pagina Move Detector): toată piața sortată după Bull / Bear / RS, cu filtre Trend Template 8/8 și VCP.
-  Disponibil doar în planurile Pro și Premium.
+## Features (stages 1–3)
+- Accounts: sign-up, login, admin/user roles, Free / Pro / Premium plans with enforced limits.
+- Candlestick charts with volume and 1D / 1W / 1M timeframes.
+- Multiple watchlists (create, rename, color, delete; live price and daily change).
+- Strategy panel with every available strategy. Stack as many as your plan allows, each with its own parameters:
+  SMA 50/100/200, SMA 50/150/200 (SEPA), custom SMA, EMA 10/21, Bollinger Bands, RSI, MACD,
+  MA crossover bot (BUY/SELL), RSI reversal bot, Trend Template, VCP + pivot, automatic trend lines, Move Detector.
+- **SEPA analysis** for every ticker (strip under the chart): RS Rating 1–99, Trend Template (8 criteria),
+  VCP detection with pivot, stop and risk.
+- **Move Detector (layer 1)**: Bull Score and Bear Score 0–100 with a per-factor breakdown:
+  volatility contraction, volume dry-up/accumulation, trend, relative strength, proximity to pivot, market regime;
+  and trend breakdown, distribution days, relative weakness, climax, failed breakout.
+- **Scanner** (Move Detector page): the whole market ranked by Bull / Bear / RS, with Trend Template 8/8 and VCP filters.
+  Pro and Premium only.
+- Admin panel: stats, change plan/role, deactivate accounts.
 
-### Cum adaugi o strategie nouă
-Creezi o clasă în `backend/engine/strategies/builtin.py` (sau într-un fișier nou importat acolo), decorată cu `@register`. Apare automat în lista de pe pagina de chart.
+### Adding a new strategy
+Create a class in `backend/engine/strategies/builtin.py` (or a new module imported there) decorated with `@register`. It shows up automatically in the chart's strategy list.
 
-## Urmează
-4. Alerte în timp real (breakout, volum neobișnuit, gap-uri, avertismente)
-5. Portofolii cu clasificare automată
-6. Pagina completă de ticker + raport PDF
-7. Unelte de piață (earnings, Fed, pre/after-hours, screener, gainers)
-8. Jurnal, Trade Review, backtesting, ML
-9. Plăți Stripe
-10. Deploy
+## Roadmap
+4. Real-time alerts (breakouts, unusual volume, gaps, warnings) + email/Telegram notifications
+5. Portfolios with automatic classification
+6. Full ticker page + PDF report
+7. Market tools (earnings, Fed, pre/after-hours, screener, gainers)
+8. Journal, Trade Review, backtesting, ML
+9. Stripe payments
 
-> Informațiile din aplicație au scop educațional și nu reprezintă sfat financiar.
+> For educational purposes only. Not financial advice.

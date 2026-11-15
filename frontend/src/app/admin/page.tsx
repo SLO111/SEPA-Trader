@@ -27,13 +27,13 @@ function AdminPanel() {
       setUsers((us) => us.map((x) => (x.id === id ? u : x)));
       api<Stats>("/api/admin/stats").then(setStats);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Eroare");
+      setError(e instanceof Error ? e.message : "Error");
     }
   };
 
   const tiles = stats
     ? [
-        { label: "Utilizatori", value: stats.total_users },
+        { label: "Users", value: stats.total_users },
         { label: "Free", value: stats.by_plan.free },
         { label: "Pro", value: stats.by_plan.pro },
         { label: "Premium", value: stats.by_plan.premium },
@@ -43,7 +43,7 @@ function AdminPanel() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
-        <h1 className="mb-6 text-xl font-semibold">Panou de administrator</h1>
+        <h1 className="mb-6 text-xl font-semibold">Admin panel</h1>
         <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
           {tiles.map((t) => (
             <div key={t.label} className="rounded-xl border border-line bg-panel p-4">
@@ -58,11 +58,11 @@ function AdminPanel() {
             <thead className="bg-panel text-left text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Nume</th>
+                <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Plan</th>
-                <th className="px-4 py-3">Rol</th>
-                <th className="px-4 py-3">Activ</th>
-                <th className="px-4 py-3">Creat</th>
+                <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Active</th>
+                <th className="px-4 py-3">Created</th>
               </tr>
             </thead>
             <tbody>
@@ -84,7 +84,7 @@ function AdminPanel() {
                       onChange={(e) => update(u.id, { role: e.target.value as User["role"] })}
                       className="rounded border border-line bg-bg px-2 py-1 disabled:opacity-50"
                     >
-                      <option value="user">Utilizator</option>
+                      <option value="user">User</option>
                       <option value="admin">Admin</option>
                     </select>
                   </td>
@@ -97,7 +97,7 @@ function AdminPanel() {
                       className="accent-blue-500"
                     />
                   </td>
-                  <td className="tabular px-4 py-2.5 text-muted">{new Date(u.created_at).toLocaleDateString("ro-RO")}</td>
+                  <td className="tabular px-4 py-2.5 text-muted">{new Date(u.created_at).toLocaleDateString("en-US")}</td>
                 </tr>
               ))}
             </tbody>

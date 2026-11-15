@@ -41,14 +41,14 @@ def user_out(u: User) -> dict:
 def register(body: RegisterIn, db: Session = Depends(get_db)):
     email = body.email.lower()
     if db.scalar(select(User).where(User.email == email)):
-        raise HTTPException(409, "Exista deja un cont cu acest email")
+        raise HTTPException(409, "An account with this email already exists")
     user = User(
         email=email,
         name=body.name.strip(),
         password_hash=hash_password(body.password),
         role="admin" if email == settings.admin_email.lower() else "user",
     )
-    wl = Watchlist(name="Favorite", position=0)
+    wl = Watchlist(name="Favorites", position=0)
     wl.items = [WatchlistItem(symbol=s, position=i) for i, s in enumerate(DEFAULT_SYMBOLS)]
     user.watchlists = [wl]
     db.add(user)
@@ -60,9 +60,9 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
 def login(body: LoginIn, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if not user or not verify_password(body.password, user.password_hash):
-        raise HTTPException(401, "Email sau parola gresita")
+        raise HTTPException(401, "Incorrect email or password")
     if not user.is_active:
-        raise HTTPException(403, "Contul este dezactivat")
+        raise HTTPException(403, "This account has been deactivated")
     return {"token": create_token(user.id), "user": user_out(user)}
 
 

@@ -6,12 +6,12 @@ import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 
 const NAV = [
-  { href: "/chart", label: "Charturi" },
-  { href: "#", label: "Portofolii", soon: true },
-  { href: "#", label: "Piață", soon: true },
+  { href: "/chart", label: "Charts" },
+  { href: "#", label: "Portfolios", soon: true },
+  { href: "#", label: "Markets", soon: true },
   { href: "/scanner", label: "Move Detector" },
-  { href: "#", label: "Alerte", soon: true },
-  { href: "#", label: "Jurnal", soon: true },
+  { href: "#", label: "Alerts", soon: true },
+  { href: "#", label: "Journal", soon: true },
 ];
 
 const PLAN_STYLE: Record<string, string> = {
@@ -41,7 +41,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
   }, [user, loading, adminOnly, router]);
 
   if (loading || !user || (adminOnly && user.role !== "admin")) {
-    return <div className="grid h-screen place-items-center text-muted">Se încarcă…</div>;
+    return <div className="grid h-screen place-items-center text-muted">Loading…</div>;
   }
 
   return (
@@ -51,7 +51,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto text-sm">
           {NAV.map((n) =>
             n.soon ? (
-              <span key={n.label} className="cursor-default whitespace-nowrap rounded px-3 py-1.5 text-muted/60" title="În curând">
+              <span key={n.label} className="cursor-default whitespace-nowrap rounded px-3 py-1.5 text-muted/60" title="Coming soon">
                 {n.label}
               </span>
             ) : (
@@ -83,7 +83,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
             }}
             className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text"
           >
-            Ieșire
+            Log out
           </button>
         </div>
       </header>

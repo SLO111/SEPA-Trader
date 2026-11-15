@@ -1,7 +1,7 @@
-"""Sistemul de plugin-uri pentru strategii/indicatori afisati pe chart.
+"""Plugin system for strategies/indicators drawn on the chart.
 
-O strategie noua = o clasa care mosteneste Strategy si e decorata cu @register.
-Rezultatul `compute` e un dict serializabil JSON pe care frontend-ul il deseneaza:
+A new strategy = a class that subclasses Strategy and is decorated with @register.
+`compute` returns a JSON-serializable dict that the frontend draws:
   lines:      [{name, color, pane: "price"|"lower", data: [{time, value}]}]
   histograms: [{name, pane, data: [{time, value, color}]}]
   markers:    [{time, position: "aboveBar"|"belowBar", shape: "arrowUp"|"arrowDown"|"circle", color, text}]
@@ -42,10 +42,10 @@ class StrategyResult:
 class Strategy:
     id: ClassVar[str]
     name: ClassVar[str]
-    category: ClassVar[str]  # "Medii mobile" | "Oscilatoare" | "Volatilitate" | "Semnale (boți)" | "SEPA"
+    category: ClassVar[str]  # "Moving Averages" | "Oscillators" | "Volatility" | "Signals (Bots)" | "SEPA"
     description: ClassVar[str] = ""
     params: ClassVar[list[Param]] = []
-    requires: ClassVar[str | None] = None  # functie de plan necesara (ex. "move_detector")
+    requires: ClassVar[str | None] = None  # required plan feature (e.g. "move_detector")
 
     def resolve_params(self, raw: dict[str, Any] | None) -> dict[str, float]:
         raw = raw or {}
@@ -85,7 +85,7 @@ def register(cls: type[Strategy]) -> type[Strategy]:
     return cls
 
 
-# ---- utilitare de serializare ----
+# ---- serialization helpers ----
 
 def t(ts: pd.Timestamp) -> str:
     return ts.strftime("%Y-%m-%d")

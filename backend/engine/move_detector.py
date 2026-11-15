@@ -1,10 +1,10 @@
-"""Move Detector – stratul 1: Setup Score.
+"""Move Detector – layer 1: Setup Score.
 
-Doua scoruri 0–100, calculate pe fiecare bara (vectorizat, fara look-ahead):
-  * Bull Score: cat de "incarcata" e actiunea pentru o miscare majora in sus;
-  * Bear Score: cat de mare e riscul unei miscari majore in jos.
-Fiecare factor e normalizat la 0..1 si ponderat. Ponderile sunt initiale si vor fi
-optimizate prin backtesting / ML (stratul 3).
+Two 0–100 scores computed on every bar (vectorized, no look-ahead):
+  * Bull Score: how "loaded" the stock is for a major move up;
+  * Bear Score: how high the risk of a major move down is.
+Each factor is normalized to 0..1 and weighted. The weights are initial values and will be
+optimized through backtesting / ML (layer 3).
 """
 
 from __future__ import annotations
@@ -32,17 +32,17 @@ BEAR_WEIGHTS = {
     "market": 0.10,
 }
 FACTOR_LABELS = {
-    "compression": "Compresie de volatilitate",
-    "volume": "Volum secat + acumulare",
+    "compression": "Volatility contraction",
+    "volume": "Volume dry-up + accumulation",
     "trend": "Trend (Trend Template)",
-    "rs": "Forță relativă vs. piață",
-    "pivot": "Aproape de maxime / pivot",
-    "market": "Regim de piață",
-    "breakdown": "Trend deteriorat",
-    "distribution": "Zile de distribuție",
-    "rs_weak": "Slăbiciune relativă",
-    "climax": "Extensie / climax",
-    "failed_breakout": "Breakout eșuat",
+    "rs": "Relative strength vs. market",
+    "pivot": "Near highs / pivot",
+    "market": "Market regime",
+    "breakdown": "Trend breakdown",
+    "distribution": "Distribution days",
+    "rs_weak": "Relative weakness",
+    "climax": "Extension / climax",
+    "failed_breakout": "Failed breakout",
 }
 
 
@@ -51,7 +51,7 @@ def _clip(s: pd.Series) -> pd.Series:
 
 
 def _pct_rank(s: pd.Series, window: int) -> pd.Series:
-    """Percentila valorii curente in fereastra ei trecuta (0 = cea mai mica)."""
+    """Percentile of the current value within its trailing window (0 = lowest)."""
     return s.rolling(window, min_periods=window // 2).rank(pct=True)
 
 
@@ -136,26 +136,26 @@ def score_series(df: pd.DataFrame, bench: pd.DataFrame | None = None) -> pd.Data
 
 def label(score: float) -> str:
     if score >= 75:
-        return "Foarte puternic"
+        return "Very strong"
     if score >= 60:
-        return "Puternic"
+        return "Strong"
     if score >= 45:
-        return "Moderat"
-    return "Slab"
+        return "Moderate"
+    return "Weak"
 
 
 def analyze(df: pd.DataFrame, bench: pd.DataFrame | None = None, rs_rating: int | None = None) -> dict:
-    """Scorurile curente plus explicatia pe factori."""
+    """Current scores plus a per-factor breakdown."""
     bull_f, bear_f = compute_factors(df, bench)
     if rs_rating is not None:
-        # Pe univers avem RS Rating-ul real; il combinam cu pozitia liniei RS.
+        # Across the universe we have the real RS Rating; blend it with the RS line position.
         bull_f.loc[bull_f.index[-1], "rs"] = 0.5 * bull_f["rs"].iloc[-1] + 0.5 * (rs_rating / 99)
         bear_f.loc[bear_f.index[-1], "rs_weak"] = 1 - bull_f["rs"].iloc[-1]
 
     def pack(f: pd.DataFrame, weights: dict[str, float]) -> dict:
         last = f.iloc[-1]
         if last.isna().all():
-            return {"score": None, "label": "Date insuficiente", "factors": []}
+            return {"score": None, "label": "Insufficient data", "factors": []}
         score = float(sum(float(np.nan_to_num(last[k])) * w for k, w in weights.items()) * 100)
         factors = [
             {

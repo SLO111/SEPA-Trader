@@ -36,7 +36,7 @@ def _rs_for(symbol: str) -> int | None:
     by_symbol = {r["symbol"]: r["rs_rating"] for r in rows}
     if symbol in by_symbol:
         return by_symbol[symbol]
-    # Simbol din afara universului: il clasam fata de univers.
+    # Symbol outside the universe: rank it against the universe.
     raws = {}
     for r in rows:
         try:
@@ -56,7 +56,7 @@ def scan(
     user: User = Depends(current_user),
 ):
     if not limits_for(user)["move_detector"]:
-        raise HTTPException(403, "Move Detector și scanner-ul sunt disponibile în planurile Pro și Premium.")
+        raise HTTPException(403, "Move Detector and the scanner are available on Pro and Premium plans.")
     rows = cached_scan()
     key = {"bull": "bull_score", "bear": "bear_score", "rs": "rs_rating"}[sort]
     out = [
@@ -76,9 +76,9 @@ def report(symbol: str, user: User = Depends(current_user)):
     try:
         market_data.history(symbol)
     except Exception:
-        raise HTTPException(404, f"Nu am găsit date pentru {symbol}")
+        raise HTTPException(404, f"No data found for {symbol}")
     rep = sepa_report(market_data.history, symbol, _rs_for(symbol))
     if not limits_for(user)["move_detector"]:
-        # Planul Free vede Trend Template si VCP, dar nu si scorurile Move Detector.
+        # Free plan sees Trend Template and VCP, but not the Move Detector scores.
         rep["move_detector"] = None
     return rep

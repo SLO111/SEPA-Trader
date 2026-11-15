@@ -14,9 +14,9 @@ import type { ActiveStrategy, CandlesResponse, StrategyDef, StrategyOutput } fro
 const PriceChart = dynamic(() => import("@/components/PriceChart"), { ssr: false });
 
 const INTERVALS = [
-  { id: "1d", label: "1Z" },
-  { id: "1wk", label: "1S" },
-  { id: "1mo", label: "1L" },
+  { id: "1d", label: "1D" },
+  { id: "1wk", label: "1W" },
+  { id: "1mo", label: "1M" },
 ];
 const STORE_KEY = "sepa_active_strategies";
 
@@ -94,7 +94,7 @@ function ChartWorkspace() {
       <section className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-2">
           <button onClick={() => setPanel(panel === "watch" ? "none" : "watch")} className="rounded border border-line px-2 py-1 text-xs text-muted lg:hidden">
-            Liste
+            Lists
           </button>
           <div className="flex items-baseline gap-2">
             <h1 className="text-lg font-semibold">{data?.symbol ?? symbol}</h1>
@@ -122,7 +122,7 @@ function ChartWorkspace() {
               </button>
             ))}
             <button onClick={() => setPanel(panel === "strat" ? "none" : "strat")} className="ml-2 rounded border border-line px-2 py-1 text-xs text-muted xl:hidden">
-              Strategii
+              Strategies
             </button>
           </div>
         </div>
@@ -130,8 +130,8 @@ function ChartWorkspace() {
         {error && <div className="bg-down/10 px-4 py-2 text-sm text-down">{error}</div>}
         <div className="min-h-0 flex-1">{data && <PriceChart candles={data.candles} overlays={overlays} />}</div>
         <div className="border-t border-line px-4 py-1.5 text-[11px] text-muted">
-          {data && data.delay_minutes > 0 ? `Date cu întârziere de ${data.delay_minutes} min · ` : ""}
-          Informațiile au scop educațional și nu reprezintă sfat financiar.
+          {data && data.delay_minutes > 0 ? `Data delayed by ${data.delay_minutes} min · ` : ""}
+          For educational purposes only. Not financial advice.
         </div>
       </section>
 

@@ -1,4 +1,4 @@
-"""Acces la date cu cache in memorie (TTL), ca sa nu interogam furnizorul la fiecare request."""
+"""Market data access with an in-memory TTL cache, so the provider isn't hit on every request."""
 
 import time
 from threading import Lock
@@ -17,7 +17,7 @@ _lock = Lock()
 def history(symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
     symbol = symbol.upper().strip()
     if interval not in INTERVALS:
-        raise ValueError(f"Interval invalid: {interval}")
+        raise ValueError(f"Invalid interval: {interval}")
     key = (settings.data_provider, symbol, interval, years)
     now = time.monotonic()
     with _lock:
@@ -26,7 +26,7 @@ def history(symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
             return hit[1]
     df = get_provider(settings.data_provider).history(symbol, interval, years)
     if df.empty:
-        raise LookupError(f"Nu exista date pentru {symbol}")
+        raise LookupError(f"No data available for {symbol}")
     with _lock:
         _cache[key] = (now, df)
     return df

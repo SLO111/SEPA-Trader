@@ -1,4 +1,4 @@
-"""Universul de simboluri cunoscute (pentru cautare si date demo). Se extinde ulterior din furnizorul de date."""
+"""Universe of known symbols (for search and demo data). To be extended from the data provider later."""
 
 SYMBOLS: dict[str, dict] = {
     "AAPL": {"name": "Apple Inc.", "sector": "Technology", "exchange": "NASDAQ"},

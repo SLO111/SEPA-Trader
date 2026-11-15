@@ -27,7 +27,7 @@ def health():
     return {"status": "ok", "data_provider": settings.data_provider}
 
 
-# Frontend-ul (export static Next.js), montat ultimul ca sa nu acopere rutele /api.
+# Frontend (static Next.js export), mounted last so it doesn't shadow /api routes.
 _static = Path(settings.static_dir)
 if _static.is_dir():
     app.mount("/", StaticFiles(directory=_static, html=True), name="frontend")

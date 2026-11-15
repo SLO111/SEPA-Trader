@@ -14,7 +14,7 @@ export function setToken(token: string | null) {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
   } catch {
-    /* storage indisponibil */
+    /* storage unavailable */
   }
 }
 
@@ -34,12 +34,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(`${BASE}${path}`, { ...init, headers });
   } catch {
-    throw new ApiError(0, "Serverul nu răspunde. Pornește backend-ul (vezi README).");
+    throw new ApiError(0, "The server is not responding. Make sure the backend is running (see README).");
   }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const detail = typeof data.detail === "string" ? data.detail : "A apărut o eroare";
+    const detail = typeof data.detail === "string" ? data.detail : "Something went wrong";
     throw new ApiError(res.status, detail);
   }
   return data as T;

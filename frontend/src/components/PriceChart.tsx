@@ -36,7 +36,7 @@ export default function PriceChart({ candles, overlays }: Props) {
   const markersRef = useRef<ReturnType<typeof createSeriesMarkers<Time>> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
 
-  // Creare chart o singura data
+  // Create the chart once
   useEffect(() => {
     if (!container.current) return;
     const chart = createChart(container.current, { ...THEME, autoSize: true });
@@ -63,7 +63,7 @@ export default function PriceChart({ candles, overlays }: Props) {
     };
   }, []);
 
-  // Date de pret
+  // Price data
   useEffect(() => {
     if (!candleRef.current || !volumeRef.current) return;
     candleRef.current.setData(candles.map((c) => ({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close })));
@@ -73,7 +73,7 @@ export default function PriceChart({ candles, overlays }: Props) {
     chartRef.current?.timeScale().fitContent();
   }, [candles]);
 
-  // Strategii suprapuse
+  // Strategy overlays
   useEffect(() => {
     const chart = chartRef.current;
     const candle = candleRef.current;
@@ -81,7 +81,7 @@ export default function PriceChart({ candles, overlays }: Props) {
 
     overlayRefs.current.forEach((s) => chart.removeSeries(s));
     overlayRefs.current = [];
-    // sterge pane-urile inferioare goale ramase
+    // remove leftover empty lower panes
     while (chart.panes().length > 1) chart.removePane(chart.panes().length - 1);
 
     const hasLower = overlays.some((o) => o.lines.some((l) => l.pane === "lower") || o.histograms.some((h) => h.pane === "lower"));
