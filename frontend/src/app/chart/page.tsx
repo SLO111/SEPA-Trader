@@ -55,12 +55,19 @@ function ChartWorkspace() {
       .catch(() => {});
   }, [max, user]);
 
+  // Live data: reload prices (and strategies) every minute.
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    setError("");
+    const id = setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (tick === 0) setError("");
     api<CandlesResponse>(`/api/market/candles/${encodeURIComponent(symbol)}?interval=${interval}`)
       .then(setData)
-      .catch((e) => setError(e.message));
-  }, [symbol, interval]);
+      .catch((e) => tick === 0 && setError(e.message));
+  }, [symbol, interval, tick]);
 
   useEffect(() => {
     try {
@@ -75,7 +82,7 @@ function ChartWorkspace() {
         .then((r) => setOverlays(active.map((a) => r[a.id]).filter(Boolean)))
         .catch((e) => setError(e.message));
     }, 250);
-  }, [active, symbol, interval]);
+  }, [active, symbol, interval, tick]);
 
   const q = data?.quote;
   const up = (q?.change ?? 0) >= 0;
@@ -140,8 +147,9 @@ function ChartWorkspace() {
         </div>
         <SepaStrip symbol={symbol} />
         {error && <div className="bg-down/10 px-4 py-2 text-sm text-down">{error}</div>}
-        <div className="min-h-0 flex-1">{data && <PriceChart candles={data.candles} overlays={overlays} />}</div>
+        <div className="min-h-0 flex-1">{data && <PriceChart candles={data.candles} overlays={overlays} fitKey={`${symbol}:${interval}`} />}</div>
         <div className="border-t border-line px-4 py-1.5 text-[11px] text-muted">
+          {data?.live_at && <span className="mr-1 text-up">● Live · updated {data.live_at} ·</span>}
           {data && data.delay_minutes > 0 ? `Data delayed by ${data.delay_minutes} min · ` : ""}
           For educational purposes only. Not financial advice.
         </div>

@@ -22,7 +22,12 @@ def _require(user: User) -> None:
 def _dataset():
     def build():
         hist = {}
-        for s in stock_symbols():
+        # Large universes: test on the 150 largest companies to keep the run fast.
+        syms = stock_symbols()
+        if len(syms) > 150:
+            caps = {s: (market_data.cached("fundamentals", s) or {}).get("market_cap_b") or 0 for s in syms}
+            syms = sorted(syms, key=lambda s: -caps[s])[:150]
+        for s in syms:
             try:
                 hist[s] = market_data.history(s)
             except Exception:

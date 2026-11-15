@@ -56,7 +56,10 @@ def check_rules(db: Session, user_id: int | None = None, now: datetime | None = 
             continue
         users[user.id] = user
         events = [e for e in rule.events.split(",") if e]
-        for symbol in rule_symbols(db, rule):
+        symbols = rule_symbols(db, rule)
+        if rule.scope != "universe":
+            market_data.watch(*symbols)  # alerts on specific symbols get minute-by-minute prices
+        for symbol in symbols:
             try:
                 df = market_data.history(symbol)
                 found = evaluate(df, bench, events, _params(rule), now=now)

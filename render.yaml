@@ -24,3 +24,5 @@ services:
         sync: false # Render asks for this during setup: enter your email
       - key: DATA_PROVIDER
         value: yfinance
+      - key: UNIVERSE
+        value: sp500 # "core" = only 38 symbols, lighter for the free instance

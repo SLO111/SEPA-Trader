@@ -15,9 +15,14 @@ from ..security import current_user
 
 router = APIRouter(prefix="/api/sepa", tags=["sepa"])
 
-_TTL = 300
+_TTL = 1800  # live mode: also recomputed whenever the store finishes a full price update
 _scan_cache: dict[str, tuple[float, list[dict]]] = {}
 _lock = Lock()
+
+
+def invalidate_scan() -> None:
+    with _lock:
+        _scan_cache.clear()
 
 
 def cached_scan() -> list[dict]:

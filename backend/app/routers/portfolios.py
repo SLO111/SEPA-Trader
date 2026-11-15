@@ -49,6 +49,7 @@ def _positions(txns: list[Txn]) -> tuple[list[dict], float]:
     """Open positions enriched with prices, fundamentals and risk metrics; plus total realized P/L."""
     bench = _bench_close()
     rows, realized = [], 0.0
+    market_data.watch(*{t.symbol for t in txns})
     for sym, h in holdings(txns).items():
         realized += h["realized"]
         if h["shares"] <= 0:

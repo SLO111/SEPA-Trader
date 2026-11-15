@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     # Folder with the statically exported frontend (in Docker). Served at "/" if present.
     static_dir: str = "static"
+    # Universe of stocks in live mode: "sp500" (S&P 500 + the built-in list) or "core" (the 38 built-in symbols).
+    universe: str = "sp500"
+    # Keep a persistent market-data cache and refresh it in the background (live providers only).
+    data_refresh: bool = True
     # Background alert checks: interval in seconds (0 disables the background loop).
     alert_check_seconds: int = 300
     # Email notifications (optional): any SMTP provider, e.g. Gmail, Brevo, SendGrid.

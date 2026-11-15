@@ -189,7 +189,10 @@ function Portfolios() {
 
   useEffect(() => {
     if (selected === null) return setDetail(null);
-    api<PortfolioDetail>(`/api/portfolios/${selected}`).then(setDetail).catch((e) => setError(e.message));
+    const load = () => api<PortfolioDetail>(`/api/portfolios/${selected}`).then(setDetail).catch((e) => setError(e.message));
+    load();
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
   }, [selected]);
 
   const onDetail = (p: PortfolioDetail) => {

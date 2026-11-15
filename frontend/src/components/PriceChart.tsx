@@ -17,7 +17,8 @@ import {
 import { useEffect, useRef } from "react";
 import type { Candle, StrategyOutput } from "@/lib/types";
 
-type Props = { candles: Candle[]; overlays: StrategyOutput[] };
+// fitKey: the view is re-fitted only when it changes (new symbol/interval), not on live refreshes.
+type Props = { candles: Candle[]; overlays: StrategyOutput[]; fitKey?: string };
 
 const THEME = {
   layout: { background: { type: ColorType.Solid, color: "#0b0e14" }, textColor: "#8b95a7", fontSize: 11 },
@@ -27,7 +28,8 @@ const THEME = {
   crosshair: { mode: CrosshairMode.Normal },
 };
 
-export default function PriceChart({ candles, overlays }: Props) {
+export default function PriceChart({ candles, overlays, fitKey = "" }: Props) {
+  const fitted = useRef<string | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -70,8 +72,11 @@ export default function PriceChart({ candles, overlays }: Props) {
     volumeRef.current.setData(
       candles.map((c) => ({ time: c.time as Time, value: c.volume, color: c.close >= c.open ? "#22c55e40" : "#ef444440" })),
     );
-    chartRef.current?.timeScale().fitContent();
-  }, [candles]);
+    if (fitted.current !== fitKey) {
+      chartRef.current?.timeScale().fitContent();
+      fitted.current = fitKey;
+    }
+  }, [candles, fitKey]);
 
   // Strategy overlays
   useEffect(() => {

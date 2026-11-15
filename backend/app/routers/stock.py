@@ -21,7 +21,7 @@ def _peers(symbol: str, sector: str) -> list[dict]:
     for s in candidates:
         try:
             q = market_data.quote(s)
-            f = market_data.fundamentals(s)
+            f = market_data.cached("fundamentals", s) or {"name": SYMBOLS[s]["name"]}
         except Exception:
             continue
         rows.append({"symbol": s, "name": f.get("name", s), "price": q["price"], "change_pct": q["change_pct"],
@@ -32,6 +32,7 @@ def _peers(symbol: str, sector: str) -> list[dict]:
 
 def _build(symbol: str, user: User) -> dict:
     symbol = symbol.upper().strip()
+    market_data.watch(symbol)
     try:
         hist = market_data.history(symbol)
     except Exception:

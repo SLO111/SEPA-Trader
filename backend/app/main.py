@@ -34,8 +34,23 @@ async def _alert_loop(interval: int) -> None:
             log.exception("Alert check failed")
 
 
+def _start_market_data() -> None:
+    """Live providers: warm the store from the database and keep it updated in the background."""
+    from engine.data.universe import SYMBOLS, stock_symbols
+
+    from .data_store import get_store
+    from .routers.sepa import invalidate_scan
+
+    store = get_store()
+    if store is None:
+        return
+    store.on_prices_refreshed(invalidate_scan)
+    store.start(lambda: list(SYMBOLS), stock_symbols)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _start_market_data()
     task = asyncio.create_task(_alert_loop(settings.alert_check_seconds)) if settings.alert_check_seconds > 0 else None
     yield
     if task:
@@ -56,7 +71,18 @@ for r in (auth.router, watchlists.router, market.router, sepa.router, alerts.rou
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "data_provider": settings.data_provider}
+    from engine.data.universe import SYMBOLS
+
+    from .data_store import get_store
+
+    store = get_store()
+    data = None
+    if store is not None:
+        st = store.status
+        data = {"state": st["state"], "message": st["message"], "symbols_with_prices": len(store.prices),
+                "prices_refreshed_at": st["prices_refreshed_at"], "live_updated_at": st.get("live_updated_at"),
+                "fundamentals_loaded": f"{st['slow_done']}/{st['slow_total']}"}
+    return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "market_data": data}
 
 
 # Frontend (static Next.js export), mounted last so it doesn't shadow /api routes.

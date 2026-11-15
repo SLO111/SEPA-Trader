@@ -66,3 +66,34 @@ def search(query: str, limit: int = 10) -> list[dict]:
     ]
     hits.sort(key=lambda h: (not h["symbol"].startswith(q), h["symbol"]))
     return hits[:limit]
+
+
+# S&P 500 constituents (symbol, name, GICS sector), maintained as open data on GitHub.
+SP500_CSV = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv"
+SECTOR_NAMES = {"Information Technology": "Technology"}
+
+
+def parse_constituents(csv_text: str) -> dict[str, dict]:
+    """Parse the S&P 500 constituents CSV into {symbol: {name, sector, exchange}} (Yahoo-style symbols)."""
+    import csv
+    import io
+
+    out: dict[str, dict] = {}
+    for row in csv.DictReader(io.StringIO(csv_text)):
+        sym = (row.get("Symbol") or "").strip().upper().replace(".", "-")  # BRK.B -> BRK-B
+        if not sym:
+            continue
+        sector = (row.get("GICS Sector") or row.get("Sector") or "Other").strip()
+        out[sym] = {"name": (row.get("Security") or row.get("Name") or sym).strip(), "sector": SECTOR_NAMES.get(sector, sector), "exchange": ""}
+    return out
+
+
+def extend(entries: dict[str, dict]) -> int:
+    """Add symbols to the universe in place (modules keep their reference to SYMBOLS). Returns how many were new."""
+    new = [s for s in entries if s not in SYMBOLS]
+    for s, meta in entries.items():
+        if s in SYMBOLS:
+            SYMBOLS[s] = {**SYMBOLS[s], "sector": SYMBOLS[s]["sector"] if SYMBOLS[s]["sector"] in NON_STOCK_SECTORS else meta["sector"]}
+        else:
+            SYMBOLS[s] = meta
+    return len(new)

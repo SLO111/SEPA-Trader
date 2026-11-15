@@ -48,6 +48,7 @@ export type CandlesResponse = {
   exchange: string;
   quote: Quote;
   delay_minutes: number;
+  live_at?: string | null;
   candles: Candle[];
 };
 

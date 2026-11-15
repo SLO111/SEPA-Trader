@@ -33,6 +33,16 @@ function StockPage() {
     api<CandlesResponse>(`/api/market/candles/${encodeURIComponent(symbol)}?years=3`).then((r) => setCandles(r.candles)).catch(() => {});
   }, [symbol]);
 
+  // Live quote in the header, refreshed every minute.
+  useEffect(() => {
+    const id = setInterval(() => {
+      api<StockData["quote"][]>(`/api/market/quotes?symbols=${encodeURIComponent(symbol)}`)
+        .then(([q]) => q && !q.error && setData((d) => (d ? { ...d, quote: q } : d)))
+        .catch(() => {});
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [symbol]);
+
   const report = async () => {
     setPdfBusy(true);
     try {

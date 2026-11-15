@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -195,3 +195,13 @@ class WebhookEvent(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class MarketCache(Base):
+    """Persistent market data cache (prices, fundamentals, earnings, universe) so restarts start warm."""
+
+    __tablename__ = "market_cache"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)  # e.g. "prices:AAPL", "fundamentals:AAPL"
+    payload: Mapped[bytes] = mapped_column(LargeBinary)  # gzip-compressed JSON
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

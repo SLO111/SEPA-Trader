@@ -22,6 +22,16 @@ class DataProvider(ABC):
     @abstractmethod
     def history(self, symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame: ...
 
+    def bulk_history(self, symbols: list[str], years: int = 3) -> dict[str, pd.DataFrame]:
+        """Daily history for many symbols. Providers with a batch endpoint override this."""
+        out = {}
+        for s in symbols:
+            try:
+                out[s] = self.history(s, "1d", years)
+            except Exception:
+                continue
+        return out
+
     def fundamentals(self, symbol: str) -> dict:
         """Market cap ($B), P/E, dividend yield (%), EPS growth (%), sector, name."""
         from .fundamentals import reference
@@ -47,6 +57,10 @@ class DataProvider(ABC):
     def extended_hours(self, symbols: list[str]) -> list[dict]:
         """Pre-market / after-hours quotes. Needs live intraday data; the base provider has none."""
         return []
+
+    def live_bars(self, symbols: list[str]) -> dict[str, dict]:
+        """Today's running daily bar per symbol ({date, open, high, low, close, volume}). None for offline providers."""
+        return {}
 
 
 def _resample(df: pd.DataFrame, interval: str) -> pd.DataFrame:
@@ -147,10 +161,34 @@ class YFinanceProvider(DataProvider):
         df.index = pd.DatetimeIndex(df.index.tz_localize(None).normalize(), name="date")
         return _resample(df, interval)
 
+    def bulk_history(self, symbols: list[str], years: int = 3) -> dict[str, pd.DataFrame]:
+        """One batched download for many symbols (far fewer requests than one per symbol)."""
+        import yfinance as yf
+
+        start = date.today() - timedelta(days=int(365.25 * years) + 5)
+        data = yf.download(symbols, start=start.isoformat(), interval="1d", auto_adjust=True, group_by="ticker",
+                           threads=True, progress=False)
+        out = {}
+        for s in symbols:
+            try:
+                d = data[s] if len(symbols) > 1 else data
+            except KeyError:
+                continue
+            d = d.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]].dropna(subset=["close"])
+            if len(d) < 30:
+                continue
+            idx = d.index.tz_localize(None) if getattr(d.index, "tz", None) else d.index
+            d.index = pd.DatetimeIndex(idx.normalize(), name="date")
+            out[s] = d
+        return out
+
     def fundamentals(self, symbol: str) -> dict:
         import yfinance as yf
 
-        base = super().fundamentals(symbol)
+        # Live mode never falls back to the approximate demo reference values: missing data stays missing.
+        meta = SYMBOLS.get(symbol.upper(), {})
+        base = {"name": meta.get("name", symbol.upper()), "sector": meta.get("sector", "Other"),
+                "market_cap_b": None, "pe": None, "dividend_yield": None, "eps_growth": None, "beta": None}
         try:
             info = yf.Ticker(symbol).info or {}
         except Exception:
@@ -198,6 +236,30 @@ class YFinanceProvider(DataProvider):
         num = lambda v: None if pd.isna(v) else float(v)
         out["history"] = [{"date": i.strftime("%Y-%m-%d"), "eps_estimate": num(r.get("EPS Estimate")), "eps_actual": num(r.get("Reported EPS")),
                            "surprise_pct": num(r.get("Surprise(%)"))} for i, r in past.iterrows()]
+        return out
+
+    def live_bars(self, symbols: list[str]) -> dict[str, dict]:
+        """Today's regular-session bar built from 1-minute data, for many symbols in one request."""
+        import yfinance as yf
+        from zoneinfo import ZoneInfo
+
+        et = ZoneInfo("America/New_York")
+        data = yf.download(symbols, period="1d", interval="1m", prepost=False, group_by="ticker", auto_adjust=True,
+                           threads=True, progress=False)
+        out = {}
+        for s in symbols:
+            try:
+                d = (data[s] if len(symbols) > 1 else data).dropna(subset=["Close"])
+            except KeyError:
+                continue
+            if d.empty:
+                continue
+            idx = d.index.tz_convert(et) if d.index.tz else d.index.tz_localize("UTC").tz_convert(et)
+            d = d.set_axis(idx)
+            day = d[d.index.date == idx[-1].date()]
+            out[s] = {"date": idx[-1].strftime("%Y-%m-%d"), "open": float(day["Open"].iloc[0]), "high": float(day["High"].max()),
+                      "low": float(day["Low"].min()), "close": float(day["Close"].iloc[-1]), "volume": float(day["Volume"].sum()),
+                      "time": idx[-1].strftime("%H:%M ET")}
         return out
 
     def extended_hours(self, symbols: list[str]) -> list[dict]:

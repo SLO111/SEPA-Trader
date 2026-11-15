@@ -19,6 +19,7 @@ def search_symbols(q: str = Query(min_length=1, max_length=40), user: User = Dep
 
 @router.get("/market/candles/{symbol}")
 def candles(symbol: str, interval: str = "1d", years: int = Query(3, ge=1, le=10), user: User = Depends(current_user)):
+    market_data.watch(symbol)
     try:
         df = market_data.history(symbol, interval, years)
     except ValueError as e:
@@ -42,6 +43,7 @@ def candles(symbol: str, interval: str = "1d", years: int = Query(3, ge=1, le=10
         **meta,
         "quote": market_data.quote(symbol),
         "delay_minutes": limits_for(user)["data_delay_minutes"],
+        "live_at": market_data.live_status(symbol),
         "candles": rows,
     }
 
@@ -49,7 +51,9 @@ def candles(symbol: str, interval: str = "1d", years: int = Query(3, ge=1, le=10
 @router.get("/market/quotes")
 def quotes(symbols: str = Query(max_length=2000), user: User = Depends(current_user)):
     out = []
-    for s in [x.strip().upper() for x in symbols.split(",") if x.strip()][:200]:
+    wanted = [x.strip().upper() for x in symbols.split(",") if x.strip()][:200]
+    market_data.watch(*wanted)
+    for s in wanted:
         try:
             out.append(market_data.quote(s))
         except Exception:

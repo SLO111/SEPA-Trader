@@ -5,9 +5,10 @@ from threading import Lock
 
 import pandas as pd
 
-from engine.data.providers import INTERVALS, get_provider
+from engine.data.providers import INTERVALS, _resample, get_provider
 
 from .config import settings
+from .data_store import get_store
 
 _TTL_SECONDS = 300
 _cache: dict[tuple, tuple[float, pd.DataFrame]] = {}
@@ -18,6 +19,15 @@ def history(symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
     symbol = symbol.upper().strip()
     if interval not in INTERVALS:
         raise ValueError(f"Invalid interval: {interval}")
+    store = get_store()
+    if store is not None and years <= 3:
+        df = store.get_prices(symbol)
+        if df is None:
+            df = get_provider(settings.data_provider).history(symbol, "1d", 3)
+            if df.empty:
+                raise LookupError(f"No data available for {symbol}")
+            store.put_prices(symbol, df)
+        return _resample(df, interval)
     key = (settings.data_provider, symbol, interval, years)
     now = time.monotonic()
     with _lock:
@@ -30,6 +40,14 @@ def history(symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
     with _lock:
         _cache[key] = (now, df)
     return df
+
+
+def watch(*symbols: str) -> None:
+    """Symbols a person is looking at (chart, watchlist, portfolio, alerts) get minute-by-minute price updates."""
+    store = get_store()
+    if store is not None:
+        for s in symbols:
+            store.touch(s.upper().strip())
 
 
 def quote(symbol: str) -> dict:
@@ -62,9 +80,33 @@ def _slow(kind: str, symbol: str, loader):
     return value
 
 
+def _stored(kind: str, symbol: str, loader):
+    store = get_store()
+    if store is None:
+        return _slow(kind, symbol, loader)
+    value = store.get_slow(kind, symbol.upper())
+    if value is None:
+        value = loader()
+        store.put_slow(kind, symbol.upper(), value)
+    return value
+
+
 def fundamentals(symbol: str) -> dict:
-    """Fundamentals change slowly; cached for 12 hours."""
-    return _slow("fundamentals", symbol, lambda: get_provider(settings.data_provider).fundamentals(symbol.upper()))
+    """Fundamentals change slowly; refreshed daily in the background (live) or cached for 12 hours."""
+    return _stored("fundamentals", symbol, lambda: get_provider(settings.data_provider).fundamentals(symbol.upper()))
+
+
+def cached(kind: str, symbol: str) -> dict | None:
+    """Stored fundamentals/earnings without calling the provider: for screens over the whole universe."""
+    store = get_store()
+    if store is None:
+        return fundamentals(symbol) if kind == "fundamentals" else earnings(symbol)
+    return store.get_slow(kind, symbol.upper())
+
+
+def live_status(symbol: str) -> str | None:
+    store = get_store()
+    return store.live_at.get(symbol.upper()) if store else None
 
 
 def dividends(symbol: str) -> pd.Series:
@@ -84,7 +126,7 @@ def company(symbol: str) -> dict:
 
 
 def earnings(symbol: str) -> dict:
-    return _slow("earnings", symbol, lambda: get_provider(settings.data_provider).earnings(symbol.upper()))
+    return _stored("earnings", symbol, lambda: get_provider(settings.data_provider).earnings(symbol.upper()))
 
 
 _fast_cache: dict[str, tuple[float, object]] = {}

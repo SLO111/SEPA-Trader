@@ -35,6 +35,22 @@ npm run dev
 Open http://localhost:3000 and sign up **with the email you set as `ADMIN_EMAIL`**. That account becomes the administrator.
 
 ### Market data
+With `DATA_PROVIDER=yfinance` all data is real and **updates continuously through the Yahoo Finance API**:
+
+| What | How often |
+|---|---|
+| Symbols you are looking at (open chart, watchlists, portfolios, alert rules, indices) | every **1 minute** during market hours |
+| The whole universe (S&P 500 + built-in list, ~510 stocks): scanner, screener, Fear & Greed, movers | every **15 minutes** |
+| Full price history (splits/dividend adjustments), fundamentals, earnings | daily, in the background |
+| Fed data (FRED) | every 6 hours |
+
+Prices are downloaded in batches (one request per 100 symbols) and kept in a database-backed cache, so the app
+restarts warm and Yahoo is not hit on every page view. Yahoo quotes can lag the market by up to a minute or two;
+tick-by-tick real time needs a paid provider (see `docs/data-providers.md`). Check progress at `/api/health`.
+
+`UNIVERSE=sp500` (default) or `UNIVERSE=core` (only the 38 built-in symbols: much lighter, recommended on
+Render's free instance, which has 0.1 CPU and 512 MB RAM).
+
 - `DATA_PROVIDER=yfinance`: real prices from Yahoo Finance, free and delayed. Suitable for personal use.
 - `DATA_PROVIDER=synthetic`: locally generated demo data, no internet needed (NOT real prices).
 - Serving paying users requires a provider with a commercial license (e.g. Polygon, FMP).

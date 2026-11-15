@@ -124,13 +124,12 @@ def earnings(user: User = Depends(current_user)):
     def build():
         entries = {}
         for s in stock_symbols():
-            try:
-                entries[s] = market_data.earnings(s)
-            except Exception:
-                continue
+            e = market_data.cached("earnings", s)
+            if e:
+                entries[s] = e
         return mt.earnings_calendar(entries, _histories(list(entries)), SYMBOLS, pd.Timestamp(date.today()))
 
-    return {"demo": settings.data_provider == "synthetic", **market_data._fast(f"{settings.data_provider}:earnings", 1800, build)}
+    return {"demo": settings.data_provider == "synthetic", **market_data._fast(f"{settings.data_provider}:earnings", 900, build)}
 
 
 @router.get("/fed")
@@ -164,7 +163,7 @@ def screener(
         raise HTTPException(403, "The screener is available on the Pro and Premium plans.")
     if preset and preset not in mt.PRESETS:
         raise HTTPException(400, f"Unknown preset: {preset}")
-    fundamentals = {s: market_data.fundamentals(s) for s in stock_symbols()}
+    fundamentals = {s: market_data.cached("fundamentals", s) or {} for s in stock_symbols()}
     rows = mt.screen_rows(_rows(), cached_scan(), fundamentals)
     out = mt.screen(rows, preset, sector, min_cap_b, max_pe, min_yield, min_rs, min_growth, template_only, above_ma50)
     return {"count": len(out), "results": out}
