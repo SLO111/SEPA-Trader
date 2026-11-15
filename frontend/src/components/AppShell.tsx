@@ -7,13 +7,14 @@ import { api } from "@/lib/api";
 import SymbolSearch from "./SymbolSearch";
 import { useAuth } from "@/lib/auth";
 
-const NAV = [
+const NAV: { href: string; label: string; soon?: boolean }[] = [
   { href: "/chart", label: "Charts" },
   { href: "/portfolios", label: "Portfolios" },
   { href: "/markets", label: "Markets" },
   { href: "/scanner", label: "Move Detector" },
   { href: "/alerts", label: "Alerts" },
-  { href: "#", label: "Journal", soon: true },
+  { href: "/journal", label: "Journal" },
+  { href: "/backtest", label: "Backtest" },
 ];
 
 const PLAN_STYLE: Record<string, string> = {

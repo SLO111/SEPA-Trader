@@ -10,6 +10,9 @@ export type PlanLimits = {
   reports: boolean;
   move_detector: boolean;
   backtesting: boolean;
+  trade_review: boolean;
+  max_journal_trades: number;
+  max_alert_rules: number;
 };
 
 export type User = {

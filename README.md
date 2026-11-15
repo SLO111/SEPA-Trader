@@ -61,7 +61,7 @@ The `Dockerfile` also works on other platforms: Fly.io, Railway, or any VPS.
 cd backend && pytest
 ```
 
-## Features (stages 1–7)
+## Features (stages 1–8)
 - Accounts: sign-up, login, admin/user roles, Free / Pro / Premium plans with enforced limits.
 - Candlestick charts with volume and 1D / 1W / 1M timeframes.
 - Multiple watchlists (create, rename, color, delete; live price and daily change).
@@ -111,6 +111,18 @@ cd backend && pytest
     market-implied outlook (estimated from T-bill yields) and decision history, from FRED.
   - Screener (Pro/Premium): presets for undervalued, growth at a reasonable price, high dividend, SEPA leaders,
     near 52-week highs, oversold and momentum, plus filters for sector, market cap, P/E, yield, RS and trend.
+- **Trading journal**: log long/short trades with stop, target, setup and notes. Analytics include win rate,
+  average win vs. loss, expectancy (in %, $ and R), profit factor, max drawdown, streaks, holding times,
+  equity curve, monthly P/L, R-multiple distribution and performance by setup. Free plan: 20 trades.
+- **Trade Review** (Premium): every closed trade gets an A–F grade with checks for setup quality (Trend Template,
+  Bull Score and market at entry), entry vs. pivot, planned risk, stop discipline and exit quality, plus hindsight
+  notes. Entry and exit prices that don't match the market on those dates are flagged instead of graded.
+- **Backtesting** (Premium):
+  - Move Detector validation: hit rate of major up/down moves by score bucket vs. the base rate, top-10 lift and
+    forward returns, using only data available on each day (triple-barrier labels).
+  - Machine-learning layer: a gradient-boosting model on the same factors, tested walk-forward (trained only on
+    data before each test window) and compared with the rule score by AUC and top-10 hit rate.
+  - Strategy backtests for the BUY/SELL bots vs. buy & hold: return, CAGR, max drawdown, win rate and trades.
 - Admin panel: stats, change plan/role, deactivate accounts. The account matching `ADMIN_EMAIL` is promoted
   to administrator on sign-up or on its next login.
 
@@ -128,7 +140,6 @@ service such as cron-job.org.
 Create a class in `backend/engine/strategies/builtin.py` (or a new module imported there) decorated with `@register`. It shows up automatically in the chart's strategy list.
 
 ## Roadmap
-8. Journal, Trade Review, backtesting, ML
 9. Stripe payments
 
 > For educational purposes only. Not financial advice.

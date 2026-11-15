@@ -16,6 +16,8 @@ PLANS: dict[str, dict] = {
         "reports": False,
         "move_detector": False,
         "backtesting": False,
+        "trade_review": False,
+        "max_journal_trades": 20,
     },
     "pro": {
         "label": "Pro",
@@ -30,6 +32,8 @@ PLANS: dict[str, dict] = {
         "reports": False,
         "move_detector": True,
         "backtesting": False,
+        "trade_review": False,
+        "max_journal_trades": UNLIMITED,
     },
     "premium": {
         "label": "Premium",
@@ -44,6 +48,8 @@ PLANS: dict[str, dict] = {
         "reports": True,
         "move_detector": True,
         "backtesting": True,
+        "trade_review": True,
+        "max_journal_trades": UNLIMITED,
     },
 }
 
