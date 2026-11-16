@@ -3,10 +3,11 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
-import SepaStrip from "@/components/SepaStrip";
-import StrategyPanel from "@/components/StrategyPanel";
+import ChartLegend from "@/components/chart/ChartLegend";
+import IndicatorPicker from "@/components/chart/IndicatorPicker";
+import SymbolInfoPanel from "@/components/chart/SymbolInfoPanel";
 import WatchlistPanel from "@/components/WatchlistPanel";
 import { api, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -15,11 +16,15 @@ import type { ActiveStrategy, CandlesResponse, StrategyDef, StrategyOutput } fro
 const PriceChart = dynamic(() => import("@/components/PriceChart"), { ssr: false });
 
 const INTERVALS = [
-  { id: "1d", label: "1D" },
-  { id: "1wk", label: "1W" },
-  { id: "1mo", label: "1M" },
+  { id: "5m", label: "5m" },
+  { id: "15m", label: "15m" },
+  { id: "1h", label: "1h" },
+  { id: "1d", label: "D" },
+  { id: "1wk", label: "W" },
+  { id: "1mo", label: "M" },
 ];
-const STORE_KEY = "sepa_active_strategies";
+const STORE_KEY = "sepa_chart_indicators_v2";
+const uid = () => Math.random().toString(36).slice(2, 10);
 
 function loadActive(): ActiveStrategy[] {
   try {
@@ -28,7 +33,7 @@ function loadActive(): ActiveStrategy[] {
   } catch {
     /* ignore */
   }
-  return [{ id: "sepa_mas", params: {} }];
+  return [{ uid: uid(), id: "ma_ribbon", params: {} }];
 }
 
 function ChartWorkspace() {
@@ -41,8 +46,10 @@ function ChartWorkspace() {
   const [active, setActive] = useState<ActiveStrategy[]>([]);
   const [overlays, setOverlays] = useState<StrategyOutput[]>([]);
   const [error, setError] = useState("");
-  const [panel, setPanel] = useState<"none" | "watch" | "strat">("none");
+  const [picker, setPicker] = useState(false);
+  const [panel, setPanel] = useState<"none" | "watch" | "info">("none");
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const loaded = useRef(false); // don't overwrite saved indicators with the empty initial state
   const max = user?.limits.max_strategies_on_chart ?? 3;
 
   useEffect(() => {
@@ -51,11 +58,12 @@ function ChartWorkspace() {
         setDefs(ds);
         const allowed = new Set(ds.filter((d) => !d.requires || user?.limits[d.requires as keyof typeof user.limits]).map((d) => d.id));
         setActive(loadActive().filter((a) => allowed.has(a.id)).slice(0, max));
+        loaded.current = true;
       })
       .catch(() => {});
   }, [max, user]);
 
-  // Live data: reload prices (and strategies) every minute.
+  // Live data: reload prices (and indicators) every minute.
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 60_000);
@@ -70,26 +78,44 @@ function ChartWorkspace() {
   }, [symbol, interval, tick]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(active));
-    } catch {
-      /* ignore */
+    if (loaded.current) {
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify(active));
+      } catch {
+        /* ignore */
+      }
     }
     clearTimeout(debounce.current);
-    if (!active.length) return setOverlays([]);
+    const visible = active.filter((a) => !a.hidden);
+    if (!visible.length) return setOverlays([]);
     debounce.current = setTimeout(() => {
-      post<Record<string, StrategyOutput>>("/api/strategies/run", { symbol, interval, strategies: active })
-        .then((r) => setOverlays(active.map((a) => r[a.id]).filter(Boolean)))
+      post<{ results: StrategyOutput[] }>("/api/strategies/run", { symbol, interval, strategies: visible.map(({ id, params }) => ({ id, params })) })
+        .then((r) => setOverlays(r.results))
         .catch((e) => setError(e.message));
     }, 250);
   }, [active, symbol, interval, tick]);
 
+  const add = useCallback(
+    (d: StrategyDef) => {
+      setActive((a) => {
+        const params = Object.fromEntries(d.params.map((p) => [p.key, p.default]));
+        // each extra copy of an indicator gets the next color, so they are easy to tell apart
+        const colorParam = d.params.find((p) => p.key === "color");
+        if (colorParam) params.color = a.filter((x) => x.id === d.id).length % (colorParam.max + 1);
+        return [...a, { uid: uid(), id: d.id, params }];
+      });
+      setPicker(false);
+    },
+    [],
+  );
+
   const q = data?.quote;
   const up = (q?.change ?? 0) >= 0;
+  const intraday = ["5m", "15m", "1h"].includes(interval);
 
   return (
     <div className="relative flex h-full">
-      <aside className={`${panel === "watch" ? "absolute inset-y-0 left-0 z-30 flex" : "hidden"} w-72 shrink-0 flex-col border-r border-line bg-panel lg:static lg:flex`}>
+      <aside className={`${panel === "watch" ? "absolute inset-y-0 left-0 z-30 flex" : "hidden"} w-64 shrink-0 flex-col border-r border-line bg-panel lg:static lg:flex`}>
         <WatchlistPanel
           selected={symbol}
           onSelect={(s) => {
@@ -100,64 +126,70 @@ function ChartWorkspace() {
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-1.5">
           <button onClick={() => setPanel(panel === "watch" ? "none" : "watch")} className="rounded border border-line px-2 py-1 text-xs text-muted lg:hidden">
             Lists
           </button>
-          <div className="flex items-baseline gap-2">
-            <Link href={`/stock?s=${encodeURIComponent(symbol)}`} className="text-lg font-semibold hover:text-accent" title="Company overview">
-              {data?.symbol ?? symbol}
-            </Link>
-            <Link href={`/stock?s=${encodeURIComponent(symbol)}`} className="hidden text-sm text-muted hover:text-text sm:inline">
-              {data?.name}
-            </Link>
-            <span className="text-xs text-muted">{data?.exchange}</span>
-          </div>
+          <Link href={`/stock?s=${encodeURIComponent(symbol)}`} className="flex items-baseline gap-2 hover:text-accent" title="Open the full company overview">
+            <span className="text-lg font-semibold">{data?.symbol ?? symbol}</span>
+            <span className="hidden max-w-[220px] truncate text-sm text-muted sm:inline">{data?.name}</span>
+          </Link>
           {q?.price !== undefined && (
-            <div className="tabular flex items-baseline gap-2">
-              <span className="text-lg font-semibold">{q.price.toFixed(2)}</span>
-              <span className={up ? "text-up" : "text-down"}>
+            <span className="tabular flex items-baseline gap-2">
+              <span className="font-semibold">{q.price.toFixed(2)}</span>
+              <span className={`text-sm ${up ? "text-up" : "text-down"}`}>
                 {up ? "+" : ""}
                 {q.change?.toFixed(2)} ({up ? "+" : ""}
                 {q.change_pct?.toFixed(2)}%)
               </span>
-            </div>
+            </span>
           )}
-          <div className="ml-auto flex items-center gap-1">
+          <div className="mx-1 h-5 w-px bg-line" />
+          <div className="flex items-center gap-0.5">
             {INTERVALS.map((i) => (
               <button
                 key={i.id}
                 onClick={() => setIntervalId(i.id)}
-                className={`rounded px-2.5 py-1 text-xs ${interval === i.id ? "bg-accent text-white" : "text-muted hover:bg-panel-2 hover:text-text"}`}
+                className={`rounded px-2 py-1 text-xs ${interval === i.id ? "bg-panel-2 text-text" : "text-muted hover:bg-panel-2 hover:text-text"}`}
               >
                 {i.label}
               </button>
             ))}
-            <Link
-              href={`/alerts?symbol=${encodeURIComponent(symbol)}`}
-              title={`Create an alert for ${symbol}`}
-              className="ml-2 rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-text"
-            >
-              🔔 Alert
+          </div>
+          <div className="mx-1 h-5 w-px bg-line" />
+          <button onClick={() => setPicker(true)} className="flex items-center gap-1.5 rounded px-2 py-1 text-sm text-muted hover:bg-panel-2 hover:text-text">
+            <span className="text-base leading-none">ƒx</span> Indicators
+          </button>
+          <Link href={`/alerts?symbol=${encodeURIComponent(symbol)}`} className="rounded px-2 py-1 text-sm text-muted hover:bg-panel-2 hover:text-text">
+            🔔 Alert
+          </Link>
+          <div className="ml-auto flex items-center gap-2">
+            <Link href={`/stock?s=${encodeURIComponent(symbol)}`} className="hidden rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-text md:inline">
+              Overview ↗
             </Link>
-            <button onClick={() => setPanel(panel === "strat" ? "none" : "strat")} className="ml-2 rounded border border-line px-2 py-1 text-xs text-muted xl:hidden">
-              Strategies
+            <button onClick={() => setPanel(panel === "info" ? "none" : "info")} className="rounded border border-line px-2 py-1 text-xs text-muted xl:hidden">
+              Details
             </button>
           </div>
         </div>
-        <SepaStrip symbol={symbol} />
         {error && <div className="bg-down/10 px-4 py-2 text-sm text-down">{error}</div>}
-        <div className="min-h-0 flex-1">{data && <PriceChart candles={data.candles} overlays={overlays} fitKey={`${symbol}:${interval}`} />}</div>
-        <div className="border-t border-line px-4 py-1.5 text-[11px] text-muted">
-          {data?.live_at && <span className="mr-1 text-up">● Live · updated {data.live_at} ·</span>}
-          {data && data.delay_minutes > 0 ? `Data delayed by ${data.delay_minutes} min · ` : ""}
-          For educational purposes only. Not financial advice.
+        <div className="relative min-h-0 flex-1">
+          <ChartLegend active={active} defs={defs} onChange={setActive} />
+          {data && <PriceChart candles={data.candles} overlays={overlays} fitKey={`${symbol}:${interval}`} />}
+        </div>
+        <div className="flex flex-wrap gap-x-3 border-t border-line px-3 py-1 text-[11px] text-muted">
+          {data?.live_at && <span className="text-up">● Live · updated {data.live_at}</span>}
+          {intraday && <span>Faded candles: pre-market (4:00–9:30) and after-hours (16:00–20:00), New York time</span>}
+          {data && data.delay_minutes > 0 && <span>Data delayed by {data.delay_minutes} min</span>}
+          <span>For educational purposes only. Not financial advice.</span>
         </div>
       </section>
 
-      <aside className={`${panel === "strat" ? "absolute inset-y-0 right-0 z-30 flex" : "hidden"} w-80 shrink-0 flex-col border-l border-line bg-panel xl:static xl:flex`}>
-        <StrategyPanel defs={defs} active={active} onChange={setActive} max={max} features={user?.limits ?? {}} />
+      <aside className={`${panel === "info" ? "absolute inset-y-0 right-0 z-30 flex" : "hidden"} w-80 shrink-0 flex-col border-l border-line bg-panel xl:static xl:flex`}>
+        <SymbolInfoPanel symbol={symbol} tick={tick} />
       </aside>
+
+      {picker && <IndicatorPicker defs={defs} features={user?.limits ?? {}} activeCount={active.length} max={max} onAdd={add} onClose={() => setPicker(false)} />}
     </div>
   );
 }

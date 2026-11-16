@@ -25,7 +25,8 @@ class Param:
     min: float = 1
     max: float = 500
     step: float = 1
-    type: str = "int"  # int | float
+    type: str = "int"  # int | float | select
+    options: list | None = None  # for "select": [[value, label], ...]
 
 
 @dataclass
@@ -57,7 +58,7 @@ class Strategy:
             except (TypeError, ValueError):
                 v = p.default
             v = min(max(v, p.min), p.max)
-            out[p.key] = int(v) if p.type == "int" else v
+            out[p.key] = int(v) if p.type in ("int", "select") else v
         return out
 
     def compute(self, df: pd.DataFrame, params: dict[str, float], bench: pd.DataFrame | None = None) -> StrategyResult:
@@ -87,8 +88,12 @@ def register(cls: type[Strategy]) -> type[Strategy]:
 
 # ---- serialization helpers ----
 
-def t(ts: pd.Timestamp) -> str:
-    return ts.strftime("%Y-%m-%d")
+def t(ts: pd.Timestamp) -> str | int:
+    """Chart time: "YYYY-MM-DD" for daily bars; for intraday bars (exchange wall-clock time) a Unix timestamp,
+    so the chart shows New York time."""
+    if ts == ts.normalize():
+        return ts.strftime("%Y-%m-%d")
+    return int(ts.tz_localize(None).timestamp()) if ts.tzinfo else int(ts.timestamp())
 
 
 def series_points(s: pd.Series) -> list[dict]:

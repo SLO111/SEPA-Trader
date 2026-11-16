@@ -42,6 +42,18 @@ def history(symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
     return df
 
 
+INTRADAY = {"5m", "15m", "1h"}
+
+
+def chart_data(symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
+    """Daily/weekly/monthly history, or intraday bars (with pre-market and after-hours) refreshed every minute."""
+    if interval in INTRADAY:
+        sym = symbol.upper().strip()
+        return _fast(f"{settings.data_provider}:intraday:{sym}:{interval}", 60,
+                     lambda: get_provider(settings.data_provider).intraday(sym, interval))
+    return history(symbol, interval, years)
+
+
 def watch(*symbols: str) -> None:
     """Symbols a person is looking at (chart, watchlist, portfolio, alerts) get minute-by-minute price updates."""
     store = get_store()
@@ -151,8 +163,8 @@ def close_on(symbol: str, day) -> float | None:
 
 
 def company(symbol: str) -> dict:
-    """Company overview (profile, financials, analysts, ...); cached for 12 hours."""
-    return _slow("company", symbol, lambda: get_provider(settings.data_provider).company(symbol.upper()))
+    """Company overview (profile, financials, analysts, ...); cached for 2 hours."""
+    return _fast(f"{settings.data_provider}:company:{symbol.upper()}", 2 * 3600, lambda: get_provider(settings.data_provider).company(symbol.upper()))
 
 
 def earnings(symbol: str) -> dict:

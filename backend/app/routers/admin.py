@@ -71,3 +71,42 @@ def update_user(user_id: int, body: UserPatch, me: User = Depends(admin_user), d
         setattr(u, field, value)
     db.commit()
     return {**user_out(u), "is_active": u.is_active}
+
+
+@router.get("/data-check")
+def data_check(symbol: str = "AAPL", _: User = Depends(admin_user)):
+    """Which data sources answer right now (for troubleshooting empty statistics). Never returns secrets."""
+    import time as _t
+
+    from engine.data.providers import _finnhub, get_provider
+
+    from ..config import settings as cfg
+
+    sym = symbol.upper()
+    out: dict = {"symbol": sym, "data_provider": cfg.data_provider}
+
+    def probe(name, fn):
+        t0 = _t.monotonic()
+        try:
+            out[name] = {"ok": True, "ms": round((_t.monotonic() - t0) * 1000), "sample": fn()}
+        except Exception as e:
+            out[name] = {"ok": False, "ms": round((_t.monotonic() - t0) * 1000), "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
+    provider = get_provider(cfg.data_provider)
+    probe("prices", lambda: {"last_close": round(float(provider.history(sym)["close"].iloc[-1]), 2)})
+    if cfg.data_provider == "yfinance":
+        def yahoo_info():
+            import yfinance as yf
+
+            info = yf.Ticker(sym).info or {}
+            if not info.get("marketCap"):
+                raise RuntimeError("Yahoo returned no fundamentals (blocked from this server)")
+            return {"market_cap": info.get("marketCap"), "pe": info.get("trailingPE")}
+
+        probe("yahoo_fundamentals", yahoo_info)
+    fh = _finnhub()
+    if fh is None:
+        out["finnhub"] = {"ok": False, "error": "No Finnhub key found. Add FINNHUB_API_KEY in Render > Environment."}
+    else:
+        probe("finnhub", lambda: {k: v for k, v in fh.fundamentals(sym).items() if k in ("name", "market_cap_b", "pe", "beta")})
+    return out

@@ -68,7 +68,18 @@ export default function PriceChart({ candles, overlays, fitKey = "" }: Props) {
   // Price data
   useEffect(() => {
     if (!candleRef.current || !volumeRef.current) return;
-    candleRef.current.setData(candles.map((c) => ({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close })));
+    // Pre-market and after-hours candles are drawn faded, like on TradingView.
+    const color = (c: Candle) => {
+      const ext = c.session === "pre" || c.session === "post";
+      const upBar = c.close >= c.open;
+      return ext ? (upBar ? "#22c55e66" : "#ef444466") : upBar ? "#22c55e" : "#ef4444";
+    };
+    candleRef.current.setData(
+      candles.map((c) => {
+        const col = color(c);
+        return { time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close, color: col, wickColor: col, borderColor: col };
+      }),
+    );
     volumeRef.current.setData(
       candles.map((c) => ({ time: c.time as Time, value: c.volume, color: c.close >= c.open ? "#22c55e40" : "#ef444440" })),
     );

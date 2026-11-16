@@ -39,7 +39,7 @@ export type Quote = {
   error?: string;
 };
 
-export type Candle = { time: string; open: number; high: number; low: number; close: number; volume: number };
+export type Candle = { time: string | number; open: number; high: number; low: number; close: number; volume: number; session?: "pre" | "regular" | "post" };
 
 export type CandlesResponse = {
   symbol: string;
@@ -52,20 +52,34 @@ export type CandlesResponse = {
   candles: Candle[];
 };
 
-export type StrategyParam = { key: string; label: string; default: number; min: number; max: number; step: number; type: "int" | "float" };
+export type StrategyParam = { key: string; label: string; default: number; min: number; max: number; step: number; type: "int" | "float" | "select"; options?: [number, string][] | null };
 
 export type StrategyDef = { id: string; name: string; category: string; description: string; params: StrategyParam[]; requires: string | null };
 
-export type Point = { time: string; value: number; color?: string };
+export type Point = { time: string | number; value: number; color?: string };
 
 export type StrategyOutput = {
   lines: { name: string; color: string; pane: "price" | "lower"; width: number; data: Point[] }[];
   histograms: { name: string; pane: "price" | "lower"; data: Point[] }[];
-  markers: { time: string; position: "aboveBar" | "belowBar"; shape: "arrowUp" | "arrowDown" | "circle"; color: string; text: string }[];
+  markers: { time: string | number; position: "aboveBar" | "belowBar"; shape: "arrowUp" | "arrowDown" | "circle"; color: string; text: string }[];
   levels: { price: number; color: string; title: string }[];
 };
 
-export type ActiveStrategy = { id: string; params: Record<string, number> };
+// uid: one entry per instance, so the same indicator can be on the chart several times.
+export type ActiveStrategy = { uid: string; id: string; params: Record<string, number>; hidden?: boolean };
+
+export type SymbolInfo = {
+  symbol: string; name: string; exchange: string; sector: string; industry: string;
+  quote: Quote; live_at: string | null;
+  day: { open: number; high: number; low: number };
+  week52: { high: number; low: number };
+  volume: { today: number; avg_50d: number; relative: number | null };
+  stats: { market_cap_b: number | null; pe: number | null; dividend_yield: number | null; eps_growth: number | null; beta: number | null };
+  next_earnings: string | null;
+  extended: { session: "pre_market" | "after_hours"; price: number; change: number; change_pct: number; reference_close: number; time: string } | null;
+  overnight: null;
+  sepa: { rs_rating: number | null; template_passed: number; vcp: boolean; pivot: number | null; bull_score: number; bear_score: number; signals: string[] } | null;
+};
 
 export type Factor = { key: string; label: string; value: number; weight: number; contribution: number };
 export type ScoreBlock = { score: number | null; label: string; factors: Factor[] };

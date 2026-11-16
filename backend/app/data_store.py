@@ -259,7 +259,9 @@ class DataStore:
         if self.slow_paused_until and _now() < self.slow_paused_until:
             return 0
         provider = self._provider_factory()
-        if settings.finnhub_api_key:
+        from engine.data.providers import _finnhub
+
+        if _finnhub() is not None:
             # Partial Yahoo fallbacks are replaced as soon as Finnhub is available.
             for sym, v in list(self.slow["fundamentals"].items()):
                 if v.get("partial"):

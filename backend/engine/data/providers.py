@@ -62,6 +62,37 @@ class DataProvider(ABC):
         """Today's running daily bar per symbol ({date, open, high, low, close, volume}). None for offline providers."""
         return {}
 
+    def intraday(self, symbol: str, interval: str) -> pd.DataFrame:
+        """Intraday bars indexed by New York wall-clock time, with a "session" column: pre | regular | post."""
+        raise NotImplementedError("Intraday charts need a live data provider")
+
+
+INTRADAY_MINUTES = {"5m": 5, "15m": 15, "1h": 60}
+
+
+def session_of(ts: pd.Timestamp) -> str:
+    m = ts.hour * 60 + ts.minute
+    return "pre" if m < 570 else "post" if m >= 960 else "regular"
+
+
+def _synthetic_intraday(self, symbol: str, interval: str) -> pd.DataFrame:
+        """Demo intraday bars for the last 5 sessions (4:00-20:00 ET), consistent with the daily closes."""
+        daily = self.history(symbol).iloc[-6:]
+        step = INTRADAY_MINUTES[interval]
+        rng = np.random.default_rng(abs(hash((symbol.upper(), interval))) % 2**32)
+        frames = []
+        for (day, row), prev_close in zip(daily.iloc[1:].iterrows(), daily["close"].iloc[:-1]):
+            times = pd.date_range(day + pd.Timedelta(hours=4), day + pd.Timedelta(hours=20) - pd.Timedelta(minutes=step), freq=f"{step}min")
+            path = np.linspace(prev_close, row["close"], len(times)) * (1 + rng.normal(0, 0.002, len(times)).cumsum() / 10)
+            path[-1] = row["close"]
+            opens = np.r_[prev_close, path[:-1]]
+            vol = np.where([session_of(t) == "regular" for t in times], row["volume"] / 78 * step / 5, row["volume"] / 2000)
+            frames.append(pd.DataFrame({"open": opens, "high": np.maximum(opens, path) * 1.001, "low": np.minimum(opens, path) * 0.999,
+                                        "close": path, "volume": vol.round()}, index=times))
+        df = pd.concat(frames)
+        df["session"] = [session_of(t) for t in df.index]
+        return df
+
 
 def _resample(df: pd.DataFrame, interval: str) -> pd.DataFrame:
     if interval == "1d":
@@ -78,6 +109,7 @@ class SyntheticProvider(DataProvider):
     These are NOT real prices."""
 
     name = "synthetic"
+    intraday = _synthetic_intraday
 
     def history(self, symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
         if not known_symbol(symbol):
@@ -148,7 +180,9 @@ def _finnhub():
     """Finnhub client when FINNHUB_API_KEY is set (fundamentals, earnings, profiles, news that Yahoo blocks)."""
     import os
 
-    key = os.environ.get("FINNHUB_API_KEY", "").strip()
+    # Accept the common names people use (the Signalist tutorial uses NEXT_PUBLIC_FINNHUB_API_KEY).
+    names = ("FINNHUB_API_KEY", "FINNHUB_KEY", "FINNHUB_TOKEN", "NEXT_PUBLIC_FINNHUB_API_KEY", "NEXT_PUBLIC_NEXT_PUBLIC_FINNHUB_API_KEY")
+    key = next((os.environ[n].strip() for n in names if os.environ.get(n, "").strip()), "")
     if not key:
         return None
     from .finnhub import Finnhub
@@ -275,6 +309,21 @@ class YFinanceProvider(DataProvider):
         out["history"] = [{"date": i.strftime("%Y-%m-%d"), "eps_estimate": num(r.get("EPS Estimate")), "eps_actual": num(r.get("Reported EPS")),
                            "surprise_pct": num(r.get("Surprise(%)"))} for i, r in past.iterrows()]
         return out
+
+    def intraday(self, symbol: str, interval: str) -> pd.DataFrame:
+        """Intraday bars including pre-market (4:00) and after-hours (to 20:00), in New York time."""
+        import yfinance as yf
+        from zoneinfo import ZoneInfo
+
+        period = {"5m": "5d", "15m": "1mo", "1h": "3mo"}[interval]
+        df = yf.Ticker(symbol).history(period=period, interval=interval, prepost=True, auto_adjust=True)
+        if df.empty:
+            raise LookupError(f"No intraday data for {symbol}")
+        idx = df.index.tz_convert(ZoneInfo("America/New_York")) if df.index.tz else df.index
+        df = df.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
+        df.index = pd.DatetimeIndex(idx.tz_localize(None) if getattr(idx, "tz", None) else idx, name="date")
+        df["session"] = [session_of(t) for t in df.index]
+        return df.dropna(subset=["close"])
 
     def live_bars(self, symbols: list[str]) -> dict[str, dict]:
         """Today's regular-session bar built from 1-minute data, for many symbols in one request."""

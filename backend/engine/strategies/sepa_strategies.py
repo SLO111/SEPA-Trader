@@ -14,8 +14,8 @@ class TrendTemplateStrategy(Strategy):
     id = "trend_template"
     name = "Trend Template (SEPA)"
     category = "SEPA"
-    description = "The 50/150/200-day MAs plus markers on days the stock enters or exits the Trend Template (criteria 1–7)."
-    params = []
+    description = "Markers on days the stock enters or exits the Trend Template (criteria 1–7). Optionally shows the 50/150/200-day MAs."
+    params = [Param("show", "Show 50/150/200 MAs", 0, 0, 1, type="select", options=[[0, "No"], [1, "Yes"]])]
 
     def compute(self, df, p, bench=None):
         c = df["close"]
@@ -28,10 +28,8 @@ class TrendTemplateStrategy(Strategy):
             {"time": t(ts), "position": "belowBar", "shape": "circle", "color": "#22c55e", "text": "TT ✓"} for ts in enter[enter].index
         ] + [{"time": t(ts), "position": "aboveBar", "shape": "circle", "color": "#f97316", "text": "TT ✗"} for ts in leave[leave].index]
         markers.sort(key=lambda m: m["time"])
-        return StrategyResult(
-            lines=[line(f"SMA {n}", sma(c, n), col, width=1) for n, col in ((50, "#f59e0b"), (150, "#3b82f6"), (200, "#a855f7"))],
-            markers=markers,
-        )
+        lines = [line(f"SMA {n}", sma(c, n), col, width=1) for n, col in ((50, "#f59e0b"), (150, "#3b82f6"), (200, "#a855f7"))] if p.get("show") else []
+        return StrategyResult(lines=lines, markers=markers)
 
 
 @register

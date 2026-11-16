@@ -46,10 +46,27 @@ def test_candles_and_all_strategies(client, register):
             assert res.status_code == 403, sid
             continue
         assert res.status_code == 200, sid
-        out = res.json()[sid]
+        out = res.json()["results"][0]
         assert set(out) == {"lines", "histograms", "markers", "levels"}, sid
-        if sid not in ("vcp", "trendlines"):  # may legitimately be empty
+        if sid not in ("vcp", "trendlines", "trend_template"):  # may legitimately be empty
             assert out["lines"] or out["markers"], sid
+
+
+def test_same_indicator_twice_intraday_and_info(client, register):
+    h, _ = register("chart2@test.ro")
+    body = {"symbol": "AAPL", "strategies": [{"id": "ma", "params": {"period": 20}}, {"id": "ma", "params": {"period": 50, "type": 1}}]}
+    res = client.post("/api/strategies/run", headers=h, json=body).json()["results"]
+    assert [r["lines"][0]["name"] for r in res] == ["SMA 20", "EMA 50"]
+
+    intra = client.get("/api/market/candles/AAPL?interval=15m", headers=h).json()
+    assert {c["session"] for c in intra["candles"]} == {"pre", "regular", "post"}
+    assert all(isinstance(c["time"], int) for c in intra["candles"])  # intraday uses timestamps
+    r = client.post("/api/strategies/run", headers=h, json={"symbol": "AAPL", "interval": "15m", "strategies": [{"id": "rsi"}]})
+    assert r.status_code == 200 and isinstance(r.json()["results"][0]["lines"][0]["data"][0]["time"], int)
+
+    info = client.get("/api/market/info/AAPL", headers=h).json()
+    assert info["name"] == "Apple Inc." and info["week52"]["high"] >= info["week52"]["low"]
+    assert info["sepa"]["rs_rating"] is not None and info["overnight"] is None
 
 
 def test_admin(client, register):

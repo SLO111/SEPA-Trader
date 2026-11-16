@@ -34,6 +34,12 @@ async def _alert_loop(interval: int) -> None:
             log.exception("Alert check failed")
 
 
+def _finnhub_key_present() -> bool:
+    from engine.data.providers import _finnhub
+
+    return _finnhub() is not None
+
+
 def _warn_missing_config() -> None:
     if settings.admin_email == "admin@sepa.local":
         log.warning("ADMIN_EMAIL is not set: nobody will become administrator")
@@ -100,7 +106,7 @@ def health():
         "admin_email_set": settings.admin_email != "admin@sepa.local",
         "jwt_secret_set": not settings.jwt_secret.startswith("dev-secret"),
         "email_configured": bool(settings.smtp_host and settings.smtp_from),
-        "finnhub_configured": bool(settings.finnhub_api_key.strip()),
+        "finnhub_configured": _finnhub_key_present(),
         "universe": settings.universe,
     }
     return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "config": config, "market_data": data}
