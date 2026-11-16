@@ -35,7 +35,7 @@ PLANS: dict[str, dict] = {
         "max_alert_rules": 50,
         "reports": False,
         "move_detector": True,
-        "backtesting": False,
+        "backtesting": True,
         "trade_review": False,
         "max_journal_trades": UNLIMITED,
         "pulse": True,

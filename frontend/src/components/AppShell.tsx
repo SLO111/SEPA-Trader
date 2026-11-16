@@ -18,9 +18,9 @@ const NAV: { label: string; tabs: { href: string; label: string; hidden?: boolea
       { href: "/ideas", label: "Trade ideas" },
       { href: "/scanner", label: "Move Detector" },
       { href: "/pulse", label: "Pulse" },
-      { href: "/backtest", label: "Backtest" },
     ],
   },
+  { label: "Backtest", tabs: [{ href: "/backtest", label: "Backtest" }] },
   { label: "Portfolio", tabs: [{ href: "/portfolios", label: "Portfolios" }, { href: "/journal", label: "Journal", hidden: true }] },
   { label: "Feed", tabs: [{ href: "/feed", label: "Feed" }] },
   { label: "Alerts", tabs: [{ href: "/alerts", label: "Alerts" }] },
@@ -125,6 +125,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
                 className={`whitespace-nowrap rounded px-3 py-1.5 ${on ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
               >
                 {n.label}
+                {n.label === "Signals" && !user.limits.move_detector && <span className="ml-1 text-[10px]">🔒</span>}
                 {n.label === "Alerts" && unread > 0 && (
                   <span className="tabular ml-1.5 rounded-full bg-down px-1.5 py-0.5 text-[10px] font-semibold text-white">{unread > 99 ? "99+" : unread}</span>
                 )}

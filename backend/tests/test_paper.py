@@ -79,3 +79,11 @@ def test_chart_trades_are_separate(client, register):
     assert sold[0]["status"] == "CLOSED"
     assert client.post("/api/paper-trades/chart/sell", headers=h, json={"symbol": "AAPL"}).status_code == 404
     assert any(g["source"] == "Charts" for g in client.get("/api/grader?source=chart", headers=h).json()["trades"])
+
+
+def test_free_backtest_covers_only_chart_trades(client, register):
+    h, _ = register("free-bt@test.ro")
+    client.post("/api/paper-trades/chart", headers=h, json={"symbol": "AAPL", "side": "long"})
+    g = client.get("/api/grader?source=all", headers=h).json()
+    assert g["trades"] and all(t["source"] == "Charts" for t in g["trades"])
+    assert client.get("/api/ideas", headers=h).status_code == 403  # Signals are paid

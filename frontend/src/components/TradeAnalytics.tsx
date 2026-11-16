@@ -25,8 +25,8 @@ function Stat({ label, value, cls = "", hint }: { label: string; value: string; 
 }
 
 /** Trading statistics over your closed trades: expectancy, win/loss efficiency, consistency by month. */
-export default function TradeAnalytics() {
-  const [source, setSource] = useState("all");
+export default function TradeAnalytics({ chartOnly = false }: { chartOnly?: boolean }) {
+  const [source, setSource] = useState(chartOnly ? "chart" : "all");
   const [pf, setPf] = useState<number | "">("");
   const [portfolios, setPortfolios] = useState<{ id: number; name: string }[]>([]);
   useEffect(() => {
@@ -42,7 +42,7 @@ export default function TradeAnalytics() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1">
-        {[["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["chart", "Charts"], ["portfolio", "Portfolios"]].map(([id, label]) => (
+        {(chartOnly ? [["chart", "Charts"]] : [["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["chart", "Charts"], ["portfolio", "Portfolios"]]).map(([id, label]) => (
           <button key={id} onClick={() => setSource(id)} className={`rounded-full px-3 py-1 text-sm ${source === id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
             {label}
           </button>

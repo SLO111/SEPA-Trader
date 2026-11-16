@@ -123,11 +123,11 @@ function StrategyBacktest() {
   );
 }
 
-function Locked() {
+function Locked({ what }: { what: string }) {
   return (
     <div className="max-w-md rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
-      <h2 className="font-semibold">Available on the Premium plan</h2>
-      <p className="mt-2 text-sm text-muted">Validate the Move Detector on historical data and test chart strategies against buy &amp; hold.</p>
+      <h2 className="font-semibold">🔒 {what} is part of Pro</h2>
+      <p className="mt-2 text-sm text-muted">On the Free plan you can backtest the trades you place from the charts (Chart trades, TradeGrader and Analytics). Pro and Premium add the trades from Trade ideas and the Move Detector, and strategy backtests.</p>
       <Link href="/billing" className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">See plans</Link>
     </div>
   );
@@ -137,43 +137,36 @@ function Backtest() {
   const { user } = useAuth();
   type Tab = "trades" | "mdtrades" | "chart" | "grader" | "analytics" | "md" | "strategy";
   const [tab, setTab] = useState<Tab>(() => {
-    if (typeof window === "undefined") return "trades";
+    if (typeof window === "undefined") return "chart";
     const t = new URLSearchParams(window.location.search).get("tab");
-    return t === "md" ? "mdtrades" : (["trades", "mdtrades", "chart", "grader", "analytics", "validation", "strategy"].includes(t ?? "") ? (t === "validation" ? "md" : t) : "trades") as Tab;
+    return t === "md" ? "mdtrades" : (["trades", "mdtrades", "chart", "grader", "analytics", "validation", "strategy"].includes(t ?? "") ? (t === "validation" ? "md" : t) : "chart") as Tab;
   });
-  if (!user?.limits.backtesting && !user?.limits.move_detector) {
-    return (
-      <div className="grid h-full place-items-center p-6">
-        <div className="max-w-md rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 text-center">
-          <h1 className="text-lg font-semibold">Backtesting</h1>
-          <p className="mt-2 text-sm text-muted">Validate the Move Detector on historical data and test chart strategies against buy &amp; hold. Available on the Premium plan.</p>
-          <Link href="/billing" className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">See plans</Link>
-        </div>
-      </div>
-    );
-  }
+  const paid = !!user?.limits.backtesting;
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-7xl p-4 sm:p-6">
         <h1 className="text-xl font-semibold">Backtesting</h1>
         <p className="mb-4 text-sm text-muted">Does it actually work? Follow the ideas you took, and test the algorithm and strategies on historical data before trusting them with money.</p>
         <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
-          {([["trades", "Idea trades"], ["mdtrades", "Move Detector trades"], ["chart", "Chart trades"], ["grader", "TradeGrader"], ["analytics", "Analytics"], ["strategy", "Strategy backtest"]] as const).map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === id ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}>{label}</button>
+          {([["chart", "Chart trades"], ["trades", "Idea trades"], ["mdtrades", "Move Detector trades"], ["grader", "TradeGrader"], ["analytics", "Analytics"], ["strategy", "Strategy backtest"]] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === id ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}>
+              {label}
+              {!paid && ["trades", "mdtrades", "strategy"].includes(id) && <span className="ml-1 text-[10px]">🔒</span>}
+            </button>
           ))}
         </nav>
         {tab === "trades" ? (
-          <PaperTrades source="ideas" />
+          paid ? <PaperTrades source="ideas" /> : <Locked what="Idea trades" />
         ) : tab === "mdtrades" ? (
-          <PaperTrades source="md" />
+          paid ? <PaperTrades source="md" /> : <Locked what="Move Detector trades" />
         ) : tab === "chart" ? (
           <PaperTrades source="chart" />
         ) : tab === "grader" ? (
-          <TradeGrader />
+          <TradeGrader source={paid ? "all" : "chart"} chartOnly={!paid} />
         ) : tab === "analytics" ? (
-          <TradeAnalytics />
-        ) : !user?.limits.backtesting ? (
-          <Locked />
+          <TradeAnalytics chartOnly={!paid} />
+        ) : !paid ? (
+          <Locked what="Strategy backtest" />
         ) : (
           <StrategyBacktest />
         )}

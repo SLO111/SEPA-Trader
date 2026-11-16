@@ -441,6 +441,8 @@ def grader(source: Literal["all", "backtest", "ideas", "md", "chart", "portfolio
     """TradeGrader: Bought / Sold Perfect, Early or Late, plus an A-F grade for every trade."""
     from engine.trade_grader import aggregate
 
+    if not limits_for(user)["backtesting"]:
+        source = "chart"  # Free: TradeGrader covers the trades you placed from the charts
     rows = _graded(user, db, source, portfolio_id)
     return {"trades": rows, "summary": aggregate(rows)}
 
@@ -468,4 +470,6 @@ def trade_analytics(source: Literal["all", "backtest", "ideas", "md", "chart", "
     """TradingLogger-style statistics over your closed trades."""
     from engine.trade_grader import analytics
 
+    if not limits_for(user)["backtesting"]:
+        source = "chart"
     return analytics(_graded(user, db, source, portfolio_id))

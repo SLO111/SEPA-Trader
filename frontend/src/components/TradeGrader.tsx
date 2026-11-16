@@ -122,7 +122,7 @@ function GradeTable({ rows, open, setOpen }: { rows: Graded[]; open: string | nu
 }
 
 /** TradeGrader: how well each buy and sell was timed, plus an A-F grade, for trades from Backtest and Portfolios. */
-export default function TradeGrader({ source: initial = "all", portfolioId }: { source?: string; portfolioId?: number }) {
+export default function TradeGrader({ source: initial = "all", portfolioId, chartOnly = false }: { source?: string; portfolioId?: number; chartOnly?: boolean }) {
   const [source, setSource] = useState(initial);
   const [pf, setPf] = useState<number | "">("");
   const [portfolios, setPortfolios] = useState<{ id: number; name: string }[]>([]);
@@ -145,7 +145,7 @@ export default function TradeGrader({ source: initial = "all", portfolioId }: { 
     <div className="space-y-4">
       {!portfolioId && (
         <div className="flex flex-wrap gap-1">
-          {[["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["chart", "Charts"], ["portfolio", "Portfolios"]].map(([id, label]) => (
+          {(chartOnly ? [["chart", "Charts"]] : [["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["chart", "Charts"], ["portfolio", "Portfolios"]]).map(([id, label]) => (
             <button key={id} onClick={() => setSource(id)} className={`rounded-full px-3 py-1 text-sm ${source === id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
               {label}
             </button>
