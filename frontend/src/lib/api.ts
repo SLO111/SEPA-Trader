@@ -10,6 +10,7 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string | null) {
+  cache.clear(); // another user signs in or out: never show their cached data
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
@@ -24,7 +25,45 @@ export class ApiError extends Error {
   }
 }
 
+// Short-lived memory cache for GET requests that change slowly, so moving between pages is instant.
+// Any write (POST / PUT / PATCH / DELETE) clears it, so you never see stale data after an action.
+const CACHE_TTL: [string, number][] = [
+  ["/api/strategies", 3600_000],
+  ["/api/markets/screener/presets", 3600_000],
+  ["/api/markets/overview", 60_000],
+  ["/api/markets/", 120_000],
+  ["/api/feed/summary", 300_000],
+  ["/api/ideas", 60_000],
+  ["/api/stock/", 120_000],
+  ["/api/sepa/", 120_000],
+  ["/api/watchlists", 30_000],
+];
+const cache = new Map<string, { at: number; data: unknown }>();
+const inflight = new Map<string, Promise<unknown>>();
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  if (method !== "GET") {
+    cache.clear();
+    return request<T>(path, init);
+  }
+  const ttl = CACHE_TTL.find(([p]) => path.startsWith(p))?.[1];
+  if (!ttl) return request<T>(path, init);
+  const hit = cache.get(path);
+  if (hit && Date.now() - hit.at < ttl) return hit.data as T;
+  const pending = inflight.get(path);
+  if (pending) return pending as Promise<T>; // the same request is already on its way
+  const p = request<T>(path, init)
+    .then((data) => {
+      cache.set(path, { at: Date.now(), data });
+      return data;
+    })
+    .finally(() => inflight.delete(path));
+  inflight.set(path, p);
+  return p;
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);

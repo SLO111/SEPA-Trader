@@ -80,3 +80,26 @@ def test_admin_email_promoted_on_login(client, register, monkeypatch):
     assert user["role"] == "user"
     monkeypatch.setattr(settings, "admin_email", "late-admin@test.ro")
     assert client.get("/api/auth/me", headers=h).json()["role"] == "admin"
+
+
+def test_watchlists_get_automatic_alert_rules(client, register):
+    from app.db import SessionLocal
+    from app.models import User
+
+    h, _ = register("auto-alerts@test.ro")
+    with SessionLocal() as db:
+        u = db.query(User).filter_by(email="auto-alerts@test.ro").one()
+        u.plan = "pro"
+        db.commit()
+    rules = client.get("/api/alert-rules", headers=h).json()
+    auto = [r for r in rules if r["auto"]]
+    assert len(auto) == 1 and auto[0]["scope"] == "watchlist" and auto[0]["name"] == "Auto · Favorites"
+    assert "breakout" in auto[0]["events"]
+    # a new list gets its own rule; listing again does not duplicate
+    client.post("/api/watchlists", headers=h, json={"name": "Swing"})
+    rules = client.get("/api/alert-rules", headers=h).json()
+    assert sorted(r["name"] for r in rules if r["auto"]) == ["Auto · Favorites", "Auto · Swing"]
+    # a deleted automatic rule is not recreated
+    client.delete(f"/api/alert-rules/{auto[0]['id']}", headers=h)
+    rules = client.get("/api/alert-rules", headers=h).json()
+    assert [r["name"] for r in rules if r["auto"]] == ["Auto · Swing"]

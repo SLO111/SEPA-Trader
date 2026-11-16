@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import DailySummary from "@/components/DailySummary";
 import AlertFeed, { type FeedFilter } from "@/components/alerts/AlertFeed";
 import NotificationsCard from "@/components/alerts/NotificationsCard";
 import RuleForm, { emptyDraft, type RuleDraft } from "@/components/alerts/RuleForm";
@@ -119,6 +120,8 @@ function AlertsWorkspace() {
           </div>
         </div>
 
+        <DailySummary compact />
+
         <div className="grid gap-5 lg:grid-cols-[1fr_400px]">
           <AlertFeed
             alerts={alerts}
@@ -175,7 +178,10 @@ function AlertsWorkspace() {
                     <li key={r.id} className={`rounded-lg border border-line p-3 ${r.active ? "" : "opacity-50"}`}>
                       <div className="flex items-start gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium">{r.name}</div>
+                          <div className="font-medium">
+                            {r.auto && <span className="mr-1.5 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-semibold text-blue-300" title="Created automatically for this watchlist">AUTO</span>}
+                            {r.auto ? r.name.replace("Auto · ", "") : r.name}
+                          </div>
                           <div className="text-xs text-muted">{scopeText(r, watchlists)}</div>
                         </div>
                         <label className="flex items-center gap-1 text-xs text-muted" title={r.active ? "Pause" : "Resume"}>

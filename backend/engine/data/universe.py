@@ -73,6 +73,30 @@ SP500_CSV = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/ma
 SECTOR_NAMES = {"Information Technology": "Technology"}
 
 
+# Nasdaq-100 members that are not in the S&P 500 (foreign listings and recent additions). Added with UNIVERSE=sp500+.
+# Symbols already in the S&P 500 list are simply skipped; a delisted symbol just gets no prices.
+NASDAQ100_EXTRA: dict[str, dict] = {
+    "ASML": {"name": "ASML Holding", "sector": "Technology", "exchange": "NASDAQ"},
+    "ARM": {"name": "Arm Holdings", "sector": "Technology", "exchange": "NASDAQ"},
+    "AZN": {"name": "AstraZeneca", "sector": "Health Care", "exchange": "NASDAQ"},
+    "MELI": {"name": "MercadoLibre", "sector": "Consumer Discretionary", "exchange": "NASDAQ"},
+    "PDD": {"name": "PDD Holdings", "sector": "Consumer Discretionary", "exchange": "NASDAQ"},
+    "SHOP": {"name": "Shopify Inc.", "sector": "Technology", "exchange": "NASDAQ"},
+    "TEAM": {"name": "Atlassian", "sector": "Technology", "exchange": "NASDAQ"},
+    "ZS": {"name": "Zscaler", "sector": "Technology", "exchange": "NASDAQ"},
+    "MRVL": {"name": "Marvell Technology", "sector": "Technology", "exchange": "NASDAQ"},
+    "GFS": {"name": "GlobalFoundries", "sector": "Technology", "exchange": "NASDAQ"},
+    "MSTR": {"name": "Strategy (MicroStrategy)", "sector": "Technology", "exchange": "NASDAQ"},
+    "CCEP": {"name": "Coca-Cola Europacific Partners", "sector": "Consumer Staples", "exchange": "NASDAQ"},
+    "TRI": {"name": "Thomson Reuters", "sector": "Industrials", "exchange": "NASDAQ"},
+    "FER": {"name": "Ferrovial", "sector": "Industrials", "exchange": "NASDAQ"},
+    "ALNY": {"name": "Alnylam Pharmaceuticals", "sector": "Health Care", "exchange": "NASDAQ"},
+    "INSM": {"name": "Insmed", "sector": "Health Care", "exchange": "NASDAQ"},
+    "MDB": {"name": "MongoDB", "sector": "Technology", "exchange": "NASDAQ"},
+    "BIIB": {"name": "Biogen", "sector": "Health Care", "exchange": "NASDAQ"},
+}
+
+
 def parse_constituents(csv_text: str) -> dict[str, dict]:
     """Parse the S&P 500 constituents CSV into {symbol: {name, sector, exchange}} (Yahoo-style symbols)."""
     import csv

@@ -9,7 +9,7 @@ import { fmt, pct, tone } from "@/lib/format";
 
 type Idea = {
   id: number; date: string; symbol: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT"; side: "long" | "short";
-  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
+  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
 type Resp = {
@@ -53,6 +53,17 @@ function Ideas() {
     api<Resp>(`/api/ideas?view=${view}`)
       .then(setData)
       .catch((e) => (e instanceof ApiError && e.status === 403 ? setLocked(e.message) : null));
+  const take = async (i: Idea) => {
+    const verb = i.side === "short" ? "Short" : "Buy";
+    if (!confirm(`${verb} ${i.symbol} now at the current price?\nStop ${i.stop} · ${i.trim ? `trim ${i.trim} · ` : ""}target ${i.target}\n\nIt is followed in Backtest → My trades.`)) return;
+    try {
+      await post("/api/paper-trades", { idea_id: i.id });
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   useEffect(() => {
     load();
     const id = setInterval(load, 120_000);
@@ -122,20 +133,20 @@ function Ideas() {
               <table className="w-full min-w-[1100px] text-sm">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
                   <tr>
-                    {["Ticker", "TF", "Date", "Weight", "Entry", "Current", "%", "Stop", "Trim", "Target", "R/R", "Stage", "Structure", "Range", "Status"].map((h) => (
-                      <th key={h} className={`px-3 py-2.5 ${["Weight", "Entry", "Current", "%", "Stop", "Trim", "Target"].includes(h) ? "text-right" : ""}`}>{h}</th>
+                    {["Ticker", "TF", "Date", "Weight", "Entry", "Current", "%", "Stop", "Trim", "Target", "R/R", "Stage", "Structure", "Range", "Status", ""].map((h) => (
+                      <th key={h} className={`px-3 py-2.5 ${["Weight", "Entry", "Current", "%", "Stop", "Trim", "Target"].includes(h) ? "text-right" : ""} ${h === "Ticker" ? "sticky left-0 z-[1] bg-panel" : ""}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {!data && <tr><td colSpan={15} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
-                  {data?.ideas.length === 0 && <tr><td colSpan={15} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
+                  {!data && <tr><td colSpan={16} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
+                  {data?.ideas.length === 0 && <tr><td colSpan={16} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
                   {data?.ideas.filter((i) => tf === "ALL" || i.timeframe === tf).map((i) => {
                     const move = i.current !== null ? ((i.current / i.entry - 1) * 100 * (i.side === "short" ? -1 : 1)) : null;
                     return (
                       <Fragment key={i.id}>
                         <tr onClick={() => setOpen(open === i.id ? null : i.id)} className="cursor-pointer border-t border-line hover:bg-panel-2/40">
-                          <td className="px-3 py-2">
+                          <td className="sticky left-0 z-[1] bg-panel px-3 py-2">
                             <Link href={`/chart?s=${encodeURIComponent(i.symbol)}`} onClick={(e) => e.stopPropagation()}
                               className={`inline-block min-w-[56px] rounded px-2 py-1 text-center text-xs font-bold ${i.side === "short" ? "bg-down/20 text-down" : "bg-up/20 text-up"}`}>
                               {i.symbol}
@@ -168,10 +179,26 @@ function Ideas() {
                             <span className={`rounded px-2 py-1 text-[11px] font-semibold ${STATUS[i.status][1]}`}>{STATUS[i.status][0]}</span>
                             {i.r_multiple !== null && i.status !== "WAIT" && <span className={`tabular ml-2 text-xs ${tone(i.r_multiple)}`}>{i.r_multiple > 0 ? "+" : ""}{i.r_multiple}R</span>}
                           </td>
+                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                            {["WAIT", "BUY", "TRIM"].includes(i.status) &&
+                              (i.taken ? (
+                                <Link href="/backtest" className="whitespace-nowrap rounded border border-line px-2 py-1 text-[11px] text-muted hover:text-text" title="Followed in Backtest → My trades">
+                                  ✓ In my trades
+                                </Link>
+                              ) : (
+                                <button
+                                  onClick={() => take(i)}
+                                  className={`whitespace-nowrap rounded px-3 py-1 text-xs font-semibold text-white ${i.side === "short" ? "bg-down hover:bg-red-500" : "bg-up hover:bg-green-500"}`}
+                                  title="Take this trade now at the current price and follow it in Backtest"
+                                >
+                                  {i.side === "short" ? "Short" : "Buy"}
+                                </button>
+                              ))}
+                          </td>
                         </tr>
                         {open === i.id && (
                           <tr className="bg-panel-2/30">
-                            <td colSpan={15} className="px-4 py-3 text-sm text-muted">
+                            <td colSpan={16} className="px-4 py-3 text-sm text-muted">
                               <b className="text-text">Why:</b> {i.reason} {i.side === "short" ? "Short" : "Buy"} near ${fmt(i.entry)}, stop ${fmt(i.stop)}
                               {i.trim ? `, trim part at $${fmt(i.trim)}` : ""}, target ${fmt(i.target)}. Suggested weight {i.weight}% risks about 1% of the account at the stop.
                               {i.closed_at && ` Closed ${i.closed_at}.`}

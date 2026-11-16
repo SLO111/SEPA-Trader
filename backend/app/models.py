@@ -257,3 +257,33 @@ class DailyDigest(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_sent: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class AutoAlertDone(Base):
+    """Watchlists that already got their automatic alert rule (so a rule the user deleted isn't recreated)."""
+
+    __tablename__ = "auto_alert_done"
+
+    watchlist_id: Mapped[int] = mapped_column(ForeignKey("watchlists.id", ondelete="CASCADE"), primary_key=True)
+
+
+class PaperTrade(Base):
+    """A Trade Idea the user chose to take (Buy / Short button), tracked with the idea's stop / trim / target."""
+
+    __tablename__ = "paper_trades"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    idea_id: Mapped[int | None] = mapped_column(ForeignKey("trade_ideas.id", ondelete="SET NULL"), nullable=True, index=True)
+    symbol: Mapped[str] = mapped_column(String(16))
+    timeframe: Mapped[str] = mapped_column(String(8), default="")
+    side: Mapped[str] = mapped_column(String(5))
+    entry_date: Mapped[date] = mapped_column(Date)
+    entry: Mapped[float] = mapped_column(Float)
+    stop: Mapped[float] = mapped_column(Float)
+    trim: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target: Mapped[float] = mapped_column(Float)
+    weight: Mapped[float] = mapped_column(Float, default=0.0)
+    exit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

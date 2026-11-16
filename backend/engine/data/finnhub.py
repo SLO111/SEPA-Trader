@@ -74,7 +74,7 @@ class Finnhub:
         today = date.today()
         return self.get("/company-news", symbol=symbol, **{"from": (today - timedelta(days=days)).isoformat(), "to": today.isoformat()}) or []
 
-    # ------------------------------------------------------------ mapped to SEPA Trader's formats
+    # ------------------------------------------------------------ mapped to Vnicorn Investments's formats
     def fundamentals(self, symbol: str, name: str = "", sector: str = "") -> dict:
         p, m = self.profile(symbol), self.metrics(symbol)
         pe = m.get("peTTM") or m.get("peBasicExclExtraTTM")

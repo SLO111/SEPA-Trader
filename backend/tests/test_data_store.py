@@ -120,3 +120,26 @@ def test_circuit_breaker_pauses_slow_refresh(store, monkeypatch):
     calls = []
     monkeypatch.setattr(Refusing, "fundamentals", lambda self, sym: calls.append(sym))
     assert s.refresh_slow(["AAPL"]) == 0 and calls == []  # no requests while paused
+
+
+def test_universe_sp500_plus_uses_bundled_list_when_offline(monkeypatch):
+    import httpx
+
+    from app.config import settings
+    from engine.data import universe
+
+    saved = dict(universe.SYMBOLS)
+    monkeypatch.setattr(settings, "universe", "sp500+")
+
+    def offline(*a, **k):
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(httpx, "get", offline)
+    try:
+        s = ds.DataStore(LiveFake, SessionLocal)
+        s.refresh_universe()
+        assert "MMM" in universe.SYMBOLS and "ASML" in universe.SYMBOLS
+        assert len(universe.stock_symbols()) > 500
+    finally:
+        universe.SYMBOLS.clear()
+        universe.SYMBOLS.update(saved)

@@ -49,6 +49,9 @@ def create_watchlist(body: WatchlistIn, user: User = Depends(current_user), db: 
     w = Watchlist(user_id=user.id, name=body.name.strip(), color=body.color, position=len(user.watchlists))
     db.add(w)
     db.commit()
+    from ..alerts_service import ensure_watchlist_rules
+
+    ensure_watchlist_rules(db, user)  # alerts for the new list's symbols, automatically
     return wl_out(w)
 
 

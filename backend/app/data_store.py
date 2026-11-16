@@ -192,7 +192,7 @@ class DataStore:
     # ---------------------------------------------------------------- refresh jobs
     def refresh_universe(self) -> int:
         """Load the S&P 500 list (weekly) and add it to the universe."""
-        if settings.universe != "sp500" or not self.stale("universe:sp500", UNIVERSE_TTL):
+        if settings.universe not in ("sp500", "sp500+") or not self.stale("universe:sp500", UNIVERSE_TTL):
             return 0
         import httpx
 
@@ -212,6 +212,10 @@ class DataStore:
             entries = parse_constituents((Path(__file__).resolve().parent.parent / "engine" / "data" / "sp500_constituents.csv").read_text())
         if len(entries) < 400:  # sanity check: never shrink the universe because of a bad download
             raise ValueError(f"Unexpected constituents list ({len(entries)} rows)")
+        if settings.universe == "sp500+":
+            from engine.data.universe import NASDAQ100_EXTRA
+
+            entries = {**NASDAQ100_EXTRA, **entries}
         added = extend(entries)
         self._save("universe:sp500", entries)
         self.updated["universe:sp500"] = _now()

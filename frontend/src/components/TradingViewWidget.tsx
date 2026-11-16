@@ -6,7 +6,7 @@ import { memo, useEffect, useRef } from "react";
  * Embeds a free TradingView widget. The script and its data load in the visitor's browser, straight
  * from TradingView, only when this component is on screen: no load on our server or data provider.
  */
-function TradingViewWidget({ script, config, height }: { script: string; config: Record<string, unknown>; height: number }) {
+function TradingViewWidget({ script, config, height }: { script: string; config: Record<string, unknown>; height: number | string }) {
   const box = useRef<HTMLDivElement>(null);
   const key = JSON.stringify(config);
 

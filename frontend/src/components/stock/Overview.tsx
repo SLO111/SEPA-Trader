@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { scoreColor } from "@/components/ScoreBadge";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
 import type { Candle, StockData } from "@/lib/types";
@@ -36,6 +36,37 @@ export function KV({ rows }: { rows: [string, string][] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/** Buy/Sell rating from TradingView: three gauges side by side on wide screens, one on phones. */
+function Technicals({ symbol }: { symbol: string }) {
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    const m = window.matchMedia("(min-width: 768px)");
+    const f = () => setWide(m.matches);
+    f();
+    m.addEventListener("change", f);
+    return () => m.removeEventListener("change", f);
+  }, []);
+  return (
+    <div className="mx-auto w-full max-w-3xl">
+      <TradingViewWidget
+        script="embed-widget-technical-analysis.js"
+        height={wide ? 450 : 480}
+        config={{
+          interval: "1D",
+          width: "100%",
+          height: "100%",
+          isTransparent: true,
+          symbol: symbol.replace("-", "."),
+          showIntervalTabs: true,
+          displayMode: wide ? "multiple" : "single",
+          locale: "en",
+          colorTheme: "dark",
+        }}
+      />
+    </div>
   );
 }
 
@@ -82,6 +113,10 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
             ))}
           </ul>
           <p className="mt-3 text-[11px] text-muted">Generated automatically from market data and technical rules.</p>
+        </Card>
+
+        <Card title="Technicals" right={<span className="text-[11px] text-muted">26 indicators: oscillators + moving averages · TradingView</span>}>
+          <Technicals symbol={c.symbol} />
         </Card>
 
         <Card title="Key statistics">
@@ -176,24 +211,6 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
             )}
           </section>
         )}
-
-        <Card title="Technicals" right={<span className="text-[11px] text-muted">26 indicators · TradingView</span>}>
-          <TradingViewWidget
-            script="embed-widget-technical-analysis.js"
-            height={420}
-            config={{
-              interval: "1D",
-              width: "100%",
-              height: "100%",
-              isTransparent: true,
-              symbol: c.symbol.replace("-", "."),
-              showIntervalTabs: true,
-              displayMode: "single",
-              locale: "en",
-              colorTheme: "dark",
-            }}
-          />
-        </Card>
 
         {c.analysts && c.analysts.score !== null && (
           <Card title="Analyst rating" right={<span className="text-[11px] text-muted">{c.analysts.total} analysts</span>}>

@@ -25,4 +25,4 @@ services:
       - key: DATA_PROVIDER
         value: yfinance
       - key: UNIVERSE
-        value: sp500 # "core" = only 38 symbols, lighter for the free instance
+        value: sp500+ # S&P 500 + Nasdaq-100; "core" = only the built-in symbols, lighter

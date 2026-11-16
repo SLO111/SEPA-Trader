@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { StrategyDef } from "@/lib/types";
+import type { ActiveStrategy, StrategyDef } from "@/lib/types";
 
 type Props = {
   defs: StrategyDef[];
   features: Record<string, unknown>;
-  activeCount: number;
+  active: ActiveStrategy[];
   max: number;
   onAdd: (d: StrategyDef) => void;
+  onRemove: (uid: string) => void;
   onClose: () => void;
 };
 
 /** TradingView-style indicator dialog: search, categories on the left, click to add. */
-export default function IndicatorPicker({ defs, features, activeCount, max, onAdd, onClose }: Props) {
+export default function IndicatorPicker({ defs, features, active, max, onAdd, onRemove, onClose }: Props) {
+  const activeCount = active.length;
+  const countOf = (id: string) => active.filter((a) => a.id === id).length;
+  const nameOf = (id: string) => defs.find((d) => d.id === id)?.name ?? id;
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const input = useRef<HTMLInputElement>(null);
@@ -54,24 +58,56 @@ export default function IndicatorPicker({ defs, features, activeCount, max, onAd
             ))}
           </nav>
           <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+            {active.length > 0 && !q && (
+              <li className="mb-3 rounded-lg border border-accent/30 bg-accent/5 p-2">
+                <div className="mb-1.5 px-1 text-[11px] uppercase tracking-wide text-muted">
+                  On your chart ({activeCount}
+                  {max < 1e6 ? `/${max}` : ""})
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {active.map((a) => (
+                    <span key={a.uid} className={`inline-flex items-center gap-1.5 rounded-full bg-panel-2 px-2.5 py-1 text-xs ${a.hidden ? "opacity-50" : ""}`}>
+                      <span className="text-up">✓</span>
+                      {nameOf(a.id)}
+                      <button onClick={() => onRemove(a.uid)} className="text-muted hover:text-down" aria-label={`Remove ${nameOf(a.id)}`}>
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </li>
+            )}
             {atLimit && max < 1e6 && <li className="mb-2 rounded bg-amber-500/10 px-3 py-2 text-xs text-amber-300">Your plan allows {max} indicators at once. Remove one or upgrade.</li>}
             {list.map((d) => {
               const locked = !!d.requires && !features[d.requires];
+              const n = countOf(d.id);
               return (
-                <li key={d.id}>
+                <li key={d.id} className="group relative">
                   <button
                     disabled={locked || atLimit}
                     onClick={() => onAdd(d)}
                     className="flex w-full items-start gap-3 rounded-md px-3 py-2 text-left hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded bg-accent/15 text-xs text-blue-300">+</span>
-                    <span className="min-w-0">
+                    <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded text-xs ${n ? "bg-up/20 text-up" : "bg-accent/15 text-blue-300"}`}>{n ? "✓" : "+"}</span>
+                    <span className="min-w-0 pr-16">
                       <span className="text-sm">{d.name}</span>
+                      {n > 0 && <span className="ml-2 rounded bg-up/15 px-1.5 py-0.5 text-[10px] font-semibold text-up">On chart{n > 1 ? ` ×${n}` : ""}</span>}
                       {locked && <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300">PRO</span>}
                       <span className="ml-2 text-[11px] text-muted">{d.category}</span>
                       {d.description && <span className="block text-xs text-muted">{d.description}</span>}
                     </span>
                   </button>
+                  {n > 0 && (
+                    <button
+                      onClick={() => {
+                        const last = [...active].reverse().find((a) => a.id === d.id);
+                        if (last) onRemove(last.uid);
+                      }}
+                      className="absolute right-2 top-2 rounded border border-line px-2 py-0.5 text-[11px] text-muted hover:border-down hover:text-down"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </li>
               );
             })}

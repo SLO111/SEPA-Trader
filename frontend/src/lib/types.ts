@@ -152,6 +152,7 @@ export type AlertRule = {
   bear_threshold: number;
   channels: Channel[];
   active: boolean;
+  auto?: boolean;
   created_at: string;
 };
 

@@ -55,6 +55,7 @@ def rule_out(r: AlertRule) -> dict:
         "bear_threshold": r.bear_threshold,
         "channels": [c for c in r.channels.split(",") if c],
         "active": r.active,
+        "auto": r.name.startswith("Auto · "),
         "created_at": r.created_at.isoformat(),
     }
 
@@ -191,6 +192,9 @@ def _owned_rule(db: Session, user: User, rule_id: int) -> AlertRule:
 
 @router.get("/alert-rules")
 def list_rules(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..alerts_service import ensure_watchlist_rules
+
+    ensure_watchlist_rules(db, user)
     rows = db.scalars(select(AlertRule).where(AlertRule.user_id == user.id).order_by(AlertRule.created_at)).all()
     return [rule_out(r) for r in rows]
 
@@ -199,7 +203,7 @@ def list_rules(user: User = Depends(current_user), db: Session = Depends(get_db)
 def create_rule(body: RuleIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     _require_alerts(user)
     limit = limits_for(user)["max_alert_rules"]
-    count = db.scalar(select(func.count()).select_from(AlertRule).where(AlertRule.user_id == user.id)) or 0
+    count = db.scalar(select(func.count()).select_from(AlertRule).where(AlertRule.user_id == user.id, AlertRule.name.notlike("Auto · %"))) or 0
     if count >= limit:
         raise HTTPException(403, f"Your plan allows up to {limit} alert rules.")
     _validate_rule(db, user, body)
@@ -273,7 +277,7 @@ def test_notification(user: User = Depends(current_user), db: Session = Depends(
     sample = Alert(symbol="TEST", type="breakout", severity="bull", title="Test notification", message="If you can read this, notifications are working.")
     result = {"email": None, "telegram": None}
     if p.email_enabled:
-        result["email"] = notify.send_email(user.email, "[SEPA Trader] Test notification", format_text(sample))
+        result["email"] = notify.send_email(user.email, "[Vnicorn] Test notification", format_text(sample))
     if p.telegram_enabled:
         result["telegram"] = notify.send_telegram(p.telegram_chat_id, format_text(sample, html=True))
     return result

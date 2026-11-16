@@ -42,7 +42,7 @@ export default function SymbolSearch() {
   };
 
   return (
-    <div ref={box} className="relative hidden w-56 lg:block">
+    <div ref={box} className="relative w-full max-w-[9.5rem] sm:max-w-[12rem] lg:w-56 lg:max-w-none">
       <input
         value={q}
         onChange={(e) => {
@@ -61,7 +61,7 @@ export default function SymbolSearch() {
         className="w-full rounded-md border border-line bg-bg px-3 py-1.5 text-sm outline-none focus:border-accent"
       />
       {open && hits.length > 0 && (
-        <ul className="absolute left-0 right-0 z-40 mt-1 overflow-hidden rounded-md border border-line bg-panel-2 shadow-xl">
+        <ul className="absolute right-0 z-40 mt-1 w-[min(20rem,90vw)] overflow-hidden rounded-md border border-line bg-panel-2 shadow-xl">
           {hits.map((h, i) => (
             <li key={h.symbol}>
               <button

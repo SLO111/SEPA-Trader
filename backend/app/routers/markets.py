@@ -49,6 +49,10 @@ def _fear_greed() -> dict:
 
 
 def _indices() -> list[dict]:
+    return market_data._fast(f"{settings.data_provider}:indices", 60, _build_indices)
+
+
+def _build_indices() -> list[dict]:
     out = []
     for sym, label in INDICES:
         d = _opt(sym)
@@ -85,6 +89,10 @@ def overview(user: User = Depends(current_user)):
 
 def _cycle() -> list[dict]:
     """Market cycle stage (Accumulation / Markup / Distribution / Markdown) of the main indexes."""
+    return market_data._fast(f"{settings.data_provider}:cycle", 1800, _build_cycle)
+
+
+def _build_cycle() -> list[dict]:
     from engine.stages import stage_now
 
     out = []

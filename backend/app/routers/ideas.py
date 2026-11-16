@@ -53,13 +53,16 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
         q = q.where(TradeIdea.status.notin_(OPEN))
     rows = db.scalars(q.order_by(TradeIdea.batch_date.desc(), TradeIdea.score.desc()).limit(200)).all()
     allrows = db.scalars(select(TradeIdea)).all()
+    from ..models import PaperTrade
+
+    taken = set(db.scalars(select(PaperTrade.idea_id).where(PaperTrade.user_id == user.id)).all())
     open_rows = [r for r in allrows if r.status in OPEN]
     done = [r for r in allrows if r.status in ("TARGET", "STOPPED") or (r.status not in OPEN and r.r_multiple is not None)]
     entered_open = [r for r in open_rows if r.pnl_pct is not None]
     wins = [r for r in done if (r.r_multiple or 0) > 0]
     return {
         "updated": latest_batch(db).isoformat() if latest_batch(db) else None,
-        "ideas": [idea_out(r, with_structure=r.status in OPEN) for r in rows],
+        "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken} for r in rows],
         "summary": {
             "open": len(open_rows),
             "active": len(entered_open),
@@ -113,7 +116,7 @@ def latest_summary(user: User = Depends(current_user), db: Session = Depends(get
     r = db.scalars(select(FeedItem).where(FeedItem.kind == "summary").order_by(FeedItem.id.desc()).limit(1)).first()
     if not r:
         return None
-    return {"id": r.id, "title": r.title, "created_at": r.created_at.isoformat(), **json.loads(r.body)}
+    return {"id": r.id, "day": r.key.split(":", 1)[1], "title": r.title, "created_at": r.created_at.isoformat(), **json.loads(r.body)}
 
 
 class DigestIn(BaseModel):
@@ -138,3 +141,89 @@ def set_digest(body: DigestIn, user: User = Depends(current_user), db: Session =
         d.enabled = body.enabled
     db.commit()
     return get_digest(user, db)
+
+
+# ---------------- paper trades: take an idea and track it ----------------
+
+def _paper_out(t, df) -> dict:
+    from engine.paper import follow
+
+    d = {"id": t.id, "idea_id": t.idea_id, "symbol": t.symbol, "timeframe": t.timeframe, "side": t.side,
+         "entry_date": t.entry_date.isoformat(), "entry": t.entry, "stop": t.stop, "trim": t.trim, "target": t.target,
+         "weight": t.weight}
+    if df is None:
+        return {**d, "status": "OPEN", "open": True, "current": None, "r_multiple": 0.0, "pnl_pct": 0.0, "closed_at": None, "exit_price": None}
+    return {**d, **follow({**d, "exit_date": t.exit_date, "exit_price": t.exit_price}, df)}
+
+
+@router.post("/paper-trades")
+def take_idea(body: dict, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Buy / Short an idea now: entry at the latest price, the idea's stop / trim / target."""
+    from datetime import date as _date
+
+    from .. import market_data
+    from ..models import PaperTrade
+
+    if not limits_for(user)["move_detector"]:
+        raise HTTPException(403, "Trade ideas are available on the Pro and Premium plans.")
+    idea = db.get(TradeIdea, int(body.get("idea_id") or 0))
+    if idea is None:
+        raise HTTPException(404, "Idea not found")
+    existing = db.scalars(select(PaperTrade).where(PaperTrade.user_id == user.id, PaperTrade.idea_id == idea.id)).first()
+    if existing:
+        raise HTTPException(409, "You already took this idea")
+    try:
+        df = market_data.history(idea.symbol)
+        price, day = float(df["close"].iloc[-1]), df.index[-1].date()
+    except Exception:
+        df, price, day = None, idea.entry, _date.today()
+    long = idea.side == "long"
+    if (long and price <= idea.stop) or (not long and price >= idea.stop):
+        raise HTTPException(400, f"{idea.symbol} is already beyond the stop ({idea.stop}); this idea is no longer valid.")
+    t = PaperTrade(user_id=user.id, idea_id=idea.id, symbol=idea.symbol, timeframe=idea.timeframe, side=idea.side,
+                   entry_date=day, entry=round(price, 2), stop=idea.stop, trim=idea.trim, target=idea.target, weight=idea.weight)
+    db.add(t)
+    db.commit()
+    return _paper_out(t, df)
+
+
+@router.get("/paper-trades")
+def paper_trades(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from engine.paper import summary
+
+    from .. import market_data
+    from ..models import PaperTrade
+
+    rows = []
+    for t in db.scalars(select(PaperTrade).where(PaperTrade.user_id == user.id).order_by(PaperTrade.created_at.desc())).all():
+        try:
+            df = market_data.history(t.symbol)
+        except Exception:
+            df = None
+        rows.append(_paper_out(t, df))
+    return {"trades": rows, "summary": summary(rows)}
+
+
+@router.post("/paper-trades/{trade_id}/close")
+def close_paper(trade_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .. import market_data
+    from ..models import PaperTrade
+
+    t = db.get(PaperTrade, trade_id)
+    if t is None or t.user_id != user.id:
+        raise HTTPException(404, "Trade not found")
+    df = market_data.history(t.symbol)
+    t.exit_price, t.exit_date = round(float(df["close"].iloc[-1]), 2), df.index[-1].date()
+    db.commit()
+    return _paper_out(t, df)
+
+
+@router.delete("/paper-trades/{trade_id}", status_code=204)
+def delete_paper(trade_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..models import PaperTrade
+
+    t = db.get(PaperTrade, trade_id)
+    if t is None or t.user_id != user.id:
+        raise HTTPException(404, "Trade not found")
+    db.delete(t)
+    db.commit()

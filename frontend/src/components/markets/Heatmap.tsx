@@ -29,7 +29,7 @@ export default function Heatmap() {
       </div>
       <TradingViewWidget
         script="embed-widget-stock-heatmap.js"
-        height={640}
+        height="max(520px, calc(100dvh - 230px))"
         config={{
           dataSource: source,
           blockSize: "market_cap_basic",

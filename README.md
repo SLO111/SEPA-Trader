@@ -1,4 +1,4 @@
-# SEPA Trader
+# Vnicorn Investments
 
 A stock analysis and trading platform: charts, watchlists, strategy overlays, SEPA analysis (Trend Template, VCP, RS Rating), the **Move Detector** algorithm with a market-wide scanner, subscription plans and an admin panel. Alerts, portfolios, market tools and payments are next.
 
@@ -142,7 +142,7 @@ cd backend && pytest
 - **Markets page**:
   - Overview: S&P 500, Nasdaq 100, Dow, Russell 2000 and VIX; top gainers / losers / most active; market breadth;
     sector rotation with emerging themes; market leaders.
-  - **Fear & Greed index**: SEPA Trader's own sentiment gauge (0 = extreme fear, 100 = extreme greed) built from six
+  - **Fear & Greed index**: Vnicorn Investments's own sentiment gauge (0 = extreme fear, 100 = extreme greed) built from six
     components (market momentum, stock price strength, breadth, volatility, safe-haven demand, junk-bond demand),
     each scored against its own last 12 months, with a 1-year history and previous close / week / month / year.
   - Earnings calendar: upcoming reports (90 days) and recent results with EPS surprise and the price reaction.

@@ -95,7 +95,7 @@ export function FearGreedTab() {
           ))}
         </div>
         <p className="mt-4 text-xs text-muted">
-          SEPA Trader&apos;s own sentiment index. Each component is scored 0–100 by where today&apos;s reading sits within its own last 12 months; the index is the average. Inspired by
+          Our own sentiment index. Each component is scored 0–100 by where today&apos;s reading sits within its own last 12 months; the index is the average. Inspired by
           classic fear &amp; greed measures, computed from the stocks and ETFs we track.
         </p>
       </Panel>
@@ -347,9 +347,30 @@ export function FedTab() {
 
 type Presets = { presets: { id: string; label: string; description: string }[]; sectors: string[] };
 
-export function ScreenerTab({ allowed }: { allowed: boolean }) {
+const EXT_PRESETS = [
+  { id: "pre-market", label: "Pre-market movers", description: "Biggest moves before the open (4:00–9:30 AM ET), vs. the previous close." },
+  { id: "after-hours", label: "After-hours movers", description: "Biggest moves after the close (4:00–8:00 PM ET), vs. today's close." },
+];
+
+function ExtendedMovers({ session }: { session: "pre-market" | "after-hours" }) {
+  const { data, error } = useLoad<Extended>("/api/markets/extended-hours");
+  if (error) return <Failed msg={error.message} />;
+  if (!data) return <Loading />;
+  if (!data.available) return <p className="rounded-xl border border-line bg-panel p-4 text-sm text-muted">{data.reason}</p>;
+  return (
+    <div className="space-y-2">
+      {data.reason && <p className="text-sm text-muted">{data.reason}</p>}
+      <div className="rounded-xl border border-line bg-panel p-3">
+        <ExtTable rows={session === "pre-market" ? data.pre_market : data.after_hours} />
+      </div>
+    </div>
+  );
+}
+
+export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowed: boolean; initialPreset?: string }) {
   const [presets, setPresets] = useState<Presets | null>(null);
-  const [preset, setPreset] = useState("undervalued");
+  const [preset, setPreset] = useState(initialPreset);
+  const ext = EXT_PRESETS.find((p) => p.id === preset);
   const [filters, setFilters] = useState({ sector: "", min_cap_b: "", max_pe: "", min_yield: "", min_rs: "", template_only: false, above_ma50: false });
   const [rows, setRows] = useState<ScreenRow[] | null>(null);
   const [error, setError] = useState("");
@@ -359,7 +380,7 @@ export function ScreenerTab({ allowed }: { allowed: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (!allowed) return;
+    if (!allowed || EXT_PRESETS.some((p) => p.id === preset)) return;
     const qs = new URLSearchParams();
     if (preset) qs.set("preset", preset);
     Object.entries(filters).forEach(([k, v]) => {
@@ -392,13 +413,17 @@ export function ScreenerTab({ allowed }: { allowed: boolean }) {
         <button onClick={() => setPreset("")} className={`rounded-md px-3 py-1.5 text-sm ${!preset ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
           All stocks
         </button>
-        {presets?.presets.map((p) => (
+        {[...(presets?.presets ?? []), ...EXT_PRESETS].map((p) => (
           <button key={p.id} onClick={() => setPreset(p.id)} className={`rounded-md px-3 py-1.5 text-sm ${preset === p.id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
             {p.label}
           </button>
         ))}
       </div>
-      {current && <p className="text-sm text-muted">{current.description}</p>}
+      {(current ?? ext) && <p className="text-sm text-muted">{(current ?? ext)!.description}</p>}
+      {ext ? (
+        <ExtendedMovers session={ext.id as "pre-market" | "after-hours"} />
+      ) : (
+      <>
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-panel p-3 text-sm text-muted">
         <select value={filters.sector} onChange={(e) => set("sector", e.target.value)} className="rounded border border-line bg-bg px-2 py-1 text-text">
           <option value="">All sectors</option>
@@ -418,7 +443,7 @@ export function ScreenerTab({ allowed }: { allowed: boolean }) {
         <table className="w-full min-w-[1000px] text-sm">
           <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">
             <tr>
-              <th className="px-3 py-2.5">Symbol</th>
+              <th className="sticky left-0 z-[1] bg-panel px-3 py-2.5">Symbol</th>
               <th className="px-3 py-2.5 text-right">Price</th>
               <th className="px-3 py-2.5 text-right">Today</th>
               <th className="px-3 py-2.5 text-right">Mkt cap</th>
@@ -441,7 +466,7 @@ export function ScreenerTab({ allowed }: { allowed: boolean }) {
             )}
             {rows?.map((r) => (
               <tr key={r.symbol} className="border-t border-line hover:bg-panel/60">
-                <td className="px-3 py-2">
+                <td className="sticky left-0 z-[1] bg-bg px-3 py-2">
                   <StockLink s={r.symbol} />
                   <div className="max-w-[170px] truncate text-xs text-muted">{r.sector}</div>
                 </td>
@@ -461,6 +486,8 @@ export function ScreenerTab({ allowed }: { allowed: boolean }) {
           </tbody>
         </table>
       </div>
+      </>
+      )}
     </div>
   );
 }

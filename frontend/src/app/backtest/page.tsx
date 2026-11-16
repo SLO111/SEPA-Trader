@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
+import PaperTrades from "@/components/PaperTrades";
 import { api, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmt, pct, tone } from "@/lib/format";
@@ -222,10 +223,20 @@ function StrategyBacktest() {
   );
 }
 
+function Locked() {
+  return (
+    <div className="max-w-md rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
+      <h2 className="font-semibold">Available on the Premium plan</h2>
+      <p className="mt-2 text-sm text-muted">Validate the Move Detector on historical data and test chart strategies against buy &amp; hold.</p>
+      <Link href="/billing" className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">See plans</Link>
+    </div>
+  );
+}
+
 function Backtest() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"md" | "strategy">("md");
-  if (!user?.limits.backtesting) {
+  const [tab, setTab] = useState<"trades" | "md" | "strategy">("trades");
+  if (!user?.limits.backtesting && !user?.limits.move_detector) {
     return (
       <div className="grid h-full place-items-center p-6">
         <div className="max-w-md rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 text-center">
@@ -240,13 +251,17 @@ function Backtest() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-7xl p-4 sm:p-6">
         <h1 className="text-xl font-semibold">Backtesting</h1>
-        <p className="mb-4 text-sm text-muted">Does it actually work? Test the algorithm and strategies on historical data before trusting them with money.</p>
-        <nav className="mb-5 flex gap-1 border-b border-line">
-          {([["md", "Move Detector validation"], ["strategy", "Strategy backtest"]] as const).map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id)} className={`border-b-2 px-3 py-2 text-sm ${tab === id ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}>{label}</button>
+        <p className="mb-4 text-sm text-muted">Does it actually work? Follow the ideas you took, and test the algorithm and strategies on historical data before trusting them with money.</p>
+        <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
+          {([["trades", "My trades from ideas"], ["md", "Move Detector validation"], ["strategy", "Strategy backtest"]] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === id ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}>{label}</button>
           ))}
         </nav>
-        {tab === "md" ? <MoveDetectorValidation /> : <StrategyBacktest />}
+        {tab === "trades" ? <PaperTrades /> : !user?.limits.backtesting ? <Locked /> : tab === "md" ? <MoveDetectorValidation /> : <StrategyBacktest />}
+        <p className="mt-4 text-xs text-muted">
+          Logging trades you made elsewhere?{" "}
+          <Link href="/journal" className="text-accent hover:underline">Trade journal &amp; Trade Review</Link>
+        </p>
         <p className="mt-6 text-xs text-muted">For educational purposes only. Not financial advice. Past performance does not guarantee future results.</p>
       </div>
     </div>

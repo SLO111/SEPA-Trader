@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import Logo from "./Logo";
 import SymbolSearch from "./SymbolSearch";
 import { useAuth } from "@/lib/auth";
 
 // Compact navigation: related pages share one top-level hub with sub-tabs.
-const NAV: { label: string; tabs: { href: string; label: string }[] }[] = [
+const NAV: { label: string; tabs: { href: string; label: string; hidden?: boolean }[] }[] = [
   { label: "Charts", tabs: [{ href: "/chart", label: "Charts" }] },
   { label: "Markets", tabs: [{ href: "/markets", label: "Markets" }] },
   {
@@ -19,13 +20,7 @@ const NAV: { label: string; tabs: { href: string; label: string }[] }[] = [
       { href: "/backtest", label: "Backtest" },
     ],
   },
-  {
-    label: "Portfolio",
-    tabs: [
-      { href: "/portfolios", label: "Portfolios" },
-      { href: "/journal", label: "Journal & Trade Review" },
-    ],
-  },
+  { label: "Portfolio", tabs: [{ href: "/portfolios", label: "Portfolios" }, { href: "/journal", label: "Journal", hidden: true }] },
   {
     label: "Alerts",
     tabs: [
@@ -41,20 +36,15 @@ const PLAN_STYLE: Record<string, string> = {
   premium: "bg-amber-500/25 text-amber-300",
 };
 
-export function Logo() {
-  return (
-    <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-      <span className="grid h-7 w-7 place-items-center rounded-md bg-accent text-sm font-bold text-white">S</span>
-      <span>SEPA Trader</span>
-    </Link>
-  );
-}
+export { Logo };
 
 export default function AppShell({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [unread, setUnread] = useState(0);
+  const [menu, setMenu] = useState(false);
+  useEffect(() => setMenu(false), [pathname]);
 
   useEffect(() => {
     if (!user) return;
@@ -82,9 +72,23 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-6 border-b border-line bg-panel px-4">
-        <Logo />
-        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto text-sm">
+      <header className="relative flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-3 lg:gap-6 lg:px-4">
+        <button
+          onClick={() => setMenu((m) => !m)}
+          className="grid h-8 w-8 place-items-center rounded text-muted hover:bg-panel-2 hover:text-text lg:hidden"
+          aria-label="Menu"
+          aria-expanded={menu}
+        >
+          {menu ? "✕" : "☰"}
+          {!menu && unread > 0 && <span className="absolute left-8 top-2 h-2 w-2 rounded-full bg-down" />}
+        </button>
+        <span className="hidden sm:block">
+          <Logo href="/chart" />
+        </span>
+        <span className="sm:hidden">
+          <Logo href="/chart" compact />
+        </span>
+        <nav className="hidden min-w-0 items-center gap-1 overflow-x-auto text-sm lg:flex">
           {NAV.map((n) => {
             const on = n.tabs.some((t) => pathname.startsWith(t.href));
             return (
@@ -109,24 +113,56 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
             </Link>
           )}
         </nav>
-        <div className="ml-auto flex items-center gap-3 text-sm">
+        <div className="ml-auto flex min-w-0 items-center gap-3 text-sm">
           <SymbolSearch />
-          <Link href="/billing" title="Plans & billing" className={`rounded px-2 py-0.5 text-xs font-medium hover:opacity-80 ${PLAN_STYLE[user.plan]}`}>{user.limits.label}</Link>
-          <span className="hidden text-muted sm:inline">{user.name || user.email}</span>
+          <Link href="/billing" title="Plans & billing" className={`hidden rounded px-2 py-0.5 text-xs font-medium hover:opacity-80 sm:inline ${PLAN_STYLE[user.plan]}`}>{user.limits.label}</Link>
+          <span className="hidden max-w-[10rem] truncate text-muted xl:inline">{user.name || user.email}</span>
           <button
             onClick={() => {
               logout();
               router.replace("/");
             }}
-            className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text"
+            className="hidden whitespace-nowrap rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text lg:block"
           >
             Log out
           </button>
         </div>
+        {menu && (
+          <div className="absolute inset-x-0 top-12 z-50 border-b border-line bg-panel p-3 shadow-2xl lg:hidden">
+            <nav className="grid gap-1 text-base">
+              {[...NAV.flatMap((n) => n.tabs.filter((t) => !t.hidden).map((t) => ({ ...t, group: n.label }))), ...(user.role === "admin" ? [{ href: "/admin", label: "Admin", group: "Admin" }] : [])].map((t) => (
+                <Link
+                  key={t.href}
+                  href={t.href}
+                  className={`flex items-center justify-between rounded-lg px-3 py-2.5 ${pathname.startsWith(t.href) ? "bg-panel-2 text-text" : "text-muted"}`}
+                >
+                  <span>{t.label}</span>
+                  {t.href === "/alerts" && unread > 0 && <span className="rounded-full bg-down px-2 text-xs text-white">{unread}</span>}
+                  {t.label !== t.group && <span className="text-xs text-muted/70">{t.group}</span>}
+                </Link>
+              ))}
+            </nav>
+            <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-sm">
+              <span className="truncate text-muted">{user.name || user.email}</span>
+              <span className="flex items-center gap-2">
+                <Link href="/billing" className={`rounded px-2 py-0.5 text-xs font-medium ${PLAN_STYLE[user.plan]}`}>{user.limits.label}</Link>
+                <button
+                  onClick={() => {
+                    logout();
+                    router.replace("/");
+                  }}
+                  className="rounded border border-line px-3 py-1 text-muted"
+                >
+                  Log out
+                </button>
+              </span>
+            </div>
+          </div>
+        )}
       </header>
-      {hub && hub.tabs.length > 1 && (
-        <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line bg-panel/60 px-4 text-sm">
-          {hub.tabs.map((t) => (
+      {hub && hub.tabs.filter((t) => !t.hidden).length > 1 && (
+        <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line bg-panel/60 px-2 text-sm md:px-4">
+          {hub.tabs.filter((t) => !t.hidden).map((t) => (
             <Link
               key={t.href}
               href={t.href}

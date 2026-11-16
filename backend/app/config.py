@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    app_name: str = "SEPA Trader"
+    app_name: str = "Vnicorn Investments"
     database_url: str = "sqlite:///./sepa.db"
     jwt_secret: str = "dev-secret-change-me-in-production-use-a-long-key"
     jwt_expire_minutes: int = 60 * 24 * 7
@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     # Folder with the statically exported frontend (in Docker). Served at "/" if present.
     static_dir: str = "static"
-    # Universe of stocks in live mode: "sp500" (S&P 500 + the built-in list) or "core" (the 38 built-in symbols).
-    universe: str = "sp500"
+    # Universe of stocks in live mode: "sp500+" (S&P 500 + Nasdaq-100 + the built-in list), "sp500", or "core" (built-in only).
+    universe: str = "sp500+"
     # Keep a persistent market-data cache and refresh it in the background (live providers only).
     data_refresh: bool = True
     # Background alert checks: interval in seconds (0 disables the background loop).

@@ -115,7 +115,6 @@ function ChartWorkspace() {
         if (colorParam) params.color = a.filter((x) => x.id === d.id).length % (colorParam.max + 1);
         return [...a, { uid: uid(), id: d.id, params }];
       });
-      setPicker(false);
     },
     [],
   );
@@ -257,7 +256,17 @@ function ChartWorkspace() {
         <SymbolInfoPanel symbol={symbol} info={info} error={infoError} />
       </aside>
 
-      {picker && <IndicatorPicker defs={defs} features={user?.limits ?? {}} activeCount={active.length} max={max} onAdd={add} onClose={() => setPicker(false)} />}
+      {picker && (
+        <IndicatorPicker
+          defs={defs}
+          features={user?.limits ?? {}}
+          active={active}
+          max={max}
+          onAdd={add}
+          onRemove={(id) => setActive((a) => a.filter((x) => x.uid !== id))}
+          onClose={() => setPicker(false)}
+        />
+      )}
     </div>
   );
 }

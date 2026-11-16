@@ -67,7 +67,7 @@ const STAGES = [
 function CyclePanel({ rows }: { rows: Overview["cycle"] }) {
   return (
     <Panel title="Market cycle" right={<span className="text-xs text-muted">Stage analysis on the 30-week average</span>}>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         {rows.map((r) => {
           const cur = STAGES[r.stage - 1];
           return (

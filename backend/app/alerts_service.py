@@ -94,7 +94,7 @@ def format_text(alert: Alert, html: bool = False) -> str:
     head = f"{icon} {alert.symbol}: {alert.title}"
     if html:
         head = f"{icon} <b>{alert.symbol}</b>: {alert.title}"
-    return f"{head}\n{alert.message}\n\nSEPA Trader · Not financial advice."
+    return f"{head}\n{alert.message}\n\nVnicorn Investments · Not financial advice."
 
 
 def dispatch(db: Session, user: User, rule: AlertRule, alert: Alert) -> None:
@@ -103,6 +103,34 @@ def dispatch(db: Session, user: User, rule: AlertRule, alert: Alert) -> None:
     if prefs is None:
         return
     if "email" in channels and prefs.email_enabled:
-        notify.send_email(user.email, f"[SEPA Trader] {alert.symbol}: {alert.title}", format_text(alert))
+        notify.send_email(user.email, f"[Vnicorn] {alert.symbol}: {alert.title}", format_text(alert))
     if "telegram" in channels and prefs.telegram_enabled and prefs.telegram_chat_id:
         notify.send_telegram(prefs.telegram_chat_id, format_text(alert, html=True))
+
+
+AUTO_PREFIX = "Auto · "
+
+
+def ensure_watchlist_rules(db: Session, user: User) -> int:
+    """Every watchlist gets one automatic alert rule (default events, app + email/Telegram if enabled),
+    so the user never has to add alerts by hand. Created once per watchlist; the user can switch it off."""
+    from engine.triggers import DEFAULT_EVENTS
+
+    from .models import AutoAlertDone, Watchlist
+
+    limits = limits_for(user)
+    if not limits["alerts"]:
+        return 0
+    events = [e for e in DEFAULT_EVENTS if limits["move_detector"] or e not in ("bull_score", "bear_score")]
+    done = set(db.scalars(select(AutoAlertDone.watchlist_id)).all())
+    n = 0
+    for w in db.scalars(select(Watchlist).where(Watchlist.user_id == user.id)).all():
+        if w.id in done:
+            continue
+        db.add(AlertRule(user_id=user.id, name=f"{AUTO_PREFIX}{w.name}"[:80], scope="watchlist", watchlist_id=w.id,
+                         events=",".join(events), channels="app,email,telegram", active=True))
+        db.add(AutoAlertDone(watchlist_id=w.id))
+        n += 1
+    if n:
+        db.commit()
+    return n

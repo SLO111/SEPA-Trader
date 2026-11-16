@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 type Mover = { symbol: string; name: string; price: number; change_pct: number };
 export type Summary = {
   id: number;
+  day: string;
   title: string;
   created_at: string;
   indices: { symbol: string; label: string; price: number; change_pct: number }[];
@@ -34,11 +35,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/** End-of-day recap card at the top of the feed, with the email opt-in. */
-export default function DailySummary() {
+/** Which days the summary covers: a Friday summary stays pinned over the weekend ("Fri – Sun"). */
+function coverage(day: string): string {
+  const d = new Date(`${day}T12:00:00`);
+  const long = d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  const now = new Date();
+  const ageDays = Math.floor((now.getTime() - d.getTime()) / 86_400_000);
+  if (d.getDay() === 5 && ageDays >= 1) return `${long} · covers Friday – Sunday`;
+  return ageDays < 1 ? `Today · ${long}` : ageDays < 2 ? `Yesterday · ${long}` : long;
+}
+
+/** End-of-day recap, pinned at the top of the Alerts pages until the next trading day's summary, with the email opt-in. */
+export default function DailySummary({ compact = false }: { compact?: boolean }) {
   const [s, setS] = useState<Summary | null>(null);
   const [digest, setDigest] = useState<Digest | null>(null);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(!compact);
 
   useEffect(() => {
     api<Summary | null>("/api/feed/summary").then(setS).catch(() => {});
@@ -68,11 +79,17 @@ export default function DailySummary() {
   }
 
   return (
-    <section className="mb-4 rounded-xl border border-accent/40 bg-panel">
+    <section className="mb-4 rounded-xl border border-accent/40 bg-gradient-to-br from-accent/10 to-panel">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 p-4 text-left">
         <span className="text-xl leading-none">📋</span>
-        <span className="flex-1 font-medium leading-snug">{s.title}</span>
-        <span className="text-xs text-muted">{open ? "▲" : "▼"}</span>
+        <span className="min-w-0 flex-1">
+          <span className="mb-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
+            <span className="rounded bg-accent/25 px-1.5 py-0.5 font-semibold text-blue-200">📌 PINNED</span>
+            <span>{s.day ? coverage(s.day) : ""}</span>
+          </span>
+          <span className="block font-medium leading-snug">{s.title}</span>
+        </span>
+        <span className="text-xs text-muted">{open ? "Hide ▲" : "Show ▼"}</span>
       </button>
       {open && (
         <div className="space-y-4 border-t border-line px-4 pb-4 pt-3 text-sm">

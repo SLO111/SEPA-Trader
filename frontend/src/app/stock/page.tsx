@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import Overview from "@/components/stock/Overview";
 import { Analysts, Dividends, Earnings, Financials, News, Ownership } from "@/components/stock/Tabs";
@@ -13,6 +13,7 @@ import type { CandlesResponse, StockData } from "@/lib/types";
 
 const TABS = ["Overview", "Financials", "Earnings", "Dividends", "Analysts", "Ownership", "News"] as const;
 type Tab = (typeof TABS)[number];
+const sid = (t: Tab) => `sec-${t.toLowerCase()}`;
 
 function StockPage() {
   const { user } = useAuth();
@@ -24,6 +25,29 @@ function StockPage() {
   const [error, setError] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
   const canReport = !!user?.limits.reports;
+  const scroller = useRef<HTMLDivElement>(null);
+
+  // One page with every section; the sticky menu scrolls to a section and follows the scroll position.
+  const go = (t: Tab) => {
+    setTab(t);
+    document.getElementById(sid(t))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  useEffect(() => {
+    const root = scroller.current;
+    if (!root || !data) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (vis[0]) setTab(TABS.find((t) => sid(t) === vis[0].target.id) ?? "Overview");
+      },
+      { root, rootMargin: "-120px 0px -60% 0px" },
+    );
+    TABS.forEach((t) => {
+      const el = document.getElementById(sid(t));
+      if (el) io.observe(el);
+    });
+    return () => io.disconnect();
+  }, [data]);
 
   useEffect(() => {
     setData(null);
@@ -69,8 +93,8 @@ function StockPage() {
   const c = data.company;
   const q = data.quote;
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-7xl p-4 sm:p-6">
+    <div ref={scroller} className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-7xl px-3 pb-6 pt-4 sm:px-6">
         {c.demo && (
           <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-200">
             Demo data: prices and fundamentals are generated for demonstration and are not real.
@@ -111,26 +135,41 @@ function StockPage() {
           </div>
         </header>
 
-        <nav className="mt-5 flex gap-1 overflow-x-auto border-b border-line">
+        <nav className="sticky top-0 z-20 -mx-3 mt-4 flex gap-1 overflow-x-auto border-b border-line bg-bg/95 px-3 backdrop-blur sm:-mx-6 sm:px-6">
+          <span className="hidden shrink-0 items-center pr-2 text-sm font-semibold md:flex">{c.symbol}</span>
           {TABS.map((t) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
-              className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === t ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}
+              onClick={() => go(t)}
+              className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm ${tab === t ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}
             >
               {t}
             </button>
           ))}
+          <span className={`tabular ml-auto hidden shrink-0 items-center text-sm md:flex ${tone(q.change)}`}>
+            ${fmt(q.price)} ({pct(q.change_pct)})
+          </span>
         </nav>
 
-        <div className="mt-5">
-          {tab === "Overview" && <Overview d={data} candles={candles} />}
-          {tab === "Financials" && <Financials c={c} />}
-          {tab === "Earnings" && <Earnings c={c} />}
-          {tab === "Dividends" && <Dividends c={c} />}
-          {tab === "Analysts" && <Analysts c={c} price={q.price ?? 0} />}
-          {tab === "Ownership" && <Ownership c={c} />}
-          {tab === "News" && <News c={c} />}
+        <div className="mt-5 space-y-10">
+          <section id={sid("Overview")} className="scroll-mt-14">
+            <Overview d={data} candles={candles} />
+          </section>
+          {(
+            [
+              ["Financials", <Financials key="f" c={c} />],
+              ["Earnings", <Earnings key="e" c={c} />],
+              ["Dividends", <Dividends key="d" c={c} />],
+              ["Analysts", <Analysts key="a" c={c} price={q.price ?? 0} />],
+              ["Ownership", <Ownership key="o" c={c} />],
+              ["News", <News key="n" c={c} />],
+            ] as [Tab, React.ReactNode][]
+          ).map(([t, node]) => (
+            <section key={t} id={sid(t)} className="scroll-mt-14">
+              <h2 className="mb-3 text-lg font-semibold">{t}</h2>
+              {node}
+            </section>
+          ))}
         </div>
         <p className="mt-6 text-xs text-muted">For educational purposes only. Not financial advice.</p>
       </div>

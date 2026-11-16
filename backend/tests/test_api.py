@@ -78,3 +78,21 @@ def test_admin(client, register):
     assert r.status_code == 200 and r.json()["plan"] == "pro"
     assert client.post("/api/watchlists", headers=hu, json={"name": "Lista 2"}).status_code == 200
     assert client.get("/api/admin/stats", headers=ha).json()["total_users"] >= 2
+
+
+def test_gzip_and_static_cache_headers(client, register, tmp_path):
+    from app.main import _CachedStatic
+
+    h, _ = register("gzip@test.ro")
+    big = client.get("/api/strategies", headers={**h, "Accept-Encoding": "gzip"})
+    assert big.status_code == 200 and big.headers.get("content-encoding") == "gzip"
+
+    (tmp_path / "_next" / "static").mkdir(parents=True)
+    (tmp_path / "_next" / "static" / "app.js").write_text("x" * 10)
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    a = FastAPI()
+    a.mount("/", _CachedStatic(directory=tmp_path, html=True))
+    r = TestClient(a).get("/_next/static/app.js")
+    assert "immutable" in r.headers["cache-control"]

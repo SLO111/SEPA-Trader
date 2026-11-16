@@ -3,9 +3,11 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "SEPA Trader",
-  description: "Stock analysis and trading platform",
+  title: { default: "Vnicorn Investments", template: "%s · Vnicorn Investments" },
+  description: "Daily trade ideas with stop, trim and target, a Move Detector for major moves, pro charts, alerts and company insight.",
 };
+
+export const viewport = { width: "device-width", initialScale: 1, themeColor: "#0b0e14" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

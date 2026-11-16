@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -18,7 +20,17 @@ log = logging.getLogger("sepa")
 
 
 def _run_checks() -> int:
+    from sqlalchemy import select
+
+    from .alerts_service import ensure_watchlist_rules
+    from .models import User
+
     with SessionLocal() as db:
+        for u in db.scalars(select(User).where(User.is_active.is_(True))).all():
+            try:
+                ensure_watchlist_rules(db, u)  # watchlists always come with alerts
+            except Exception:
+                db.rollback()
         return len(check_rules(db))
 
 
@@ -61,6 +73,27 @@ def _start_market_data() -> None:
         return
     store.on_prices_refreshed(invalidate_scan)
     store.start(lambda: list(SYMBOLS), stock_symbols)
+    threading.Thread(target=_warm_loop, name="cache-warmer", daemon=True).start()
+
+
+def _warm_loop() -> None:
+    """Keep the heavy screens precomputed (scan, movers, Fear & Greed, indexes), so pages open instantly."""
+    import time
+
+    from .data_store import get_store
+    from .routers import markets as mk
+    from .routers.sepa import cached_scan
+
+    time.sleep(20)
+    while True:
+        store = get_store()
+        if store is not None and store.prices:
+            for fn in (cached_scan, mk._rows, mk._fear_greed, mk._indices, mk._cycle):
+                try:
+                    fn()
+                except Exception:
+                    log.debug("warm-up %s failed", getattr(fn, "__name__", fn), exc_info=True)
+        time.sleep(240)
 
 
 def _run_ideas_tick() -> None:
@@ -95,6 +128,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=800)  # JSON and JS shrink 5-10x
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
@@ -134,6 +168,18 @@ def health():
 
 
 # Frontend (static Next.js export), mounted last so it doesn't shadow /api routes.
+class _CachedStatic(StaticFiles):
+    """Next.js build files have content hashes in their names, so browsers can keep them for a year."""
+
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        if path.startswith("_next/static/"):
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif path.endswith((".webp", ".png", ".svg", ".ico", ".jpg")):
+            resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+
+
 _static = Path(settings.static_dir)
 if _static.is_dir():
-    app.mount("/", StaticFiles(directory=_static, html=True), name="frontend")
+    app.mount("/", _CachedStatic(directory=_static, html=True), name="frontend")
