@@ -72,9 +72,8 @@ PRICES = {
 
 
 def limits_for(user) -> dict:
-    # Administrators get full access regardless of plan.
-    if user.role == "admin":
-        return PLANS["premium"]
+    # Everyone, administrators included, gets the limits of their own plan: an admin can switch their plan in the
+    # Admin panel to test exactly what Free / Pro / Premium users see. Admin access depends only on the role.
     return PLANS.get(user.plan, PLANS["free"])
 
 

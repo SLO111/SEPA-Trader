@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import MoveDetectorValidation from "@/components/MoveDetectorValidation";
 import { api, patch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { User } from "@/lib/types";
@@ -15,7 +14,7 @@ type Stats = {
 const money = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 function AdminPanel() {
-  const { user: me } = useAuth();
+  const { user: me, refresh } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState("");
@@ -32,6 +31,7 @@ function AdminPanel() {
       const u = await patch<User>(`/api/admin/users/${id}`, body);
       setUsers((us) => us.map((x) => (x.id === id ? u : x)));
       api<Stats>("/api/admin/stats").then(setStats);
+      if (id === me?.id) await refresh(); // your own plan: the badge and the paywall update right away
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     }
@@ -81,6 +81,7 @@ function AdminPanel() {
           </div>
         )}
         {error && <p className="mb-4 rounded-md bg-down/10 px-3 py-2 text-sm text-down">{error}</p>}
+        <p className="mb-2 text-xs text-muted">Change any user&apos;s plan here. Change your own plan to test what Free / Pro / Premium users see (you stay an administrator).</p>
         <div className="overflow-x-auto rounded-xl border border-line">
           <table className="w-full text-sm">
             <thead className="bg-panel text-left text-xs uppercase tracking-wide text-muted">
@@ -137,11 +138,6 @@ function AdminPanel() {
             </tbody>
           </table>
         </div>
-        <section className="mt-8">
-          <h2 className="mb-1 text-lg font-semibold">Move Detector validation</h2>
-          <p className="mb-4 text-sm text-muted">For calibrating the algorithm: do high Bull/Bear scores precede major moves more often than chance? Not shown to clients.</p>
-          <MoveDetectorValidation />
-        </section>
       </div>
     </div>
   );

@@ -132,3 +132,21 @@ def test_account_settings(client, register):
     assert client.request("DELETE", "/api/auth/me", headers=h, json={"password": "nope"}).status_code == 400
     assert client.request("DELETE", "/api/auth/me", headers=h, json={"password": "newpass123"}).status_code == 204
     assert client.post("/api/auth/login", json={"email": "settings2@test.ro", "password": "newpass123"}).status_code == 401
+
+
+def test_admin_can_test_any_plan(client):
+    from app.config import settings
+
+    r = client.post("/api/auth/register", json={"email": settings.admin_email, "password": "parola123", "name": "Admin"})
+    if r.status_code == 409:
+        r = client.post("/api/auth/login", json={"email": settings.admin_email, "password": "parola123"})
+    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    me = client.get("/api/auth/me", headers=h).json()
+    assert me["role"] == "admin" and me["plan"] == "premium" and me["limits"]["move_detector"]
+    client.patch(f"/api/admin/users/{me['id']}", headers=h, json={"plan": "free"})
+    me = client.get("/api/auth/me", headers=h).json()
+    assert me["plan"] == "free" and not me["limits"]["move_detector"] and me["limits"]["label"] == "Free"
+    assert client.get("/api/ideas", headers=h).status_code == 403
+    assert client.get("/api/admin/stats", headers=h).status_code == 200  # still an admin
+    client.patch(f"/api/admin/users/{me['id']}", headers=h, json={"plan": "premium"})
+    assert client.get("/api/auth/me", headers=h).json()["limits"]["label"] == "Premium"

@@ -22,13 +22,8 @@ const NAV: { label: string; tabs: { href: string; label: string; hidden?: boolea
     ],
   },
   { label: "Portfolio", tabs: [{ href: "/portfolios", label: "Portfolios" }, { href: "/journal", label: "Journal", hidden: true }] },
-  {
-    label: "Alerts",
-    tabs: [
-      { href: "/feed", label: "Feed" },
-      { href: "/alerts", label: "My alerts" },
-    ],
-  },
+  { label: "Feed", tabs: [{ href: "/feed", label: "Feed" }] },
+  { label: "Alerts", tabs: [{ href: "/alerts", label: "Alerts" }] },
 ];
 
 const PLAN_STYLE: Record<string, string> = {

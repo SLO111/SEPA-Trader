@@ -29,7 +29,25 @@ def ensure_admin(user: User, db: Session) -> None:
     """Promote the account matching ADMIN_EMAIL, even if it was created before ADMIN_EMAIL was set."""
     if user.email == settings.admin_email.lower().strip() and user.role != "admin":
         user.role = "admin"
+        user.plan = "premium"
         db.commit()
+    if user.role == "admin":
+        # once: admins created before plans applied to them start on Premium (later changes are kept)
+        import json
+
+        from ..models import UserPrefs
+
+        row = db.get(UserPrefs, user.id)
+        data = json.loads(row.data) if row else {}
+        if not data.get("admin_plan_init"):
+            if user.plan == "free":
+                user.plan = "premium"
+            data["admin_plan_init"] = True
+            if row is None:
+                db.add(UserPrefs(user_id=user.id, data=json.dumps(data)))
+            else:
+                row.data = json.dumps(data)
+            db.commit()
 
 
 def user_out(u: User) -> dict:
@@ -55,6 +73,8 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
         password_hash=hash_password(body.password),
         role="admin" if email == settings.admin_email.lower().strip() else "user",
     )
+    if user.role == "admin":
+        user.plan = "premium"
     wl = Watchlist(name="Favorites", position=0)
     wl.items = [WatchlistItem(symbol=s, position=i) for i, s in enumerate(DEFAULT_SYMBOLS)]
     user.watchlists = [wl]
@@ -140,7 +160,8 @@ def get_prefs(user: User = Depends(current_user), db: Session = Depends(get_db))
     from ..models import UserPrefs
 
     row = db.get(UserPrefs, user.id)
-    return {**PREF_DEFAULTS, **(json.loads(row.data) if row else {})}
+    saved = json.loads(row.data) if row else {}
+    return {k: saved.get(k, v) for k, v in PREF_DEFAULTS.items()}
 
 
 @router.put("/prefs")
@@ -166,7 +187,7 @@ def set_prefs(body: dict, user: User = Depends(current_user), db: Session = Depe
     else:
         row.data = json.dumps(current)
     db.commit()
-    return {**PREF_DEFAULTS, **current}
+    return {k: current.get(k, v) for k, v in PREF_DEFAULTS.items()}
 
 
 @router.delete("/me", status_code=204)
