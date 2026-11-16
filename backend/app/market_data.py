@@ -116,6 +116,26 @@ def cached(kind: str, symbol: str) -> dict | None:
     return store.get_slow(kind, symbol.upper())
 
 
+def fundamentals_fresh(symbol: str) -> dict:
+    """For a single symbol on screen: use stored fundamentals unless they are missing or incomplete,
+    then fetch them now (Finnhub when configured) and store them."""
+    store = get_store()
+    if store is None:
+        return fundamentals(symbol)
+    sym = symbol.upper()
+    f = store.get_slow("fundamentals", sym)
+    if f and f.get("market_cap_b") is not None and not f.get("partial"):
+        return f
+    try:
+        fresh = get_provider(settings.data_provider).fundamentals(sym)
+        if fresh.get("market_cap_b") is not None or not f:
+            store.put_slow("fundamentals", sym, fresh)
+            return fresh
+    except Exception:
+        pass
+    return f or {}
+
+
 def symbol_meta(symbol: str) -> dict:
     """Name / sector / exchange for any symbol: the universe first, then the US symbol directory."""
     from engine.data.universe import SYMBOLS

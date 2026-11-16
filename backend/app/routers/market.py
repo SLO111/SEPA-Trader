@@ -119,7 +119,7 @@ def info(symbol: str, user: User = Depends(current_user)):
     last = d.iloc[-1]
     y = d.iloc[-252:]
     meta = market_data.symbol_meta(sym)
-    f = market_data.cached("fundamentals", sym) or {}
+    f = market_data.fundamentals_fresh(sym) or {}
     e = market_data.cached("earnings", sym) or {}
     from .sepa import cached_scan
 

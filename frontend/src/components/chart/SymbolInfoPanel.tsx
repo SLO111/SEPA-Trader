@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { scoreColor } from "@/components/ScoreBadge";
-import { api } from "@/lib/api";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
 import type { SymbolInfo } from "@/lib/types";
 
@@ -31,17 +29,7 @@ const Row = ({ k, v, cls = "" }: { k: string; v: React.ReactNode; cls?: string }
 );
 
 /** TradingView-style details panel for the symbol on the chart. */
-export default function SymbolInfoPanel({ symbol, tick }: { symbol: string; tick: number }) {
-  const [info, setInfo] = useState<SymbolInfo | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    setError("");
-    api<SymbolInfo>(`/api/market/info/${encodeURIComponent(symbol)}`)
-      .then(setInfo)
-      .catch((e) => setError(e.message));
-  }, [symbol, tick]);
-
+export default function SymbolInfoPanel({ symbol, info, error }: { symbol: string; info: SymbolInfo | null; error: string }) {
   if (error) return <p className="p-4 text-sm text-muted">{error}</p>;
   if (!info || info.symbol !== symbol) return <p className="p-4 text-sm text-muted">Loading {symbol}…</p>;
   const q = info.quote;

@@ -11,7 +11,7 @@ import SymbolInfoPanel from "@/components/chart/SymbolInfoPanel";
 import WatchlistPanel from "@/components/WatchlistPanel";
 import { api, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { ActiveStrategy, CandlesResponse, StrategyDef, StrategyOutput } from "@/lib/types";
+import type { ActiveStrategy, CandlesResponse, StrategyDef, StrategyOutput, SymbolInfo } from "@/lib/types";
 
 const PriceChart = dynamic(() => import("@/components/PriceChart"), { ssr: false });
 
@@ -69,6 +69,16 @@ function ChartWorkspace() {
     const id = setInterval(() => setTick((t) => t + 1), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // Symbol details (side panel + extended-hours price in the header), refreshed every minute.
+  const [info, setInfo] = useState<SymbolInfo | null>(null);
+  const [infoError, setInfoError] = useState("");
+  useEffect(() => {
+    setInfoError("");
+    api<SymbolInfo>(`/api/market/info/${encodeURIComponent(symbol)}`)
+      .then(setInfo)
+      .catch((e) => setInfoError(e.message));
+  }, [symbol, tick]);
 
   useEffect(() => {
     if (tick === 0) setError("");
@@ -144,6 +154,17 @@ function ChartWorkspace() {
               </span>
             </span>
           )}
+          {info?.symbol === symbol && info.extended && (
+            <span className="tabular flex items-baseline gap-1.5 rounded bg-violet-500/10 px-2 py-0.5 text-sm" title={`Last trade ${info.extended.time}`}>
+              <span className="text-[11px] font-medium text-violet-300">{info.extended.session === "pre_market" ? "Pre-market" : "Post-market"}</span>
+              <span className="font-semibold">{info.extended.price.toFixed(2)}</span>
+              <span className={info.extended.change >= 0 ? "text-up" : "text-down"}>
+                {info.extended.change >= 0 ? "+" : ""}
+                {info.extended.change.toFixed(2)} ({info.extended.change >= 0 ? "+" : ""}
+                {info.extended.change_pct.toFixed(2)}%)
+              </span>
+            </span>
+          )}
           <div className="mx-1 h-5 w-px bg-line" />
           <div className="flex items-center gap-0.5">
             {INTERVALS.map((i) => (
@@ -186,7 +207,7 @@ function ChartWorkspace() {
       </section>
 
       <aside className={`${panel === "info" ? "absolute inset-y-0 right-0 z-30 flex" : "hidden"} w-80 shrink-0 flex-col border-l border-line bg-panel xl:static xl:flex`}>
-        <SymbolInfoPanel symbol={symbol} tick={tick} />
+        <SymbolInfoPanel symbol={symbol} info={info} error={infoError} />
       </aside>
 
       {picker && <IndicatorPicker defs={defs} features={user?.limits ?? {}} activeCount={active.length} max={max} onAdd={add} onClose={() => setPicker(false)} />}

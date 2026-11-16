@@ -7,16 +7,32 @@ import { api } from "@/lib/api";
 import SymbolSearch from "./SymbolSearch";
 import { useAuth } from "@/lib/auth";
 
-const NAV: { href: string; label: string; soon?: boolean }[] = [
-  { href: "/chart", label: "Charts" },
-  { href: "/portfolios", label: "Portfolios" },
-  { href: "/markets", label: "Markets" },
-  { href: "/ideas", label: "Ideas" },
-  { href: "/scanner", label: "Scanner" },
-  { href: "/feed", label: "Feed" },
-  { href: "/alerts", label: "Alerts" },
-  { href: "/journal", label: "Journal" },
-  { href: "/backtest", label: "Backtest" },
+// Compact navigation: related pages share one top-level hub with sub-tabs.
+const NAV: { label: string; tabs: { href: string; label: string }[] }[] = [
+  { label: "Charts", tabs: [{ href: "/chart", label: "Charts" }] },
+  { label: "Markets", tabs: [{ href: "/markets", label: "Markets" }] },
+  {
+    label: "Signals",
+    tabs: [
+      { href: "/ideas", label: "Trade ideas" },
+      { href: "/scanner", label: "Move Detector" },
+      { href: "/backtest", label: "Backtest" },
+    ],
+  },
+  {
+    label: "Portfolio",
+    tabs: [
+      { href: "/portfolios", label: "Portfolios" },
+      { href: "/journal", label: "Journal & Trade Review" },
+    ],
+  },
+  {
+    label: "Alerts",
+    tabs: [
+      { href: "/feed", label: "Feed" },
+      { href: "/alerts", label: "My alerts" },
+    ],
+  },
 ];
 
 const PLAN_STYLE: Record<string, string> = {
@@ -58,6 +74,8 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
     else if (adminOnly && user.role !== "admin") router.replace("/chart");
   }, [user, loading, adminOnly, router]);
 
+  const hub = NAV.find((n) => n.tabs.some((t) => pathname.startsWith(t.href)));
+
   if (loading || !user || (adminOnly && user.role !== "admin")) {
     return <div className="grid h-screen place-items-center text-muted">Loading…</div>;
   }
@@ -67,24 +85,21 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
       <header className="flex h-12 shrink-0 items-center gap-6 border-b border-line bg-panel px-4">
         <Logo />
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto text-sm">
-          {NAV.map((n) =>
-            n.soon ? (
-              <span key={n.label} className="cursor-default whitespace-nowrap rounded px-3 py-1.5 text-muted/60" title="Coming soon">
-                {n.label}
-              </span>
-            ) : (
+          {NAV.map((n) => {
+            const on = n.tabs.some((t) => pathname.startsWith(t.href));
+            return (
               <Link
                 key={n.label}
-                href={n.href}
-                className={`whitespace-nowrap rounded px-3 py-1.5 ${pathname.startsWith(n.href) ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
+                href={n.tabs[0].href}
+                className={`whitespace-nowrap rounded px-3 py-1.5 ${on ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
               >
                 {n.label}
-                {n.href === "/alerts" && unread > 0 && (
+                {n.label === "Alerts" && unread > 0 && (
                   <span className="tabular ml-1.5 rounded-full bg-down px-1.5 py-0.5 text-[10px] font-semibold text-white">{unread > 99 ? "99+" : unread}</span>
                 )}
               </Link>
-            ),
-          )}
+            );
+          })}
           {user.role === "admin" && (
             <Link
               href="/admin"
@@ -109,6 +124,19 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
           </button>
         </div>
       </header>
+      {hub && hub.tabs.length > 1 && (
+        <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line bg-panel/60 px-4 text-sm">
+          {hub.tabs.map((t) => (
+            <Link
+              key={t.href}
+              href={t.href}
+              className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 ${pathname.startsWith(t.href) ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </div>
+      )}
       <main className="min-h-0 flex-1">{children}</main>
     </div>
   );

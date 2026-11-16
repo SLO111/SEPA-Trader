@@ -176,6 +176,18 @@ def _synthetic_vix(years: int, end: date) -> pd.DataFrame:
     return pd.DataFrame({"open": vix, "high": vix * 1.04, "low": vix * 0.96, "close": vix, "volume": 0.0}, index=spy.index)
 
 
+def _ticker_frame(data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    """One symbol's columns from yf.download output. Recent yfinance versions return (ticker, field) MultiIndex
+    columns even for a single symbol, so always select by ticker when the columns are multi-level."""
+    if isinstance(data.columns, pd.MultiIndex):
+        if symbol in data.columns.get_level_values(0):
+            return data[symbol]
+        if symbol in data.columns.get_level_values(1):
+            return data.xs(symbol, axis=1, level=1)
+        raise KeyError(symbol)
+    return data
+
+
 def _finnhub():
     """Finnhub client when FINNHUB_API_KEY is set (fundamentals, earnings, profiles, news that Yahoo blocks)."""
     import os
@@ -217,7 +229,7 @@ class YFinanceProvider(DataProvider):
         out = {}
         for s in symbols:
             try:
-                d = data[s] if len(symbols) > 1 else data
+                d = _ticker_frame(data, s)
             except KeyError:
                 continue
             d = d.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]].dropna(subset=["close"])
@@ -336,7 +348,7 @@ class YFinanceProvider(DataProvider):
         out = {}
         for s in symbols:
             try:
-                d = (data[s] if len(symbols) > 1 else data).dropna(subset=["Close"])
+                d = _ticker_frame(data, s).dropna(subset=["Close"])
             except KeyError:
                 continue
             if d.empty:
@@ -359,7 +371,7 @@ class YFinanceProvider(DataProvider):
         out = []
         for s in symbols:
             try:
-                d = (data[s] if len(symbols) > 1 else data).dropna(subset=["Close"])
+                d = _ticker_frame(data, s).dropna(subset=["Close"])
             except KeyError:
                 continue
             if d.empty:
