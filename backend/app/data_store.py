@@ -71,6 +71,7 @@ class DataStore:
         self._listeners: list[Callable[[], None]] = []
         self.hot: dict[str, datetime] = {}
         self.slow_paused_until: datetime | None = None
+        self.directory: dict[str, dict] = {}
         self.live_at: dict[str, str] = {}
         self._thread: threading.Thread | None = None
 
@@ -107,6 +108,8 @@ class DataStore:
                         self.prices[sym] = obj_to_df(obj)
                     elif kind in self.slow:
                         self.slow[kind][sym] = obj
+                    elif kind == "directory":
+                        self.directory = obj
                     elif kind == "universe":
                         from engine.data.universe import extend
 
@@ -206,6 +209,27 @@ class DataStore:
         log.info("Universe: %d S&P 500 symbols (%d new)", len(entries), added)
         return added
 
+    def refresh_directory(self) -> int:
+        """All US-listed stocks and ETFs (Nasdaq Trader symbol files), refreshed weekly. Powers the search."""
+        if self.directory and not self.stale("directory:us", UNIVERSE_TTL):
+            return 0
+        import httpx
+
+        from engine.data.directory import NASDAQ_URL, OTHER_URL, parse
+
+        texts = [httpx.get(u, timeout=30, follow_redirects=True) for u in (NASDAQ_URL, OTHER_URL)]
+        for r in texts:
+            r.raise_for_status()
+        directory = parse(texts[0].text, texts[1].text)
+        if len(directory) < 3000:  # sanity check against a truncated download
+            raise ValueError(f"Unexpected symbol directory ({len(directory)} rows)")
+        with self._lock:
+            self.directory = directory
+        self._save("directory:us", directory)
+        self.updated["directory:us"] = _now()
+        log.info("Symbol directory: %d US stocks and ETFs", len(directory))
+        return len(directory)
+
     def refresh_prices(self, symbols: list[str], force: bool = False) -> int:
         todo = [s for s in symbols if force or self.stale(f"prices:{s}", PRICE_TTL)]
         provider = self._provider_factory()
@@ -235,6 +259,11 @@ class DataStore:
         if self.slow_paused_until and _now() < self.slow_paused_until:
             return 0
         provider = self._provider_factory()
+        if settings.finnhub_api_key:
+            # Partial Yahoo fallbacks are replaced as soon as Finnhub is available.
+            for sym, v in list(self.slow["fundamentals"].items()):
+                if v.get("partial"):
+                    self.updated.pop(f"fundamentals:{sym}", None)
         todo = [s for s in symbols if self.stale(f"fundamentals:{s}", SLOW_TTL) or self.stale(f"earnings:{s}", SLOW_TTL)]
         self.status.update(slow_total=len(symbols), slow_done=len(symbols) - len(todo))
         n = 0
@@ -282,6 +311,10 @@ class DataStore:
                         self.refresh_universe()
                     except Exception:
                         log.warning("Universe refresh failed; using the existing list", exc_info=True)
+                    try:
+                        self.refresh_directory()
+                    except Exception:
+                        log.warning("Symbol directory refresh failed; search uses the existing list", exc_info=True)
                     self.refresh_prices(symbols_fn())
                     self.status["message"] = "Updating fundamentals and earnings"
                     self.refresh_slow(stocks_fn(), stop)

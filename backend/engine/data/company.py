@@ -28,7 +28,7 @@ SECTOR_GROSS = {
 
 
 def empty_company(symbol: str) -> dict:
-    meta = SYMBOLS.get(symbol, {})
+    meta = SYMBOLS.get(symbol, {})  # names for non-universe symbols come from Yahoo's profile when available
     return {
         "symbol": symbol, "name": meta.get("name", symbol), "sector": meta.get("sector", ""), "industry": "",
         "exchange": meta.get("exchange", ""), "currency": "USD", "demo": False,

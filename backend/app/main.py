@@ -100,6 +100,7 @@ def health():
         "admin_email_set": settings.admin_email != "admin@sepa.local",
         "jwt_secret_set": not settings.jwt_secret.startswith("dev-secret"),
         "email_configured": bool(settings.smtp_host and settings.smtp_from),
+        "finnhub_configured": bool(settings.finnhub_api_key.strip()),
         "universe": settings.universe,
     }
     return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "config": config, "market_data": data}

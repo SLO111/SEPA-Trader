@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     # Telegram notifications (optional): token from @BotFather.
     telegram_bot_token: str = ""
+    # Finnhub API key (free plan works): fundamentals, earnings, profiles and news when Yahoo blocks them.
+    finnhub_api_key: str = ""
     # Payments (Stripe). Billing is disabled until STRIPE_SECRET_KEY is set.
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""

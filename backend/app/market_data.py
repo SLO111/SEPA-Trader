@@ -104,6 +104,36 @@ def cached(kind: str, symbol: str) -> dict | None:
     return store.get_slow(kind, symbol.upper())
 
 
+def symbol_meta(symbol: str) -> dict:
+    """Name / sector / exchange for any symbol: the universe first, then the US symbol directory."""
+    from engine.data.universe import SYMBOLS
+
+    s = symbol.upper()
+    if s in SYMBOLS:
+        return SYMBOLS[s]
+    store = get_store()
+    d = store.directory.get(s) if store else None
+    if d:
+        return {"name": d["name"], "sector": "ETF" if d["etf"] else "", "exchange": d["exchange"]}
+    return {"name": s, "sector": "", "exchange": ""}
+
+
+def search_symbols(query: str, limit: int = 10) -> list[dict]:
+    """Universe matches first (they have full analysis), then every other US stock and ETF."""
+    from engine.data.directory import search as dir_search
+    from engine.data.universe import search as uni_search
+
+    hits = uni_search(query, limit)
+    store = get_store()
+    if store is not None and store.directory:
+        seen = {h["symbol"] for h in hits}
+        q = query.strip().upper()
+        extra = [h for h in dir_search(store.directory, query, limit) if h["symbol"] not in seen]
+        # an exact ticker match always comes first
+        hits = sorted(hits + extra, key=lambda h: h["symbol"] != q)[:limit]
+    return hits
+
+
 def live_status(symbol: str) -> str | None:
     store = get_store()
     return store.live_at.get(symbol.upper()) if store else None

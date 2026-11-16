@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api", tags=["market"])
 
 @router.get("/market/search")
 def search_symbols(q: str = Query(min_length=1, max_length=40), user: User = Depends(current_user)):
-    return search(q)
+    return market_data.search_symbols(q)
 
 
 @router.get("/market/candles/{symbol}")
@@ -37,7 +37,7 @@ def candles(symbol: str, interval: str = "1d", years: int = Query(3, ge=1, le=10
         }
         for ts, r in df.iterrows()
     ]
-    meta = SYMBOLS.get(symbol.upper(), {"name": symbol.upper(), "sector": "", "exchange": ""})
+    meta = market_data.symbol_meta(symbol)
     return {
         "symbol": symbol.upper(),
         **meta,

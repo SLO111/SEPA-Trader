@@ -144,6 +144,18 @@ def _synthetic_vix(years: int, end: date) -> pd.DataFrame:
     return pd.DataFrame({"open": vix, "high": vix * 1.04, "low": vix * 0.96, "close": vix, "volume": 0.0}, index=spy.index)
 
 
+def _finnhub():
+    """Finnhub client when FINNHUB_API_KEY is set (fundamentals, earnings, profiles, news that Yahoo blocks)."""
+    import os
+
+    key = os.environ.get("FINNHUB_API_KEY", "").strip()
+    if not key:
+        return None
+    from .finnhub import Finnhub
+
+    return Finnhub(key)
+
+
 class YFinanceProvider(DataProvider):
     """Free real data from Yahoo Finance (delayed). Fine for personal use and development;
     paying users require a provider with a commercial license."""
@@ -183,6 +195,16 @@ class YFinanceProvider(DataProvider):
         return out
 
     def fundamentals(self, symbol: str) -> dict:
+        fh = _finnhub()
+        if fh is not None:
+            meta = SYMBOLS.get(symbol.upper(), {})
+            try:
+                return fh.fundamentals(symbol.upper(), meta.get("name", ""), meta.get("sector", ""))
+            except Exception:
+                pass  # fall back to Yahoo below
+        return self._yahoo_fundamentals(symbol)
+
+    def _yahoo_fundamentals(self, symbol: str) -> dict:
         import yfinance as yf
 
         # Live mode never falls back to the approximate demo reference values: missing data stays missing.
@@ -217,9 +239,20 @@ class YFinanceProvider(DataProvider):
     def company(self, symbol: str) -> dict:
         from .company import yfinance_company
 
-        return yfinance_company(symbol, self.history(symbol), self.dividends(symbol))
+        co = yfinance_company(symbol, self.history(symbol), self.dividends(symbol))
+        fh = _finnhub()
+        return fh.enrich_company(co) if fh is not None else co
 
     def earnings(self, symbol: str) -> dict:
+        fh = _finnhub()
+        if fh is not None:
+            try:
+                return fh.earnings(symbol.upper())
+            except Exception:
+                pass
+        return self._yahoo_earnings(symbol)
+
+    def _yahoo_earnings(self, symbol: str) -> dict:
         import yfinance as yf
 
         out = {"next_date": None, "next_eps_estimate": None, "history": []}

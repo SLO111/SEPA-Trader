@@ -48,6 +48,14 @@ Prices are downloaded in batches (one request per 100 symbols) and kept in a dat
 restarts warm and Yahoo is not hit on every page view. Yahoo quotes can lag the market by up to a minute or two;
 tick-by-tick real time needs a paid provider (see `docs/data-providers.md`). Check progress at `/api/health`.
 
+**Search covers every US-listed stock and ETF** (~11,000, from the official Nasdaq Trader symbol directory,
+refreshed weekly). Any symbol works on charts, ticker pages, watchlists, portfolios and alerts; the scanner,
+screener and market-wide statistics use the universe below.
+
+**Finnhub (recommended, free plan works):** set `FINNHUB_API_KEY` to load fundamentals, earnings, company
+profiles, analyst recommendations and news from Finnhub, which (unlike Yahoo) does not block cloud servers.
+Prices still come from Yahoo. Requests are rate-limited to stay under the free plan's 60 per minute.
+
 `UNIVERSE=sp500` (default) or `UNIVERSE=core` (only the 38 built-in symbols: much lighter, recommended on
 Render's free instance, which has 0.1 CPU and 512 MB RAM).
 
