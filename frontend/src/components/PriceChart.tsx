@@ -6,6 +6,8 @@ import {
   CrosshairMode,
   HistogramSeries,
   LineSeries,
+  LineStyle,
+  LineType,
   createChart,
   createSeriesMarkers,
   type IChartApi,
@@ -14,7 +16,7 @@ import {
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { chartColors } from "@/lib/theme";
 import type { Candle, StrategyOutput } from "@/lib/types";
 
@@ -44,6 +46,12 @@ export default function PriceChart({ candles, overlays, fitKey = "", onHover }: 
   const overlayRefs = useRef<ISeriesApi<"Line" | "Histogram">[]>([]);
   const markersRef = useRef<ReturnType<typeof createSeriesMarkers<Time>> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  // Indicators can colour the candles (e.g. green above a trailing stop, red below)
+  const barColors = useMemo(() => {
+    const m = new Map<string | number, string>();
+    for (const o of overlays) for (const b of o.bar_colors ?? []) m.set(b.time, b.color);
+    return m;
+  }, [overlays]);
 
   // Create the chart once
   useEffect(() => {
@@ -84,6 +92,8 @@ export default function PriceChart({ candles, overlays, fitKey = "", onHover }: 
     // Pre-market and after-hours candles are drawn faded, like on TradingView.
     const color = (c: Candle) => {
       const ext = c.session === "pre" || c.session === "post";
+      const painted = barColors.get(c.time);
+      if (painted && !ext) return painted;
       const upBar = c.close >= c.open;
       return ext ? (upBar ? "#22c55e66" : "#ef444466") : upBar ? "#22c55e" : "#ef4444";
     };
@@ -100,7 +110,7 @@ export default function PriceChart({ candles, overlays, fitKey = "", onHover }: 
       chartRef.current?.timeScale().fitContent();
       fitted.current = fitKey;
     }
-  }, [candles, fitKey]);
+  }, [candles, fitKey, barColors]);
 
   // Strategy overlays
   useEffect(() => {
@@ -113,26 +123,33 @@ export default function PriceChart({ candles, overlays, fitKey = "", onHover }: 
     // remove leftover empty lower panes
     while (chart.panes().length > 1) chart.removePane(chart.panes().length - 1);
 
-    const hasLower = overlays.some((o) => o.lines.some((l) => l.pane === "lower") || o.histograms.some((h) => h.pane === "lower"));
-    const paneOf = (p: string) => (p === "lower" && hasLower ? 1 : 0);
-
+    // each indicator with a lower part gets its own pane (RSI and the RS line don't share a scale)
+    let panes = 0;
     for (const o of overlays) {
+      const lower = o.lines.some((l) => l.pane === "lower") || o.histograms.some((h) => h.pane === "lower");
+      const idx = lower ? ++panes : 0;
+      const paneOf = (p: string) => (p === "lower" ? idx : 0);
       for (const h of o.histograms) {
         const s = chart.addSeries(HistogramSeries, { lastValueVisible: false, priceLineVisible: false }, paneOf(h.pane));
-        s.setData(h.data.map((d) => ({ time: d.time as Time, value: d.value, color: d.color })));
+        s.setData(h.data.map((d) => ({ time: d.time as Time, value: d.value ?? 0, color: d.color })));
         overlayRefs.current.push(s);
       }
       for (const l of o.lines) {
         const s = chart.addSeries(
           LineSeries,
-          { color: l.color, lineWidth: l.width as 1 | 2 | 3 | 4, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, title: "" },
+          {
+            color: l.color, lineWidth: l.width as 1 | 2 | 3 | 4, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, title: "",
+            lineType: l.step ? LineType.WithSteps : LineType.Simple, lineStyle: l.style === "dashed" ? LineStyle.Dashed : l.style === "dotted" ? LineStyle.Dotted : LineStyle.Solid,
+          },
           paneOf(l.pane),
         );
-        s.setData(l.data.map((d) => ({ time: d.time as Time, value: d.value })));
+        s.setData(l.data.map((d) => (d.value === null || d.value === undefined ? { time: d.time as Time } : d.color ? { time: d.time as Time, value: d.value, color: d.color } : { time: d.time as Time, value: d.value })));
         overlayRefs.current.push(s);
       }
     }
-    if (hasLower) chart.panes()[1]?.setHeight(150);
+    // main chart keeps most of the room; each lower pane gets a fair share
+    chart.panes()[0]?.setStretchFactor(panes ? Math.max(2, 4 - panes) : 1);
+    for (let i = 1; i <= panes; i++) chart.panes()[i]?.setStretchFactor(1);
 
     const markers: SeriesMarker<Time>[] = overlays
       .flatMap((o) => o.markers)

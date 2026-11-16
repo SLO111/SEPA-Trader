@@ -25,20 +25,35 @@ class ItemIn(BaseModel):
     symbol: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9.\-^=]+$")
 
 
-def wl_out(w: Watchlist) -> dict:
-    return {"id": w.id, "name": w.name, "color": w.color, "symbols": [i.symbol for i in w.items]}
+def active_watchlist_ids(user: User) -> set[int]:
+    """After a downgrade the oldest watchlists within the plan stay usable; the rest are kept but locked."""
+    ws = sorted(user.watchlists, key=lambda w: (w.created_at or 0, w.id) if w.created_at else (0, w.id))
+    return {w.id for w in ws[: limits_for(user)["max_watchlists"]]}
 
 
-def _get_owned(db: Session, user: User, wl_id: int) -> Watchlist:
+def wl_out(w: Watchlist, user: User | None = None) -> dict:
+    syms = [i.symbol for i in w.items]
+    if user is None:
+        return {"id": w.id, "name": w.name, "color": w.color, "symbols": syms}
+    if w.id not in active_watchlist_ids(user):
+        return {"id": w.id, "name": w.name, "color": w.color, "symbols": [], "locked": True, "hidden": len(syms)}
+    cap = limits_for(user)["max_symbols_per_watchlist"]
+    return {"id": w.id, "name": w.name, "color": w.color, "symbols": syms[:cap], "hidden": max(0, len(syms) - cap)}
+
+
+def _get_owned(db: Session, user: User, wl_id: int, active: bool = True) -> Watchlist:
     w = db.get(Watchlist, wl_id)
     if w is None or w.user_id != user.id:
         raise HTTPException(404, "Watchlist not found")
+    if active and wl_id not in active_watchlist_ids(user):
+        n = limits_for(user)["max_watchlists"]
+        raise HTTPException(403, f"Your plan includes {n} watchlist{'s' if n != 1 else ''}. Upgrade to use this one, or delete another.")
     return w
 
 
 @router.get("")
 def list_watchlists(user: User = Depends(current_user)):
-    return [wl_out(w) for w in user.watchlists]
+    return [wl_out(w, user) for w in user.watchlists]
 
 
 @router.post("")
@@ -52,7 +67,7 @@ def create_watchlist(body: WatchlistIn, user: User = Depends(current_user), db: 
     from ..alerts_service import ensure_watchlist_rules
 
     ensure_watchlist_rules(db, user)  # alerts for the new list's symbols, automatically
-    return wl_out(w)
+    return wl_out(w, user)
 
 
 @router.patch("/{wl_id}")
@@ -63,12 +78,12 @@ def update_watchlist(wl_id: int, body: WatchlistPatch, user: User = Depends(curr
     if body.color is not None:
         w.color = body.color
     db.commit()
-    return wl_out(w)
+    return wl_out(w, user)
 
 
 @router.delete("/{wl_id}", status_code=204)
 def delete_watchlist(wl_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    db.delete(_get_owned(db, user, wl_id))
+    db.delete(_get_owned(db, user, wl_id, active=False))  # locked lists can still be deleted
     db.commit()
 
 
@@ -77,7 +92,7 @@ def add_item(wl_id: int, body: ItemIn, user: User = Depends(current_user), db: S
     w = _get_owned(db, user, wl_id)
     symbol = body.symbol.upper()
     if any(i.symbol == symbol for i in w.items):
-        return wl_out(w)
+        return wl_out(w, user)
     limit = limits_for(user)["max_symbols_per_watchlist"]
     if len(w.items) >= limit:
         raise HTTPException(403, f"Your plan allows up to {limit} symbols per watchlist.")
@@ -87,17 +102,17 @@ def add_item(wl_id: int, body: ItemIn, user: User = Depends(current_user), db: S
         raise HTTPException(404, f"No data found for {symbol}")
     w.items.append(WatchlistItem(symbol=symbol, position=len(w.items)))
     db.commit()
-    return wl_out(w)
+    return wl_out(w, user)
 
 
 @router.delete("/{wl_id}/items/{symbol}")
 def remove_item(wl_id: int, symbol: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    w = _get_owned(db, user, wl_id)
+    w = _get_owned(db, user, wl_id, active=False)
     w.items = [i for i in w.items if i.symbol != symbol.upper()]
     for pos, i in enumerate(w.items):
         i.position = pos
     db.commit()
-    return wl_out(w)
+    return wl_out(w, user)
 
 
 class OrderIn(BaseModel):
@@ -115,4 +130,4 @@ def reorder(wl_id: int, body: OrderIn, user: User = Depends(current_user), db: S
     w.items = items
     db.commit()
     db.refresh(w)
-    return wl_out(w)
+    return wl_out(w, user)

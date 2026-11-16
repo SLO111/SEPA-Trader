@@ -57,7 +57,7 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
     <div className="relative border-b border-line">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 text-left hover:bg-panel/60">
         <Chip label="RS" value={rep.rs_rating ?? "—"} tone={(rep.rs_rating ?? 0) >= 80 ? "text-up" : "text-text"} />
-        <Chip label="Trend Template" value={`${tt.passed_count}/8`} tone={tt.all_passed ? "text-up" : tt.passed_count <= 3 ? "text-down" : "text-amber-300"} />
+        <Chip label="Trend Template" value={`${tt.passed_count}/${tt.total ?? 8}`} tone={tt.all_passed ? "text-up" : tt.passed_count / (tt.total ?? 8) <= 0.4 ? "text-down" : "text-amber-300"} />
         {v.locked ? (
           <span className="flex items-baseline gap-1.5 whitespace-nowrap">
             <span className="text-[11px] uppercase tracking-wide text-muted">VCP</span>
@@ -84,7 +84,7 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
       {open && (
         <div className="absolute left-0 right-0 top-full z-20 grid max-h-[70vh] gap-6 overflow-y-auto border-b border-line bg-panel p-4 shadow-2xl md:grid-cols-3">
           <div>
-            <h4 className="mb-2 text-sm font-semibold">Trend Template · {tt.passed_count}/8</h4>
+            <h4 className="mb-2 text-sm font-semibold">Trend Template · {tt.passed_count}/{tt.total ?? 8}</h4>
             <ul className="space-y-1.5 text-xs">
               {tt.criteria.map((c) => (
                 <li key={c.label} className="flex gap-2">
@@ -102,7 +102,7 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
                 </li>
               ))}
             </ul>
-            {tt.locked && <p className="mt-2 text-[11px] text-amber-300">The other criteria are part of Pro.</p>}
+            {tt.locked && <p className="mt-2 text-[11px] text-amber-300">🔒 The full Trend Template is part of Pro.</p>}
             <h4 className="mb-2 mt-5 text-sm font-semibold">VCP</h4>
             {v.locked ? (
               <Locked feature="VCP + pivot" text="Volatility contractions, the exact pivot (buy point), the logical stop and the risk %, on every stock." />

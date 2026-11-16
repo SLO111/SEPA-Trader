@@ -18,7 +18,7 @@ export type SectorRow = {
   avg_rs: number | null; pct_above_ma50: number; leaders: string[]; rank_1m: number; rank_3m: number; trend: "Improving" | "Weakening" | "Steady"; emerging: boolean;
 };
 
-export type LeaderRow = { symbol: string; name: string; price: number; change_pct: number; rs_rating: number; bull_score: number; template_passed: number; leadership: number; vcp: boolean };
+export type LeaderRow = { symbol: string; name: string; price: number; change_pct: number; rs_rating: number; bull_score: number; template_passed: number | null; template_total?: number; leadership: number; vcp: boolean | null };
 
 export type Overview = {
   demo: boolean;

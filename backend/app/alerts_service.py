@@ -28,7 +28,14 @@ def rule_symbols(db: Session, rule: AlertRule) -> list[str]:
         return [rule.symbol] if rule.symbol else []
     if rule.scope == "watchlist":
         wl = db.get(Watchlist, rule.watchlist_id) if rule.watchlist_id else None
-        return [i.symbol for i in wl.items] if wl and wl.user_id == rule.user_id else []
+        if not wl or wl.user_id != rule.user_id:
+            return []
+        from .routers.watchlists import active_watchlist_ids
+        from .plans import limits_for
+
+        if wl.id not in active_watchlist_ids(wl.user):
+            return []  # locked after a downgrade
+        return [i.symbol for i in wl.items][: limits_for(wl.user)["max_symbols_per_watchlist"]]
     return stock_symbols()
 
 

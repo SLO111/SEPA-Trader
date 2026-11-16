@@ -133,7 +133,13 @@ def publish_summary(db: Session, day: date, hist: dict[str, pd.DataFrame], ideas
         fg = _fear_greed()
     except Exception:
         fg = {}
-    item = feedmod.daily_summary(day.isoformat(), _indices(), cycle, fg, rows, ideas, earn)
+    try:
+        from .routers.sepa import cached_scan, pulse_map
+
+        scan, pm = cached_scan(), pulse_map()
+    except Exception:
+        scan, pm = [], {}
+    item = feedmod.daily_summary(day.isoformat(), _indices(), cycle, fg, rows, ideas, earn, scan, pm)
     if not add_feed(db, [item]):
         return None  # already published today
     send_digests(db, day, item, {r["symbol"]: r for r in rows})
@@ -152,7 +158,9 @@ def send_digests(db: Session, day: date, item: dict, by_symbol: dict[str, dict])
         syms = db.scalars(select(WatchlistItem.symbol).join(Watchlist, Watchlist.id == WatchlistItem.watchlist_id)
                           .where(Watchlist.user_id == user.id)).all()
         watch = [by_symbol[s] for s in dict.fromkeys(syms) if s in by_symbol][:15]
-        if send_email(user.email, f"[Vnicorn] {item['title']}", feedmod.summary_text(item, watch)):
+        from .plans import limits_for
+
+        if send_email(user.email, f"[Vnicorn] {item['title']}", feedmod.summary_text(item, watch, limits_for(user))):
             sub.last_sent = day
             n += 1
     db.commit()

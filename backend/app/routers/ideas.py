@@ -109,8 +109,14 @@ def feed(
     if before_id:
         q = q.where(FeedItem.id < before_id)
     rows = db.scalars(q.order_by(FeedItem.id.desc()).limit(limit)).all()
+    import json
+
+    from engine.feed import gate_summary
+
+    lim = limits_for(user)
+    body = lambda r: json.dumps(gate_summary(json.loads(r.body), lim)) if r.kind == "summary" and r.body else r.body
     return [
-        {"id": r.id, "kind": r.kind, "symbol": r.symbol, "severity": r.severity, "title": r.title, "body": r.body, "url": r.url,
+        {"id": r.id, "kind": r.kind, "symbol": r.symbol, "severity": r.severity, "title": r.title, "body": body(r), "url": r.url,
          "created_at": r.created_at.isoformat()}
         for r in rows
     ]
@@ -124,7 +130,10 @@ def latest_summary(user: User = Depends(current_user), db: Session = Depends(get
     r = db.scalars(select(FeedItem).where(FeedItem.kind == "summary").order_by(FeedItem.id.desc()).limit(1)).first()
     if not r:
         return None
-    return {"id": r.id, "day": r.key.split(":", 1)[1], "title": r.title, "created_at": r.created_at.isoformat(), **json.loads(r.body)}
+    from engine.feed import gate_summary
+
+    return {"id": r.id, "day": r.key.split(":", 1)[1], "title": r.title, "created_at": r.created_at.isoformat(),
+            **gate_summary(json.loads(r.body), limits_for(user))}
 
 
 class DigestIn(BaseModel):
@@ -408,7 +417,9 @@ def _trades_for(user: User, db: Session, source: str, portfolio_id: int | None =
                         "entry_date": t.entry_date.isoformat(), "entry_price": t.entry, "stop": t.stop,
                         "exit_date": f["closed_at"], "exit_price": f["exit_price"], "ref": f"paper:{t.id}"})
     if source in ("all", "portfolio"):
-        q = select(Portfolio).where(Portfolio.user_id == user.id)
+        from .portfolios import _active_ids
+
+        q = select(Portfolio).where(Portfolio.user_id == user.id, Portfolio.id.in_(_active_ids(db, user)))  # locked portfolios are skipped
         if portfolio_id:
             q = q.where(Portfolio.id == portfolio_id)
         for p in db.scalars(q).all():
@@ -441,8 +452,8 @@ def grader(source: Literal["all", "backtest", "ideas", "md", "chart", "portfolio
     """TradeGrader: Bought / Sold Perfect, Early or Late, plus an A-F grade for every trade."""
     from engine.trade_grader import aggregate
 
-    if not limits_for(user)["backtesting"]:
-        source = "chart"  # Free: TradeGrader covers the trades you placed from the charts
+    if not limits_for(user)["backtesting"] and source not in ("chart", "portfolio"):
+        source = "chart"  # Free: your own trades (charts, portfolios); Trade ideas / Move Detector trades are Pro
     rows = _graded(user, db, source, portfolio_id)
     return {"trades": rows, "summary": aggregate(rows)}
 
@@ -470,6 +481,6 @@ def trade_analytics(source: Literal["all", "backtest", "ideas", "md", "chart", "
     """TradingLogger-style statistics over your closed trades."""
     from engine.trade_grader import analytics
 
-    if not limits_for(user)["backtesting"]:
+    if not limits_for(user)["backtesting"] and source not in ("chart", "portfolio"):
         source = "chart"
     return analytics(_graded(user, db, source, portfolio_id))

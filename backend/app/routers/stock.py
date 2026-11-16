@@ -51,7 +51,7 @@ def _build(symbol: str, user: User) -> dict:
     from engine.key_facts import key_facts
     from engine.stages import stage_now
 
-    facts = market_data._fast(f"keyfacts:{symbol}", 6 * 3600, lambda: key_facts(co, hist, stage_now(hist), sepa, peers))
+    facts = market_data._fast(f"keyfacts:{symbol}:{'pro' if limits_for(user)['sepa_details'] else 'free'}", 6 * 3600, lambda: key_facts(co, hist, stage_now(hist), sepa, peers))
     return {"company": co, "quote": quote, "returns": returns, "sepa": sepa, "peers": peers, "takeaways": items, "verdict": verdict(items),
             "key_facts": facts, "history": hist}
 

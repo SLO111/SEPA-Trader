@@ -236,7 +236,7 @@ export default function OverviewTab({ o, onFearGreed }: { o: Overview; onFearGre
                     {l.vcp && <span className="ml-1.5 rounded bg-up/10 px-1 text-[10px] text-up">VCP</span>}
                   </td>
                   <td className="tabular py-1.5 text-right">{l.rs_rating}</td>
-                  <td className={`tabular py-1.5 text-right ${l.template_passed === 8 ? "text-up" : "text-muted"}`}>{l.template_passed}/8</td>
+                  <td className={`tabular py-1.5 text-right ${l.template_passed === (l.template_total ?? 8) ? "text-up" : "text-muted"}`}>{l.template_passed ?? "—"}/{l.template_total ?? 8}</td>
                   <td className="py-1.5 pl-3"><ScoreBar score={l.bull_score} kind="bull" /></td>
                   <td className={`tabular py-1.5 text-right ${tone(l.change_pct)}`}>{pct(l.change_pct)}</td>
                 </tr>

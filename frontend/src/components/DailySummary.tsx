@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import Locked from "@/components/Locked";
 
 type Mover = { symbol: string; name: string; price: number; change_pct: number };
 export type Summary = {
@@ -17,9 +18,26 @@ export type Summary = {
   breadth: { advancing: number; declining: number; new_highs: number; new_lows: number };
   gainers: Mover[];
   losers: Mover[];
-  ideas: { count: number; top: { symbol: string; timeframe: string; side: string; entry: number; stop: number; target: number; rr: number }[] };
+  ideas: { locked?: boolean; count: number; top?: { symbol: string; timeframe: string; side: string; entry: number; stop: number; target: number; rr: number }[] };
   earnings_next: { symbol: string }[];
+  move_detector?: { locked?: boolean; bull?: MdRow[]; bear?: MdRow[] };
+  pulse?: { locked?: boolean; best?: PulseRow[]; warning?: PulseRow[] };
 };
+type MdRow = { symbol: string; score: number; price: number; change_pct: number };
+type PulseRow = { symbol: string; conf: number; warn: number };
+
+function Chips({ items, cls }: { items: { symbol: string; label: string }[]; cls: string }) {
+  if (!items.length) return <span className="text-xs text-muted">—</span>;
+  return (
+    <span className="flex flex-wrap gap-1.5">
+      {items.map((x) => (
+        <Link key={x.symbol} href={`/chart?s=${x.symbol}`} className="tabular rounded bg-panel-2 px-2 py-0.5 text-xs hover:text-accent">
+          {x.symbol} <span className={cls}>{x.label}</span>
+        </Link>
+      ))}
+    </span>
+  );
+}
 type Digest = { enabled: boolean; email: string; email_configured: boolean };
 
 const pct = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(2)}%`;
@@ -139,8 +157,38 @@ export default function DailySummary({ compact = false }: { compact?: boolean })
               </div>
             </Section>
           </div>
+          {(s.ideas.locked || s.move_detector?.locked || s.pulse?.locked) && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {s.ideas.locked && <Locked feature="Trade ideas" text={`${s.ideas.count ?? "New"} setups today with entry, stop, trim and target.`} />}
+              {s.move_detector?.locked && <Locked feature="Move Detector" text="The day's strongest Bull and Bear scores across the market." />}
+              {s.pulse?.locked && <Locked feature="vnicorn Pulse" text="Which stocks act best and which flash warnings, over the last 10 days." />}
+            </div>
+          )}
+          {s.move_detector && !s.move_detector.locked && (s.move_detector.bull?.length || s.move_detector.bear?.length) ? (
+            <Section title="Move Detector">
+              <div className="space-y-1.5">
+                <div className="flex items-start gap-2"><span className="w-12 shrink-0 text-xs text-up">Bull ↑</span>
+                  <Chips items={(s.move_detector.bull ?? []).map((r) => ({ symbol: r.symbol, label: `${Math.round(r.score)}` }))} cls="text-up" /></div>
+                <div className="flex items-start gap-2"><span className="w-12 shrink-0 text-xs text-down">Bear ↓</span>
+                  <Chips items={(s.move_detector.bear ?? []).map((r) => ({ symbol: r.symbol, label: `${Math.round(r.score)}` }))} cls="text-down" /></div>
+              </div>
+              <Link href="/scanner" className="mt-1 inline-block text-xs text-accent hover:underline">Open Move Detector →</Link>
+            </Section>
+          ) : null}
+          {s.pulse && !s.pulse.locked && (s.pulse.best?.length || s.pulse.warning?.length) ? (
+            <Section title="vnicorn Pulse · 10 days">
+              <div className="space-y-1.5">
+                <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-up">Acting best</span>
+                  <Chips items={(s.pulse.best ?? []).map((r) => ({ symbol: r.symbol, label: `+${r.conf}/−${r.warn}` }))} cls="text-up" /></div>
+                <div className="flex items-start gap-2"><span className="w-20 shrink-0 text-xs text-down">Warnings</span>
+                  <Chips items={(s.pulse.warning ?? []).map((r) => ({ symbol: r.symbol, label: `+${r.conf}/−${r.warn}` }))} cls="text-down" /></div>
+              </div>
+              <Link href="/pulse" className="mt-1 inline-block text-xs text-accent hover:underline">Open vnicorn Pulse →</Link>
+            </Section>
+          ) : null}
+          {!s.ideas.locked && (
           <Section title={`New trade ideas (${s.ideas.count})`}>
-            {s.ideas.top.length ? (
+            {s.ideas.top?.length ? (
               <ul className="space-y-1">
                 {s.ideas.top.map((i) => (
                   <li key={i.symbol} className="tabular text-xs">
@@ -159,6 +207,7 @@ export default function DailySummary({ compact = false }: { compact?: boolean })
               All ideas →
             </Link>
           </Section>
+          )}
           {s.earnings_next.length > 0 && (
             <Section title="Earnings next trading day">
               <p className="text-xs">{s.earnings_next.map((e) => e.symbol).join(", ")}</p>

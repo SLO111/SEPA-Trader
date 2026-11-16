@@ -30,7 +30,7 @@ export type User = {
   subscription_status?: string | null;
 };
 
-export type Watchlist = { id: number; name: string; color: string; symbols: string[] };
+export type Watchlist = { id: number; name: string; color: string; symbols: string[]; locked?: boolean; hidden?: number };
 
 export type Quote = {
   symbol: string;
@@ -57,15 +57,19 @@ export type CandlesResponse = {
 
 export type StrategyParam = { key: string; label: string; default: number; min: number; max: number; step: number; type: "int" | "float" | "select"; options?: [number, string][] | null };
 
-export type StrategyDef = { id: string; name: string; category: string; description: string; params: StrategyParam[]; requires: string | null };
+export type StrategyDef = {
+  id: string; name: string; category: string; description: string; params: StrategyParam[]; requires: string | null;
+  rating?: number; level?: "Beginner" | "Intermediate" | "Advanced"; best_for?: string;
+};
 
-export type Point = { time: string | number; value: number; color?: string };
+export type Point = { time: string | number; value: number | null; color?: string };
 
 export type StrategyOutput = {
-  lines: { name: string; color: string; pane: "price" | "lower"; width: number; data: Point[] }[];
+  lines: { name: string; color: string; pane: "price" | "lower"; width: number; data: Point[]; step?: boolean; style?: "solid" | "dashed" | "dotted" }[];
   histograms: { name: string; pane: "price" | "lower"; data: Point[] }[];
   markers: { time: string | number; position: "aboveBar" | "belowBar"; shape: "arrowUp" | "arrowDown" | "circle"; color: string; text: string }[];
   levels: { price: number; color: string; title: string }[];
+  bar_colors?: { time: string | number; color: string }[];
 };
 
 // uid: one entry per instance, so the same indicator can be on the chart several times.
@@ -82,7 +86,7 @@ export type SymbolInfo = {
   next_earnings: string | null;
   extended: { session: "pre_market" | "after_hours"; price: number; change: number; change_pct: number; reference_close: number; time: string } | null;
   overnight: null;
-  sepa: { rs_rating: number | null; template_passed: number; vcp: boolean | null; pivot: number | null; bull_score: number; bear_score: number; signals: string[]; locked?: boolean } | null;
+  sepa: { rs_rating: number | null; template_passed: number | null; template_total?: number; vcp: boolean | null; pivot: number | null; bull_score: number; bear_score: number; signals: string[]; locked?: boolean } | null;
 };
 
 export type Factor = { key: string; label: string; value: number; weight: number; contribution: number };
@@ -91,7 +95,7 @@ export type ScoreBlock = { score: number | null; label: string; factors: Factor[
 export type SepaReport = {
   symbol: string;
   rs_rating: number | null;
-  trend_template: { criteria: { label: string; passed: boolean | null; locked?: boolean }[]; passed_count: number; all_passed: boolean; locked?: boolean };
+  trend_template: { criteria: { label: string; passed: boolean | null; locked?: boolean }[]; passed_count: number; total?: number; all_passed: boolean; locked?: boolean };
   vcp: {
     locked?: boolean;
     detected: boolean | null;
@@ -187,6 +191,7 @@ export type Classification = ClassificationBrief & {
 export type PortfolioSummary = {
   id: number;
   name: string;
+  locked?: boolean;
   description: string;
   template_id: string | null;
   created_at: string;

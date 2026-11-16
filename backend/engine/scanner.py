@@ -59,6 +59,7 @@ def scan_universe(history: Callable[[str], pd.DataFrame], symbols: list[str] | N
                 "change_pct": round(float(c.iloc[-1] / c.iloc[-2] - 1) * 100, 2),
                 "rs_rating": rs,
                 "template_passed": tt["passed_count"],
+                "template_free": sum(bool(tt["criteria"][i]["passed"]) for i in (0, 3, 4)),  # the chart-readable ones (Free plan)
                 "vcp": vcp["detected"],
                 "pivot": vcp.get("pivot"),
                 "pivot_distance_pct": vcp.get("distance_pct"),

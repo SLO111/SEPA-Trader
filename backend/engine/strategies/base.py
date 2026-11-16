@@ -35,9 +35,10 @@ class StrategyResult:
     histograms: list[dict] = field(default_factory=list)
     markers: list[dict] = field(default_factory=list)
     levels: list[dict] = field(default_factory=list)
+    bar_colors: list[dict] = field(default_factory=list)  # [{time, color}]: paints the candles
 
     def to_dict(self) -> dict:
-        return {"lines": self.lines, "histograms": self.histograms, "markers": self.markers, "levels": self.levels}
+        return {"lines": self.lines, "histograms": self.histograms, "markers": self.markers, "levels": self.levels, "bar_colors": self.bar_colors}
 
 
 class Strategy:
@@ -47,6 +48,10 @@ class Strategy:
     description: ClassVar[str] = ""
     params: ClassVar[list[Param]] = []
     requires: ClassVar[str | None] = None  # required plan feature (e.g. "move_detector")
+    # How much it can help a trader (1-5, our assessment), who it suits, and what it is best for
+    rating: ClassVar[int] = 3
+    level: ClassVar[str] = "Intermediate"  # Beginner | Intermediate | Advanced
+    best_for: ClassVar[str] = ""
 
     def resolve_params(self, raw: dict[str, Any] | None) -> dict[str, float]:
         raw = raw or {}
@@ -73,6 +78,9 @@ class Strategy:
             "description": cls.description,
             "params": [p.__dict__ for p in cls.params],
             "requires": cls.requires,
+            "rating": cls.rating,
+            "level": cls.level,
+            "best_for": cls.best_for,
         }
 
 
@@ -103,6 +111,13 @@ def series_points(s: pd.Series) -> list[dict]:
 
 def line(name: str, s: pd.Series, color: str, pane: str = "price", width: int = 2) -> dict:
     return {"name": name, "color": color, "pane": pane, "width": width, "data": series_points(s)}
+
+
+def colored_line(name: str, s: pd.Series, colors: pd.Series, pane: str = "price", width: int = 2, step: bool = False, style: str = "solid") -> dict:
+    """A line whose colour changes point by point (e.g. green while bullish, red while bearish)."""
+    pts = [{"time": t(i), "value": round(float(v), 4), "color": colors.get(i)} for i, v in s.dropna().items() if np.isfinite(v)]
+    return {"name": name, "color": colors.dropna().iloc[-1] if colors.notna().any() else "#94a3b8", "pane": pane, "width": width, "data": pts,
+            "step": step, "style": style}
 
 
 def marker(ts: pd.Timestamp, buy: bool, text: str) -> dict:

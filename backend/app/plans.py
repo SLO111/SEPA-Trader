@@ -82,9 +82,19 @@ FREE_TEMPLATE_CRITERIA = {0, 3, 4}
 
 
 def gate_sepa(rep: dict, limits: dict) -> dict:
-    """Free plan: Trend Template score + the chart-readable criteria; the other criteria and the VCP are locked."""
+    """Free plan: only the chart-readable Trend Template criteria (scored out of those); the others and the VCP stay hidden."""
     if limits.get("sepa_details"):
-        return rep
+        tt = rep.get("trend_template")
+        return {**rep, "trend_template": {**tt, "total": len(tt.get("criteria", []))}} if tt else rep
     tt = rep.get("trend_template") or {}
-    crit = [c if i in FREE_TEMPLATE_CRITERIA else {"label": c["label"], "passed": None, "locked": True} for i, c in enumerate(tt.get("criteria", []))]
-    return {**rep, "trend_template": {**tt, "criteria": crit, "locked": True}, "vcp": {"locked": True, "detected": None, "contractions": []}}
+    crit = [c for i, c in enumerate(tt.get("criteria", [])) if i in FREE_TEMPLATE_CRITERIA]
+    passed = sum(bool(c.get("passed")) for c in crit)
+    return {**rep, "trend_template": {"criteria": crit, "passed_count": passed, "total": len(crit), "all_passed": passed == len(crit),
+                                      "locked": True}, "vcp": {"locked": True, "detected": None, "contractions": []}}
+
+
+def gate_rows(rows: list[dict], limits: dict) -> list[dict]:
+    """Scan-derived rows (leaders, symbol info): on Free the Trend Template count covers only the chart-readable criteria."""
+    if limits.get("sepa_details"):
+        return [{**r, "template_total": 8} for r in rows]
+    return [{**r, "template_passed": r.get("template_free"), "template_total": len(FREE_TEMPLATE_CRITERIA), "vcp": None} for r in rows]

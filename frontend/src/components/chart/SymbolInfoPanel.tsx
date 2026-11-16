@@ -150,7 +150,7 @@ export default function SymbolInfoPanel({ symbol, info, error }: { symbol: strin
         <div className="p-4">
           <div className="mb-2 text-[11px] uppercase tracking-wide text-muted">SEPA analysis</div>
           <Row k="RS Rating" v={sepa.rs_rating ?? "—"} cls={(sepa.rs_rating ?? 0) >= 80 ? "text-up" : ""} />
-          <Row k="Trend Template" v={`${sepa.template_passed}/8`} cls={sepa.template_passed === 8 ? "text-up" : sepa.template_passed <= 3 ? "text-down" : "text-amber-300"} />
+          <Row k="Trend Template" v={sepa.template_passed == null ? "—" : `${sepa.template_passed}/${sepa.template_total ?? 8}`} cls={sepa.template_passed === (sepa.template_total ?? 8) ? "text-up" : (sepa.template_passed ?? 0) / (sepa.template_total ?? 8) <= 0.4 ? "text-down" : "text-amber-300"} />
           <Row k="Bull Score" v={Math.round(sepa.bull_score)} cls={scoreColor(sepa.bull_score, "bull")} />
           <Row k="Bear Score" v={Math.round(sepa.bear_score)} cls={scoreColor(sepa.bear_score, "bear")} />
           <Row k="VCP" v={"locked" in sepa ? <Locked feature="VCP" compact /> : sepa.vcp ? `Yes · pivot ${sepa.pivot}` : "No"} cls={sepa.vcp ? "text-up" : "text-muted"} />

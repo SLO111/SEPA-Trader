@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, del, patch, post, put } from "@/lib/api";
 import type { Quote, Watchlist } from "@/lib/types";
@@ -156,7 +157,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
               className={`flex shrink-0 items-center gap-1.5 rounded px-2 py-1 text-xs ${l.id === active?.id ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
             >
               <span className="h-2 w-2 rounded-full" style={{ background: l.color }} />
-              {l.name}
+              {l.locked ? `🔒 ${l.name}` : l.name}
             </button>
           ))}
         </div>
@@ -250,7 +251,19 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
             </div>
           );
         })}
-        {active && active.symbols.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">This watchlist is empty. Add a symbol above.</p>}
+        {active?.locked && (
+          <div className="m-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted">
+            <div className="mb-1 font-medium text-amber-200">🔒 Locked on your current plan</div>
+            This watchlist ({active.hidden ?? 0} symbols) is kept safe. Upgrade to use it again, or delete it from the ⋯ menu.
+            <Link href="/billing" className="mt-2 block font-semibold text-amber-300 hover:underline">Unlock with Pro →</Link>
+          </div>
+        )}
+        {active && !active.locked && (active.hidden ?? 0) > 0 && (
+          <p className="px-3 py-2 text-[11px] text-amber-300">
+            +{active.hidden} more symbol{active.hidden === 1 ? "" : "s"} hidden on your plan. <Link href="/billing" className="underline">Upgrade</Link>
+          </p>
+        )}
+        {active && !active.locked && active.symbols.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">This watchlist is empty. Add a symbol above.</p>}
       </div>
     </div>
   );

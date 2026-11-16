@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import AskVnicorn from "@/components/chart/AskVnicorn";
 import ChartLegend from "@/components/chart/ChartLegend";
 import TradeTicket from "@/components/chart/TradeTicket";
+import SellDialog from "@/components/chart/SellDialog";
 import IndicatorPicker from "@/components/chart/IndicatorPicker";
 import SymbolInfoPanel from "@/components/chart/SymbolInfoPanel";
 import SepaStrip from "@/components/SepaStrip";
@@ -58,16 +59,7 @@ function ChartWorkspace() {
   const [picker, setPicker] = useState(false);
   const [ask, setAsk] = useState(false);
   const [ticket, setTicket] = useState<"long" | "short" | null>(null);
-  const [toast, setToast] = useState("");
-  const sell = async () => {
-    try {
-      await post("/api/paper-trades/chart/sell", { symbol });
-      setToast(`Sold: your ${symbol} chart position is closed (Backtest → Chart trades).`);
-    } catch (e) {
-      setToast(e instanceof Error ? e.message : String(e));
-    }
-    setTimeout(() => setToast(""), 5000);
-  };
+  const [selling, setSelling] = useState(false);
   const [panel, setPanel] = useState<"none" | "watch" | "info">("none");
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
   const loaded = useRef(false); // don't overwrite saved indicators with the empty initial state
@@ -248,7 +240,7 @@ function ChartWorkspace() {
           </button>
           <div className="flex overflow-hidden rounded-md border border-line text-xs font-semibold">
             <button onClick={() => setTicket("long")} className="bg-up/15 px-2.5 py-1 text-up hover:bg-up/25">Buy</button>
-            <button onClick={sell} className="border-x border-line px-2.5 py-1 text-muted hover:bg-panel-2 hover:text-text" title="Close your open chart position">Sell</button>
+            <button onClick={() => setSelling(true)} className="border-x border-line px-2.5 py-1 text-text hover:bg-panel-2" title="Sell from a portfolio or close a chart trade">Sell</button>
             <button onClick={() => setTicket("short")} className="bg-down/15 px-2.5 py-1 text-down hover:bg-down/25">Short</button>
           </div>
           <button
@@ -287,8 +279,8 @@ function ChartWorkspace() {
         <SymbolInfoPanel symbol={symbol} info={info} error={infoError} />
       </aside>
 
-      {ticket && <TradeTicket symbol={symbol} price={data?.quote?.price ?? 0} side={ticket} onClose={() => setTicket(null)} />}
-      {toast && <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-line bg-panel px-4 py-2 text-sm shadow-xl">{toast}</div>}
+      {ticket && <TradeTicket key={`${symbol}-${ticket}`} symbol={symbol} price={data?.quote?.price ?? 0} side={ticket} pro={!!user?.limits.sepa_details} onClose={() => setTicket(null)} />}
+      {selling && <SellDialog symbol={symbol} onClose={() => setSelling(false)} onShort={() => { setSelling(false); setTicket("short"); }} />}
       {ask && <AskVnicorn symbol={symbol} locked={!user?.limits.ask_ai} onClose={() => setAsk(false)} />}
       {picker && (
         <IndicatorPicker

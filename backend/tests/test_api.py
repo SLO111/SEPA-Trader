@@ -47,7 +47,7 @@ def test_candles_and_all_strategies(client, register):
             continue
         assert res.status_code == 200, sid
         out = res.json()["results"][0]
-        assert set(out) == {"lines", "histograms", "markers", "levels"}, sid
+        assert set(out) == {"lines", "histograms", "markers", "levels", "bar_colors"}, sid
         if sid not in ("vcp", "trendlines", "trend_template"):  # may legitimately be empty
             assert out["lines"] or out["markers"], sid
 

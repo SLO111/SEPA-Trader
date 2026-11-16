@@ -15,6 +15,7 @@ class TrendTemplateStrategy(Strategy):
     name = "Trend Template (SEPA)"
     category = "SEPA"
     description = "Markers on days the stock enters or exits the Trend Template (criteria 1–7). Optionally shows the 50/150/200-day MAs."
+    requires = "sepa_details"  # the full template is a Pro feature
     params = [Param("show", "Show 50/150/200 MAs", 0, 0, 1, type="select", options=[[0, "No"], [1, "Yes"]])]
 
     def compute(self, df, p, bench=None):

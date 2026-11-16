@@ -70,7 +70,7 @@ def test_scan_api_plan_gating(client, register):
     h, _ = register("scan-free@test.ro")
     assert client.get("/api/sepa/scan", headers=h).status_code == 403
     rep = client.get("/api/sepa/AAPL", headers=h).json()
-    assert rep["move_detector"] is None and len(rep["trend_template"]["criteria"]) == 8
+    assert rep["move_detector"] is None and len(rep["trend_template"]["criteria"]) == 3  # Free: chart-readable criteria only
 
 
 def test_scan_api_pro(client, register):

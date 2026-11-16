@@ -145,7 +145,7 @@ export default function TradeGrader({ source: initial = "all", portfolioId, char
     <div className="space-y-4">
       {!portfolioId && (
         <div className="flex flex-wrap gap-1">
-          {(chartOnly ? [["chart", "Charts"]] : [["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["chart", "Charts"], ["portfolio", "Portfolios"]]).map(([id, label]) => (
+          {(chartOnly ? [["chart", "Charts"], ["portfolio", "Portfolios"]] : [["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["chart", "Charts"], ["portfolio", "Portfolios"]]).map(([id, label]) => (
             <button key={id} onClick={() => setSource(id)} className={`rounded-full px-3 py-1 text-sm ${source === id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
               {label}
             </button>
@@ -161,7 +161,13 @@ export default function TradeGrader({ source: initial = "all", portfolioId, char
       )}
       {error && <p className="text-sm text-down">{error}</p>}
       {!data && !error && <p className="text-sm text-muted">Grading your trades…</p>}
-      {data && data.trades.length === 0 && (
+      {data && data.trades.length === 0 && portfolioId && (
+        <div className="rounded-xl border border-line bg-panel p-6 text-center text-sm text-muted">
+          No trades in this portfolio yet. Add a buy (or import your broker file) and it shows up here: open positions are graded on the entry,
+          sales on the exit.
+        </div>
+      )}
+      {data && data.trades.length === 0 && !portfolioId && (
         <div className="rounded-xl border border-line bg-panel p-6 text-center text-sm text-muted">
           No trades to grade yet. Take trades from <Link href="/ideas" className="text-accent hover:underline">Trade ideas</Link> or the{" "}
           <Link href="/scanner" className="text-accent hover:underline">Move Detector</Link>, or add / import trades in{" "}

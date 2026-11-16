@@ -10,7 +10,7 @@ from engine.data.universe import SYMBOLS, stock_symbols
 from .. import market_data
 from ..config import settings
 from ..models import User
-from ..plans import limits_for
+from ..plans import gate_rows, limits_for
 from ..security import current_user
 from .sepa import cached_scan
 
@@ -78,7 +78,7 @@ def overview(user: User = Depends(current_user)):
         "losers": mt.movers(rows, "losers", 5),
         "active": mt.movers(rows, "active", 5),
         "sectors": mt.sector_rotation(rows, cached_scan()),
-        "leaders": mt.leaders(cached_scan(), 8),
+        "leaders": gate_rows(mt.leaders(cached_scan(), 8), limits_for(user)),
         "breadth": {
             "advancing": sum(r["change_pct"] > 0 for r in rows), "declining": sum(r["change_pct"] < 0 for r in rows),
             "new_highs": sum(r["new_high"] for r in rows), "new_lows": sum(r["new_low"] for r in rows),
@@ -124,7 +124,7 @@ def sectors(user: User = Depends(current_user)):
 
 @router.get("/leaders")
 def leaders(limit: int = Query(15, ge=1, le=50), user: User = Depends(current_user)):
-    return mt.leaders(cached_scan(), limit)
+    return gate_rows(mt.leaders(cached_scan(), limit), limits_for(user))
 
 
 @router.get("/extended-hours")

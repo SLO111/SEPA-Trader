@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import ImportCsv from "@/components/portfolio/ImportCsv";
@@ -160,7 +161,7 @@ function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChang
         <PerformanceCard id={p.id} version={version} />
         <ClassificationCard c={p.classification} />
       </div>
-      <HoldingsTable rows={p.positions} />
+      <HoldingsTable rows={p.positions} portfolioId={p.id} onSold={update} />
       <Transactions portfolioId={p.id} txns={p.transactions} onChange={update} />
       {p.dividends.length > 0 && (
         <details className="rounded-xl border border-line bg-panel p-4">
@@ -187,6 +188,27 @@ function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChang
   );
 }
 
+function LockedPortfolio({ p, max, onDeleted }: { p: PortfolioSummary; max: number; onDeleted: () => void }) {
+  const remove = async () => {
+    if (!confirm(`Delete the portfolio "${p.name}" and all its transactions?`)) return;
+    await del(`/api/portfolios/${p.id}`);
+    onDeleted();
+  };
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-panel p-6">
+      <h1 className="text-xl font-semibold">🔒 {p.name}</h1>
+      <p className="mt-2 max-w-xl text-sm text-muted">
+        Your plan includes {max} portfolio{max !== 1 ? "s" : ""}. This one is kept safe with all its transactions, but it&apos;s locked until you upgrade.
+        You can also delete another portfolio, or this one.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link href="/billing" className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400">Unlock with Pro</Link>
+        <button onClick={remove} className="rounded-md border border-line px-4 py-2 text-sm text-muted hover:text-down">Delete this portfolio</button>
+      </div>
+    </div>
+  );
+}
+
 function Portfolios() {
   const { user } = useAuth();
   const [list, setList] = useState<PortfolioSummary[] | null>(null);
@@ -205,19 +227,20 @@ function Portfolios() {
   useEffect(() => {
     loadList()
       .then((l) => {
-        if (l.length) setSelected((s) => s ?? l[0].id);
+        if (l.length) setSelected((s) => s ?? (l.find((x) => !x.locked) ?? l[0]).id);
         else setMode("templates");
       })
       .catch((e) => setError(e.message));
   }, [loadList]);
 
+  const selLocked = !!list?.find((x) => x.id === selected)?.locked;
   useEffect(() => {
-    if (selected === null) return setDetail(null);
+    if (selected === null || selLocked) return setDetail(null);
     const load = () => api<PortfolioDetail>(`/api/portfolios/${selected}`).then(setDetail).catch((e) => setError(e.message));
     load();
     const id = setInterval(load, 60_000);
     return () => clearInterval(id);
-  }, [selected]);
+  }, [selected, selLocked]);
 
   const onDetail = (p: PortfolioDetail) => {
     setDetail(p);
@@ -295,7 +318,18 @@ function Portfolios() {
         </div>
         {atLimit && max < 1e6 && <p className="border-b border-line px-3 py-2 text-xs text-amber-300">Your plan allows {max} portfolio{max > 1 ? "s" : ""}. Upgrade for more.</p>}
         <ul className="min-h-0 flex-1 overflow-y-auto">
-          {list?.map((p) => (
+          {list?.map((p) => p.locked ? (
+            <li key={p.id}>
+              <button onClick={() => { setSelected(p.id); setMode("view"); }}
+                className={`w-full border-b border-line px-3 py-3 text-left opacity-60 ${p.id === selected && mode === "view" ? "bg-panel-2" : "hover:bg-panel-2/60"}`}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate font-medium">🔒 {p.name}</span>
+                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">Upgrade</span>
+                </div>
+                <div className="text-[11px] text-muted">Locked on your current plan</div>
+              </button>
+            </li>
+          ) : (
             <li key={p.id}>
               <button
                 onClick={() => {
@@ -374,6 +408,16 @@ function Portfolios() {
                 }}
               />
             </>
+          ) : selLocked ? (
+            <LockedPortfolio
+              p={list!.find((x) => x.id === selected)!}
+              max={max}
+              onDeleted={async () => {
+                const l = await loadList();
+                setSelected((l.find((x) => !x.locked) ?? l[0])?.id ?? null);
+                if (!l.length) setMode("templates");
+              }}
+            />
           ) : detail ? (
             <PortfolioView
               p={detail}

@@ -82,7 +82,7 @@ def key_facts(co: dict, history: pd.DataFrame, stage: dict | None, sepa: dict | 
     if stage:
         s = f"Market cycle: Stage {stage['stage']} ({stage['name']}) for {stage['weeks']} week{'s' if stage['weeks'] != 1 else ''}"
         if tt.get("passed_count") is not None:
-            s += f"; {tt['passed_count']}/8 Trend Template criteria met"
+            s += f"; {tt['passed_count']}/{tt.get('total', 8)} Trend Template criteria met"
         facts.append(s + ".")
 
     return {"facts": facts[:5], "headline": _headline(co.get("news") or [])}

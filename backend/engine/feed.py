@@ -128,7 +128,7 @@ def idea_items(ideas: list[dict], day: str) -> list[dict]:
 
 
 def daily_summary(day: str, indices: list[dict], cycle: list[dict], fear_greed: dict, rows: list[dict],
-                  ideas: list[dict], earnings_next: list[dict]) -> dict:
+                  ideas: list[dict], earnings_next: list[dict], scan: list[dict] | None = None, pulse: dict[str, dict] | None = None) -> dict:
     """One end-of-day recap (feed item of kind "summary"); `body` holds the sections as JSON."""
     import json
 
@@ -148,17 +148,48 @@ def daily_summary(day: str, indices: list[dict], cycle: list[dict], fear_greed: 
         "losers": [pick(r) for r in losers],
         "ideas": {"count": len(ideas), "top": [{k: i[k] for k in ("symbol", "timeframe", "side", "entry", "stop", "target", "rr")} for i in ideas[:5]]},
         "earnings_next": earnings_next[:10],
+        "move_detector": _md_section(scan or []),
+        "pulse": _pulse_section(pulse or {}),
     }
     tone = "higher" if spy and spy["change_pct"] > 0 else "lower" if spy and spy["change_pct"] < 0 else "flat"
     title = f"Daily summary {day}: S&P 500 {tone}" + (f" ({spy['change_pct']:+.2f}%)" if spy else "") + f", {adv} up / {dec} down"
     return {"key": f"summary:{day}", "kind": "summary", "symbol": None, "severity": "info", "title": title, "body": json.dumps(data), "url": None}
 
 
-def summary_text(item: dict, watch: list[dict] | None = None) -> str:
+def _md_section(scan: list[dict], n: int = 5) -> dict:
+    """Top Bull and Bear scores from the Move Detector scan."""
+    row = lambda r, k: {"symbol": r["symbol"], "score": r.get(k), "price": r.get("price"), "change_pct": r.get("change_pct")}
+    bull = sorted([r for r in scan if (r.get("bull_score") or 0) >= 60], key=lambda r: -(r.get("bull_score") or 0))[:n]
+    bear = sorted([r for r in scan if (r.get("bear_score") or 0) >= 60], key=lambda r: -(r.get("bear_score") or 0))[:n]
+    return {"bull": [row(r, "bull_score") for r in bull], "bear": [row(r, "bear_score") for r in bear]}
+
+
+def _pulse_section(pulse: dict[str, dict], n: int = 5) -> dict:
+    """vnicorn Pulse: stocks acting best (confirmations) and those flashing warnings over the last 10 days."""
+    items = [{"symbol": s, "conf": p.get("conf", 0), "warn": p.get("warn", 0)} for s, p in pulse.items()]
+    best = sorted([x for x in items if x["conf"] > x["warn"]], key=lambda x: (-(x["conf"] - x["warn"]), -x["conf"]))[:n]
+    warn = sorted([x for x in items if x["warn"] > x["conf"]], key=lambda x: (-(x["warn"] - x["conf"]), -x["warn"]))[:n]
+    return {"best": best, "warning": warn}
+
+
+def gate_summary(d: dict, limits: dict) -> dict:
+    """Free plan: Trade ideas, Move Detector and vnicorn Pulse sections are replaced by a lock."""
+    out = dict(d)
+    if not limits.get("move_detector"):
+        out["ideas"] = {"locked": True, "count": (d.get("ideas") or {}).get("count")}
+        out["move_detector"] = {"locked": True}
+    if not limits.get("pulse"):
+        out["pulse"] = {"locked": True}
+    return out
+
+
+def summary_text(item: dict, watch: list[dict] | None = None, limits: dict | None = None) -> str:
     """Plain-text email version of a daily summary, optionally with the reader's watchlist moves."""
     import json
 
     d = json.loads(item["body"])
+    if limits is not None:
+        d = gate_summary(d, limits)
     pct = lambda x: f"{x:+.2f}%"
     lines = [item["title"], ""]
     lines += ["MARKETS"] + [f"  {i['label']}: {i['price']:,.2f} ({pct(i['change_pct'])})" for i in d["indices"]]
@@ -174,9 +205,29 @@ def summary_text(item: dict, watch: list[dict] | None = None) -> str:
         lines += ["YOUR WATCHLISTS"] + [f"  {w['symbol']}: {w['price']:,.2f} ({pct(w['change_pct'])})" for w in watch] + [""]
     lines += ["TOP GAINERS"] + [f"  {r['symbol']} {pct(r['change_pct'])}" for r in d["gainers"]]
     lines += ["TOP LOSERS"] + [f"  {r['symbol']} {pct(r['change_pct'])}" for r in d["losers"]] + [""]
-    lines.append(f"NEW TRADE IDEAS: {d['ideas']['count']}")
-    lines += [f"  {i['timeframe']} {i['symbol']}: {'short' if i['side'] == 'short' else 'buy'} {i['entry']}, stop {i['stop']}, target {i['target']} (R/R {i['rr']})"
-              for i in d["ideas"]["top"]]
+    locked = []
+    if d["ideas"].get("locked"):
+        locked.append("Trade ideas")
+    else:
+        lines.append(f"NEW TRADE IDEAS: {d['ideas']['count']}")
+        lines += [f"  {i['timeframe']} {i['symbol']}: {'short' if i['side'] == 'short' else 'buy'} {i['entry']}, stop {i['stop']}, target {i['target']} (R/R {i['rr']})"
+                  for i in d["ideas"]["top"]]
+    md = d.get("move_detector") or {}
+    if md.get("locked"):
+        locked.append("Move Detector")
+    elif md.get("bull") or md.get("bear"):
+        lines += ["", "MOVE DETECTOR"]
+        lines += ["  Bull: " + ", ".join(f"{r['symbol']} {r['score']:.0f}" for r in md.get("bull", []))] if md.get("bull") else []
+        lines += ["  Bear: " + ", ".join(f"{r['symbol']} {r['score']:.0f}" for r in md.get("bear", []))] if md.get("bear") else []
+    pu = d.get("pulse") or {}
+    if pu.get("locked"):
+        locked.append("vnicorn Pulse")
+    elif pu.get("best") or pu.get("warning"):
+        lines += ["", "VNICORN PULSE (10 DAYS)"]
+        lines += ["  Acting best: " + ", ".join(f"{x['symbol']} +{x['conf']}/-{x['warn']}" for x in pu.get("best", []))] if pu.get("best") else []
+        lines += ["  Warnings: " + ", ".join(f"{x['symbol']} +{x['conf']}/-{x['warn']}" for x in pu.get("warning", []))] if pu.get("warning") else []
+    if locked:
+        lines += ["", f"Upgrade to Pro to see {', '.join(locked)} in your daily summary."]
     if d["earnings_next"]:
         lines += ["", "EARNINGS NEXT TRADING DAY: " + ", ".join(e["symbol"] for e in d["earnings_next"])]
     lines += ["", "For educational purposes only. Not financial advice.", "Turn this email off in the app: Alerts > Feed."]

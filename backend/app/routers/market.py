@@ -1,3 +1,4 @@
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -169,7 +170,8 @@ def info(symbol: str, user: User = Depends(current_user)):
         # Overnight (8 PM - 4 AM ET, e.g. Blue Ocean ATS) needs a paid feed; Yahoo and Finnhub free don't provide it.
         "overnight": None,
         "sepa": ({k: scan[k] for k in ("rs_rating", "template_passed", "vcp", "pivot", "bull_score", "bear_score", "signals")}
-                 if limits_for(user)["sepa_details"] else {**{k: scan[k] for k in ("rs_rating", "template_passed", "bull_score", "bear_score")},
+                 if limits_for(user)["sepa_details"] else {**{k: scan[k] for k in ("rs_rating", "bull_score", "bear_score")},
+                                                           "template_passed": scan.get("template_free"), "template_total": 3,
                                                            "vcp": None, "pivot": None, "signals": [], "locked": True}) if scan else None,
     }
 
@@ -215,3 +217,51 @@ def analysis(symbol: str, user: User = Depends(current_user)):
         return out
 
     return market_data._fast(f"analysis:{sym}", 600, build)
+
+
+@router.get("/market/levels/{symbol}")
+def trade_levels(symbol: str, side: Literal["long", "short"] = "long", user: User = Depends(current_user)):
+    """Order-ticket helpers: ATR, nearest support / resistance and (Pro) the VCP pivot stop and vnicornAI's plan."""
+    from engine.ideas import levels
+    from engine.indicators import atr
+
+    sym = symbol.upper().strip()
+    try:
+        df = market_data.history(sym)
+    except Exception:
+        raise HTTPException(404, f"No data found for {sym}")
+    lim = limits_for(user)
+    price = float(df["close"].iloc[-1])
+    try:
+        lv = levels(df)
+    except Exception:
+        lv = {"support": [], "resistance": []}
+    out = {"symbol": sym, "price": round(price, 2), "atr": round(float(atr(df, 14).iloc[-1]), 2),
+           "resistance": sorted(x for x in lv.get("resistance", []) if x > price * 1.005)[:3],
+           "support": sorted((x for x in lv.get("support", []) if x < price * 0.995), reverse=True)[:3]}
+    if lim["sepa_details"]:
+        from engine.vcp import detect_vcp
+
+        v = detect_vcp(df)
+        out["vcp"] = {"pivot": v.get("pivot"), "stop": v.get("stop")} if v.get("detected") else None
+    if lim["ask_ai"]:
+        def plan():
+            from .. import vnicorn_service
+            from ..db import SessionLocal
+            from engine import vnicorn_ai
+
+            with SessionLocal() as db:
+                bundle = vnicorn_service.load(db)
+            if bundle is None:
+                return None
+            try:
+                bench = market_data.history("SPY")
+            except Exception:
+                bench = None
+            return vnicorn_ai.best_plan(bundle, df, bench, side)
+
+        try:
+            out["ai_plan"] = market_data._fast(f"tktplan:{sym}:{side}", 600, plan)
+        except Exception:
+            out["ai_plan"] = None
+    return out

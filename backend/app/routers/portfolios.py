@@ -127,10 +127,20 @@ def _summary(p: Portfolio, detail: bool = False) -> dict:
     return out
 
 
-def _owned(db: Session, user: User, pid: int) -> Portfolio:
+def _active_ids(db: Session, user: User) -> set[int]:
+    """After a downgrade the oldest portfolios within the plan stay usable; the rest are kept but locked."""
+    limit = limits_for(user)["max_portfolios"]
+    ids = db.scalars(select(Portfolio.id).where(Portfolio.user_id == user.id).order_by(Portfolio.created_at, Portfolio.id)).all()
+    return set(ids[:limit])
+
+
+def _owned(db: Session, user: User, pid: int, active: bool = True) -> Portfolio:
     p = db.get(Portfolio, pid)
     if p is None or p.user_id != user.id:
         raise HTTPException(404, "Portfolio not found")
+    if active and pid not in _active_ids(db, user):
+        n = limits_for(user)["max_portfolios"]
+        raise HTTPException(403, f"Your plan includes {n} portfolio{'s' if n != 1 else ''}. Upgrade to use this one, or delete another.")
     return p
 
 
@@ -150,8 +160,27 @@ class PortfolioIn(BaseModel):
 
 @router.get("/portfolios")
 def list_portfolios(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    rows = db.scalars(select(Portfolio).where(Portfolio.user_id == user.id).order_by(Portfolio.created_at)).all()
-    return [_summary(p) for p in rows]
+    rows = db.scalars(select(Portfolio).where(Portfolio.user_id == user.id).order_by(Portfolio.created_at, Portfolio.id)).all()
+    active = _active_ids(db, user)
+    return [_summary(p) if p.id in active else {"id": p.id, "name": p.name, "description": p.description, "locked": True,
+                                                  "value": 0, "symbols": [], "positions_count": 0} for p in rows]
+
+
+@router.get("/portfolios/positions")
+def positions_for(symbol: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Where you hold a symbol: each active portfolio's position (for selling from the chart)."""
+    sym = symbol.upper().strip()
+    out = []
+    for p in db.scalars(select(Portfolio).where(Portfolio.user_id == user.id, Portfolio.id.in_(_active_ids(db, user)))).all():
+        h = holdings(_txns(p)).get(sym)
+        if h and h["shares"] > 1e-9:
+            try:
+                price = market_data.quote(sym)["price"]
+            except Exception:
+                price = None
+            out.append({"portfolio_id": p.id, "portfolio": p.name, "shares": round(h["shares"], 6), "avg_cost": round(h["avg_cost"], 4),
+                        "price": price, "pnl": round((price - h["avg_cost"]) * h["shares"], 2) if price else None})
+    return out
 
 
 @router.post("/portfolios")
@@ -178,7 +207,7 @@ def update_portfolio(pid: int, body: PortfolioIn, user: User = Depends(current_u
 
 @router.delete("/portfolios/{pid}", status_code=204)
 def delete_portfolio(pid: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    db.delete(_owned(db, user, pid))
+    db.delete(_owned(db, user, pid, active=False))  # locked portfolios can still be deleted
     db.commit()
 
 
@@ -210,13 +239,6 @@ def add_transaction(pid: int, body: TxnIn, user: User = Depends(current_user), d
         validate(_txns(p) + [Txn(t.date, t.symbol, t.side, t.shares, t.price, t.fees)])
     except LedgerError as e:
         raise HTTPException(400, str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        import logging
-
-        logging.getLogger("sepa.import").exception("Import apply failed")
-        raise HTTPException(400, f"Could not save the import ({type(e).__name__}).")
     p.transactions.append(t)
     db.commit()
     return _summary(p, detail=True)
@@ -434,10 +456,7 @@ class ImportApplyIn(BaseModel):
 
 
 def _own(db: Session, user: User, pid: int) -> Portfolio:
-    p = db.get(Portfolio, pid)
-    if p is None or p.user_id != user.id:
-        raise HTTPException(404, "Portfolio not found")
-    return p
+    return _owned(db, user, pid)
 
 
 @router.post("/portfolios/{pid}/import/preview")
@@ -480,3 +499,58 @@ def import_apply(pid: int, body: ImportApplyIn, user: User = Depends(current_use
 
         logging.getLogger("sepa.import").exception("Import apply failed")
         raise HTTPException(400, f"Could not save the import ({type(e).__name__}).")
+
+
+
+class SellNowIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=16)
+    shares: float | None = Field(default=None, gt=0)  # missing = the whole position
+
+
+@router.post("/portfolios/{pid}/sell-now")
+def sell_now(pid: int, body: SellNowIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Sell at the market: the latest price, on the latest trading day."""
+    p = _owned(db, user, pid)
+    sym = body.symbol.upper().strip()
+    held = holdings(_txns(p)).get(sym, {"shares": 0.0})["shares"]
+    if held <= 1e-9:
+        raise HTTPException(400, f"You don't hold {sym} in this portfolio.")
+    qty = body.shares or held
+    if qty > held + 1e-9:
+        raise HTTPException(400, f"You hold only {held:g} {sym}.")
+    price, day = _market_price(sym)
+    p.transactions.append(PortfolioTxn(date=day, symbol=sym, side="sell", shares=min(qty, held), price=round(price, 4), fees=0.0))
+    db.commit()
+    return _summary(p, detail=True)
+
+
+def _market_price(sym: str) -> tuple[float, date]:
+    """The latest price (live quote when there is one, else the last close), dated the latest trading day."""
+    try:
+        df = market_data.history(sym)
+    except Exception:
+        raise HTTPException(404, f"No data found for {sym}")
+    price, day = float(df["close"].iloc[-1]), df.index[-1].date()
+    try:
+        q = market_data.quote(sym).get("price")
+        if q and q > 0:
+            price = float(q)
+    except Exception:
+        pass
+    return price, min(day, date.today())
+
+
+class BuyNowIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9.\-^=]+$")
+    shares: float = Field(gt=0, le=1e9)
+
+
+@router.post("/portfolios/{pid}/buy-now")
+def buy_now(pid: int, body: BuyNowIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Buy at the market (from the chart): the latest price, on the latest trading day."""
+    p = _owned(db, user, pid)
+    sym = body.symbol.upper().strip()
+    price, day = _market_price(sym)
+    p.transactions.append(PortfolioTxn(date=day, symbol=sym, side="buy", shares=body.shares, price=round(price, 4), fees=0.0))
+    db.commit()
+    return _summary(p, detail=True)

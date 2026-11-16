@@ -254,7 +254,7 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
           <div className="grid grid-cols-2 gap-3 text-center">
             <div className="rounded-lg bg-panel-2/60 p-2">
               <div className="text-[11px] text-muted">Trend Template</div>
-              <div className={`tabular text-xl font-semibold ${tt.all_passed ? "text-up" : tt.passed_count <= 3 ? "text-down" : "text-amber-300"}`}>{tt.passed_count}/8</div>
+              <div className={`tabular text-xl font-semibold ${tt.all_passed ? "text-up" : tt.passed_count / (tt.total ?? 8) <= 0.4 ? "text-down" : "text-amber-300"}`}>{tt.passed_count}/{tt.total ?? 8}</div>
             </div>
             <div className="rounded-lg bg-panel-2/60 p-2">
               <div className="text-[11px] text-muted">RS Rating</div>
@@ -286,6 +286,7 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
               </li>
             ))}
           </ul>
+          {tt.locked && <p className="mt-2 text-[11px] text-amber-300">🔒 The full Trend Template is part of Pro.</p>}
           <p className="mt-3 text-sm">
             VCP:{" "}
             {d.sepa.vcp.locked ? (
