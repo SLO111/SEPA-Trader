@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import DailySummary from "@/components/DailySummary";
 import { api } from "@/lib/api";
 
 type Item = { id: number; kind: string; symbol: string | null; severity: "bull" | "bear" | "info"; title: string; body: string; url: string | null; created_at: string };
@@ -77,6 +78,7 @@ function Feed() {
       <div className="mx-auto max-w-2xl p-4 sm:p-6">
         <h1 className="text-xl font-semibold">Market feed</h1>
         <p className="mb-4 text-sm text-muted">Earnings beats and misses, big movers, breakouts, new highs, trade ideas and market-moving news, as they happen.</p>
+        <DailySummary />
         <div className="sticky top-0 z-10 -mx-1 mb-4 flex gap-1 overflow-x-auto bg-bg/90 px-1 py-2 backdrop-blur">
           {KINDS.map((k) => (
             <button key={k.id} onClick={() => setKind(k.id)} className={`whitespace-nowrap rounded-full px-3 py-1 text-sm ${kind === k.id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>

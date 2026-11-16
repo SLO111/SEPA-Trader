@@ -18,7 +18,8 @@ import { useEffect, useRef } from "react";
 import type { Candle, StrategyOutput } from "@/lib/types";
 
 // fitKey: the view is re-fitted only when it changes (new symbol/interval), not on live refreshes.
-type Props = { candles: Candle[]; overlays: StrategyOutput[]; fitKey?: string };
+// onHover: the time of the candle under the crosshair (null when the mouse leaves the chart).
+type Props = { candles: Candle[]; overlays: StrategyOutput[]; fitKey?: string; onHover?: (time: string | number | null) => void };
 
 const THEME = {
   layout: { background: { type: ColorType.Solid, color: "#0b0e14" }, textColor: "#8b95a7", fontSize: 11 },
@@ -28,7 +29,9 @@ const THEME = {
   crosshair: { mode: CrosshairMode.Normal },
 };
 
-export default function PriceChart({ candles, overlays, fitKey = "" }: Props) {
+export default function PriceChart({ candles, overlays, fitKey = "", onHover }: Props) {
+  const hoverRef = useRef(onHover);
+  hoverRef.current = onHover;
   const fitted = useRef<string | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -57,7 +60,10 @@ export default function PriceChart({ candles, overlays, fitKey = "" }: Props) {
     candleRef.current = candle;
     volumeRef.current = volume;
     markersRef.current = createSeriesMarkers(candle, []);
+    const onMove = (p: { time?: Time }) => hoverRef.current?.(p.time === undefined ? null : (p.time as string | number));
+    chart.subscribeCrosshairMove(onMove);
     return () => {
+      chart.unsubscribeCrosshairMove(onMove);
       chart.remove();
       chartRef.current = null;
       overlayRefs.current = [];

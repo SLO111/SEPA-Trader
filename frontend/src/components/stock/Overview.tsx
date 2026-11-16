@@ -6,9 +6,11 @@ import { useState } from "react";
 import { scoreColor } from "@/components/ScoreBadge";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
 import type { Candle, StockData } from "@/lib/types";
+import Gauge from "./Gauge";
 import type { Range } from "./MiniChart";
 
 const MiniChart = dynamic(() => import("./MiniChart"), { ssr: false });
+const TradingViewWidget = dynamic(() => import("@/components/TradingViewWidget"), { ssr: false });
 
 const TONE_DOT = { positive: "bg-up", negative: "bg-down", neutral: "bg-muted" } as const;
 
@@ -149,6 +151,65 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
       </div>
 
       <div className="space-y-5">
+        {d.key_facts && (d.key_facts.facts.length > 0 || d.key_facts.headline) && (
+          <section className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-panel p-4">
+            <h2 className="mb-2 flex items-center gap-1.5 font-semibold">
+              <span className="text-violet-300">✦</span> Key facts
+            </h2>
+            <ul className="space-y-1.5 text-sm">
+              {d.key_facts.facts.map((f) => (
+                <li key={f} className="leading-snug">
+                  {f}
+                </li>
+              ))}
+            </ul>
+            {d.key_facts.headline && (
+              <div className="mt-3 border-t border-line pt-2 text-sm">
+                <span className="text-[11px] uppercase tracking-wide text-muted">In the news</span>
+                <p className="leading-snug">{d.key_facts.headline.title}</p>
+                {d.key_facts.headline.url && (
+                  <a href={d.key_facts.headline.url} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline">
+                    Keep reading{d.key_facts.headline.publisher ? ` (${d.key_facts.headline.publisher})` : ""} ›
+                  </a>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        <Card title="Technicals" right={<span className="text-[11px] text-muted">26 indicators · TradingView</span>}>
+          <TradingViewWidget
+            script="embed-widget-technical-analysis.js"
+            height={420}
+            config={{
+              interval: "1D",
+              width: "100%",
+              height: "100%",
+              isTransparent: true,
+              symbol: c.symbol.replace("-", "."),
+              showIntervalTabs: true,
+              displayMode: "single",
+              locale: "en",
+              colorTheme: "dark",
+            }}
+          />
+        </Card>
+
+        {c.analysts && c.analysts.score !== null && (
+          <Card title="Analyst rating" right={<span className="text-[11px] text-muted">{c.analysts.total} analysts</span>}>
+            <Gauge value={(5 - c.analysts.score) / 4} label={c.analysts.rating ?? "—"} />
+            {c.analysts.target_mean && (
+              <div className="mt-3 flex justify-between text-sm">
+                <span className="text-muted">1-year price target</span>
+                <span className="tabular">
+                  {fmt(c.analysts.target_mean)}{" "}
+                  {c.analysts.upside_pct !== null && <span className={tone(c.analysts.upside_pct)}>({pct(c.analysts.upside_pct, 1)})</span>}
+                </span>
+              </div>
+            )}
+          </Card>
+        )}
+
         <Card title="SEPA analysis" right={<Link href={`/chart?s=${encodeURIComponent(c.symbol)}`} className="text-xs text-accent hover:underline">Open chart</Link>}>
           <div className="grid grid-cols-2 gap-3 text-center">
             <div className="rounded-lg bg-panel-2/60 p-2">

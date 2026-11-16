@@ -125,3 +125,59 @@ def idea_items(ideas: list[dict], day: str) -> list[dict]:
             "body": f"Stop {_money(i['stop'])} · target {_money(i['target'])} · R/R {i['rr']}. {i['reason']}",
         })
     return out
+
+
+def daily_summary(day: str, indices: list[dict], cycle: list[dict], fear_greed: dict, rows: list[dict],
+                  ideas: list[dict], earnings_next: list[dict]) -> dict:
+    """One end-of-day recap (feed item of kind "summary"); `body` holds the sections as JSON."""
+    import json
+
+    adv = sum(r["change_pct"] > 0 for r in rows)
+    dec = sum(r["change_pct"] < 0 for r in rows)
+    gainers = sorted([r for r in rows if r["change_pct"] > 0], key=lambda r: -r["change_pct"])[:3]
+    losers = sorted([r for r in rows if r["change_pct"] < 0], key=lambda r: r["change_pct"])[:3]
+    spy = next((i for i in indices if i["symbol"] == "SPY"), None)
+    pick = lambda r: {"symbol": r["symbol"], "name": r.get("name", ""), "price": r["price"], "change_pct": r["change_pct"]}
+    data = {
+        "indices": [{k: i[k] for k in ("symbol", "label", "price", "change_pct")} for i in indices if i["symbol"] != "^VIX"][:4],
+        "vix": next((i["price"] for i in indices if i["symbol"] == "^VIX"), None),
+        "cycle": [{k: c[k] for k in ("label", "stage", "name")} for c in cycle],
+        "fear_greed": {"score": fear_greed.get("score"), "label": fear_greed.get("label")},
+        "breadth": {"advancing": adv, "declining": dec, "new_highs": sum(r["new_high"] for r in rows), "new_lows": sum(r["new_low"] for r in rows)},
+        "gainers": [pick(r) for r in gainers],
+        "losers": [pick(r) for r in losers],
+        "ideas": {"count": len(ideas), "top": [{k: i[k] for k in ("symbol", "timeframe", "side", "entry", "stop", "target", "rr")} for i in ideas[:5]]},
+        "earnings_next": earnings_next[:10],
+    }
+    tone = "higher" if spy and spy["change_pct"] > 0 else "lower" if spy and spy["change_pct"] < 0 else "flat"
+    title = f"Daily summary {day}: S&P 500 {tone}" + (f" ({spy['change_pct']:+.2f}%)" if spy else "") + f", {adv} up / {dec} down"
+    return {"key": f"summary:{day}", "kind": "summary", "symbol": None, "severity": "info", "title": title, "body": json.dumps(data), "url": None}
+
+
+def summary_text(item: dict, watch: list[dict] | None = None) -> str:
+    """Plain-text email version of a daily summary, optionally with the reader's watchlist moves."""
+    import json
+
+    d = json.loads(item["body"])
+    pct = lambda x: f"{x:+.2f}%"
+    lines = [item["title"], ""]
+    lines += ["MARKETS"] + [f"  {i['label']}: {i['price']:,.2f} ({pct(i['change_pct'])})" for i in d["indices"]]
+    if d.get("vix") is not None:
+        lines.append(f"  VIX: {d['vix']:.2f}")
+    if d["fear_greed"].get("score") is not None:
+        lines.append(f"  Fear & Greed: {round(d['fear_greed']['score'])} ({d['fear_greed']['label']})")
+    if d["cycle"]:
+        lines.append("  Cycle: " + ", ".join(f"{c['label']} Stage {c['stage']} {c['name']}" for c in d["cycle"]))
+    b = d["breadth"]
+    lines += [f"  Breadth: {b['advancing']} up / {b['declining']} down, {b['new_highs']} new highs, {b['new_lows']} new lows", ""]
+    if watch:
+        lines += ["YOUR WATCHLISTS"] + [f"  {w['symbol']}: {w['price']:,.2f} ({pct(w['change_pct'])})" for w in watch] + [""]
+    lines += ["TOP GAINERS"] + [f"  {r['symbol']} {pct(r['change_pct'])}" for r in d["gainers"]]
+    lines += ["TOP LOSERS"] + [f"  {r['symbol']} {pct(r['change_pct'])}" for r in d["losers"]] + [""]
+    lines.append(f"NEW TRADE IDEAS: {d['ideas']['count']}")
+    lines += [f"  {i['timeframe']} {i['symbol']}: {'short' if i['side'] == 'short' else 'buy'} {i['entry']}, stop {i['stop']}, target {i['target']} (R/R {i['rr']})"
+              for i in d["ideas"]["top"]]
+    if d["earnings_next"]:
+        lines += ["", "EARNINGS NEXT TRADING DAY: " + ", ".join(e["symbol"] for e in d["earnings_next"])]
+    lines += ["", "For educational purposes only. Not financial advice.", "Turn this email off in the app: Alerts > Feed."]
+    return "\n".join(lines)

@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { EarningsTab, ExtendedTab, FearGreedTab, FedTab, ScreenerTab } from "@/components/markets/OtherTabs";
+import Heatmap from "@/components/markets/Heatmap";
 import OverviewTab from "@/components/markets/OverviewTab";
 import type { Overview } from "@/components/markets/types";
 import { api } from "@/lib/api";
@@ -11,6 +12,7 @@ import { useAuth } from "@/lib/auth";
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "heatmap", label: "Heatmap" },
   { id: "fear-greed", label: "Fear & Greed" },
   { id: "earnings", label: "Earnings calendar" },
   { id: "extended", label: "Pre & after hours" },
@@ -61,6 +63,7 @@ function Markets() {
         </nav>
         {tab === "overview" &&
           (error ? <p className="text-sm text-down">{error}</p> : overview ? <OverviewTab o={overview} onFearGreed={() => setTab("fear-greed")} /> : <p className="text-sm text-muted">Loading market data…</p>)}
+        {tab === "heatmap" && <Heatmap />}
         {tab === "fear-greed" && <FearGreedTab />}
         {tab === "earnings" && <EarningsTab />}
         {tab === "extended" && <ExtendedTab />}

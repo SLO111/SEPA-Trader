@@ -198,9 +198,18 @@ class DataStore:
 
         from engine.data.universe import SP500_CSV, extend, parse_constituents
 
-        r = httpx.get(SP500_CSV, timeout=20, follow_redirects=True)
-        r.raise_for_status()
-        entries = parse_constituents(r.text)
+        try:
+            r = httpx.get(SP500_CSV, timeout=20, follow_redirects=True)
+            r.raise_for_status()
+            entries = parse_constituents(r.text)
+            if len(entries) < 400:
+                raise ValueError("short list")
+        except Exception:
+            # Bundled copy, so the universe is complete even when GitHub can't be reached.
+            from pathlib import Path
+
+            log.warning("S&P 500 download failed; using the bundled list")
+            entries = parse_constituents((Path(__file__).resolve().parent.parent / "engine" / "data" / "sp500_constituents.csv").read_text())
         if len(entries) < 400:  # sanity check: never shrink the universe because of a bad download
             raise ValueError(f"Unexpected constituents list ({len(entries)} rows)")
         added = extend(entries)

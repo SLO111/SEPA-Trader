@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import ChartLegend from "@/components/chart/ChartLegend";
 import IndicatorPicker from "@/components/chart/IndicatorPicker";
@@ -120,6 +120,51 @@ function ChartWorkspace() {
     [],
   );
 
+  // OHLC legend: the candle under the crosshair, or the last one.
+  const [hover, setHover] = useState<string | number | null>(null);
+  const candleIndex = useMemo(() => new Map((data?.candles ?? []).map((c, i) => [c.time, i])), [data]);
+  const lineMaps = useMemo(
+    () => overlays.map((o) => o.lines.map((l) => ({ color: l.color, points: new Map(l.data.map((d) => [d.time, d.value])) }))),
+    [overlays],
+  );
+  const ohlc = useMemo(() => {
+    const cs = data?.candles ?? [];
+    if (!cs.length) return null;
+    const i = hover !== null && candleIndex.has(hover) ? candleIndex.get(hover)! : cs.length - 1;
+    const c = cs[i];
+    const prev = i > 0 ? cs[i - 1].close : c.open;
+    return { c, chg: c.close - prev, pct: prev ? (c.close / prev - 1) * 100 : 0 };
+  }, [data, hover, candleIndex]);
+  const values = useMemo(() => {
+    const out: Record<string, string> = {};
+    const visible = active.filter((a) => !a.hidden);
+    const t = ohlc?.c.time;
+    if (t === undefined) return out;
+    visible.forEach((a, i) => {
+      const vs = (lineMaps[i] ?? []).map((l) => l.points.get(t)).filter((v): v is number => v !== undefined);
+      if (vs.length) out[a.uid] = vs.map((v) => (Math.abs(v) >= 1000 ? v.toFixed(0) : v.toFixed(2))).join("  ");
+    });
+    return out;
+  }, [active, lineMaps, ohlc]);
+  const vol = (v: number) => (v >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : String(v));
+  const ohlcHeader = ohlc && (
+    <div className={`tabular pointer-events-none inline-flex flex-wrap items-baseline gap-x-2 rounded bg-bg/70 px-2 py-0.5 text-xs backdrop-blur ${ohlc.c.close >= ohlc.c.open ? "text-up" : "text-down"}`}>
+      {(["open", "high", "low", "close"] as const).map((k) => (
+        <span key={k}>
+          <span className="text-muted">{k[0].toUpperCase()}</span>
+          {ohlc.c[k].toFixed(2)}
+        </span>
+      ))}
+      <span className={ohlc.chg >= 0 ? "text-up" : "text-down"}>
+        {ohlc.chg >= 0 ? "+" : ""}
+        {ohlc.chg.toFixed(2)} ({ohlc.chg >= 0 ? "+" : ""}
+        {ohlc.pct.toFixed(2)}%)
+      </span>
+      <span className="text-muted">Vol {vol(ohlc.c.volume)}</span>
+      {ohlc.c.session && ohlc.c.session !== "regular" && <span className="text-violet-300">{ohlc.c.session === "pre" ? "Pre-market" : "After hours"}</span>}
+    </div>
+  );
+
   const q = data?.quote;
   const up = (q?.change ?? 0) >= 0;
   const intraday = ["5m", "15m", "1h"].includes(interval);
@@ -197,8 +242,8 @@ function ChartWorkspace() {
         <SepaStrip symbol={symbol} />
         {error && <div className="bg-down/10 px-4 py-2 text-sm text-down">{error}</div>}
         <div className="relative min-h-0 flex-1">
-          <ChartLegend active={active} defs={defs} onChange={setActive} />
-          {data && <PriceChart candles={data.candles} overlays={overlays} fitKey={`${symbol}:${interval}`} />}
+          <ChartLegend active={active} defs={defs} onChange={setActive} header={ohlcHeader} values={values} />
+          {data && <PriceChart candles={data.candles} overlays={overlays} fitKey={`${symbol}:${interval}`} onHover={setHover} />}
         </div>
         <div className="flex flex-wrap gap-x-3 border-t border-line px-3 py-1 text-[11px] text-muted">
           {data?.live_at && <span className="text-up">● Live · updated {data.live_at}</span>}

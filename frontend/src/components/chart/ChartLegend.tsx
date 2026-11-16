@@ -7,6 +7,8 @@ type Props = {
   active: ActiveStrategy[];
   defs: StrategyDef[];
   onChange: (next: ActiveStrategy[]) => void;
+  header?: React.ReactNode; // OHLC line shown above the indicators
+  values?: Record<string, string>; // indicator values under the crosshair, by uid
 };
 
 function summary(a: ActiveStrategy, d?: StrategyDef) {
@@ -18,13 +20,14 @@ function summary(a: ActiveStrategy, d?: StrategyDef) {
 }
 
 /** Active indicators shown over the chart (like TradingView's legend): settings, hide and remove. */
-export default function ChartLegend({ active, defs, onChange }: Props) {
+export default function ChartLegend({ active, defs, onChange, header, values = {} }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
-  if (!active.length) return null;
+  if (!active.length && !header) return null;
   const update = (uid: string, patch: Partial<ActiveStrategy>) => onChange(active.map((a) => (a.uid === uid ? { ...a, ...patch } : a)));
 
   return (
     <div className="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[70%] flex-col gap-1">
+      {header}
       {active.map((a) => {
         const d = defs.find((x) => x.id === a.id);
         return (
@@ -32,6 +35,7 @@ export default function ChartLegend({ active, defs, onChange }: Props) {
             <div className={`group inline-flex items-center gap-2 rounded bg-bg/70 px-2 py-0.5 text-xs backdrop-blur ${a.hidden ? "opacity-50" : ""}`}>
               <span className="text-text">{d?.name ?? a.id}</span>
               <span className="tabular text-muted">{summary(a, d)}</span>
+              {values[a.uid] && <span className="tabular text-text/90">{values[a.uid]}</span>}
               <span className="flex gap-1 opacity-60 group-hover:opacity-100">
                 <button title={a.hidden ? "Show" : "Hide"} onClick={() => update(a.uid, { hidden: !a.hidden })} className="px-0.5 hover:text-accent">
                   {a.hidden ? "◌" : "◉"}

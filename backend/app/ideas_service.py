@@ -25,7 +25,7 @@ from engine.ideas import generate, update_status
 
 from . import market_data
 from .config import settings
-from .models import FeedItem, TradeIdea
+from .models import DailyDigest, FeedItem, TradeIdea, User, Watchlist, WatchlistItem
 
 log = logging.getLogger("sepa.ideas")
 ET = ZoneInfo("America/New_York")
@@ -61,7 +61,7 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
         return []
     if force:
         db.query(TradeIdea).filter(TradeIdea.batch_date == day).delete()
-    ideas = generate(hist, _scan())
+    ideas = generate(hist, _scan(), max_long=40, max_short=10)  # top 50 per day
     rows = []
     for i in ideas:
         row = TradeIdea(batch_date=day, **i.to_dict(), status="WAIT", current=i.entry)
@@ -70,7 +70,63 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
     db.commit()
     add_feed(db, feedmod.idea_items([i.to_dict() for i in ideas], day.isoformat()))
     log.info("Generated %d ideas for %s", len(rows), day)
+    try:
+        publish_summary(db, day, hist, [i.to_dict() for i in ideas])
+    except Exception:
+        log.exception("Daily summary failed")
     return rows
+
+
+def _next_trading_day(day: date) -> date:
+    nxt = pd.Timestamp(day) + pd.offsets.BDay(1)
+    return nxt.date()
+
+
+def publish_summary(db: Session, day: date, hist: dict[str, pd.DataFrame], ideas: list[dict]) -> dict | None:
+    """End-of-day recap in the feed (once per day), then emailed to users who opted in."""
+    from engine.stages import stage_now
+
+    from .routers.markets import _fear_greed, _indices
+
+    rows = mt.mover_rows(hist, SYMBOLS)
+    cycle = []
+    for sym, label in (("SPY", "S&P 500"), ("QQQ", "Nasdaq 100"), ("IWM", "Russell 2000")):
+        try:
+            st = stage_now(market_data.history(sym))
+            if st:
+                cycle.append({"label": label, **st})
+        except Exception:
+            continue
+    nxt = _next_trading_day(day).isoformat()
+    earn = [{"symbol": s} for s in hist if (e := market_data.cached("earnings", s)) and e.get("next_date") == nxt]
+    try:
+        fg = _fear_greed()
+    except Exception:
+        fg = {}
+    item = feedmod.daily_summary(day.isoformat(), _indices(), cycle, fg, rows, ideas, earn)
+    if not add_feed(db, [item]):
+        return None  # already published today
+    send_digests(db, day, item, {r["symbol"]: r for r in rows})
+    return item
+
+
+def send_digests(db: Session, day: date, item: dict, by_symbol: dict[str, dict]) -> int:
+    from .notify import email_configured, send_email
+
+    if not email_configured():
+        return 0
+    n = 0
+    for sub, user in db.execute(select(DailyDigest, User).join(User, User.id == DailyDigest.user_id).where(DailyDigest.enabled.is_(True))).all():
+        if sub.last_sent == day:
+            continue
+        syms = db.scalars(select(WatchlistItem.symbol).join(Watchlist, Watchlist.id == WatchlistItem.watchlist_id)
+                          .where(Watchlist.user_id == user.id)).all()
+        watch = [by_symbol[s] for s in dict.fromkeys(syms) if s in by_symbol][:15]
+        if send_email(user.email, item["title"], feedmod.summary_text(item, watch)):
+            sub.last_sent = day
+            n += 1
+    db.commit()
+    return n
 
 
 def refresh_statuses(db: Session) -> int:
@@ -139,6 +195,6 @@ def due_for_ideas(db: Session, now: datetime | None = None) -> bool:
 def tick(db: Session) -> None:
     """One pass of the background job (every 10 minutes)."""
     if due_for_ideas(db):
-        run_ideas(db)
+        run_ideas(db)  # also publishes the daily summary
     refresh_statuses(db)
     build_feed(db)

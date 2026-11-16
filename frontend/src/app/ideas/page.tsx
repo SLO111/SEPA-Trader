@@ -47,6 +47,7 @@ function Ideas() {
   const [locked, setLocked] = useState("");
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
+  const [tf, setTf] = useState<"ALL" | "SWING" | "TRADE" | "INVEST" | "SHORT">("ALL");
 
   const load = () =>
     api<Resp>(`/api/ideas?view=${view}`)
@@ -107,6 +108,16 @@ function Ideas() {
                 </button>
               ))}
             </div>
+            <div className="flex flex-wrap gap-1 border-b border-line px-2 py-1.5">
+              {(["ALL", "SWING", "TRADE", "INVEST", "SHORT"] as const).map((t) => {
+                const n = t === "ALL" ? data?.ideas.length : data?.ideas.filter((i) => i.timeframe === t).length;
+                return (
+                  <button key={t} onClick={() => setTf(t)} className={`rounded-full px-3 py-0.5 text-xs ${tf === t ? "bg-accent text-white" : "text-muted hover:bg-panel-2 hover:text-text"}`}>
+                    {t === "ALL" ? "All" : t} <span className="tabular opacity-70">{n ?? 0}</span>
+                  </button>
+                );
+              })}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1100px] text-sm">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
@@ -119,7 +130,7 @@ function Ideas() {
                 <tbody>
                   {!data && <tr><td colSpan={15} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
                   {data?.ideas.length === 0 && <tr><td colSpan={15} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
-                  {data?.ideas.map((i) => {
+                  {data?.ideas.filter((i) => tf === "ALL" || i.timeframe === tf).map((i) => {
                     const move = i.current !== null ? ((i.current / i.entry - 1) * 100 * (i.side === "short" ? -1 : 1)) : null;
                     return (
                       <Fragment key={i.id}>

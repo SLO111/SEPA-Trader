@@ -45,7 +45,12 @@ def _build(symbol: str, user: User) -> dict:
         sepa["move_detector"] = None
     peers = _peers(symbol, co.get("sector") or SYMBOLS.get(symbol, {}).get("sector", ""))
     items = takeaways(co, sepa, returns, [p["pe"] for p in peers] + [co.get("valuation", {}).get("pe")])
-    return {"company": co, "quote": quote, "returns": returns, "sepa": sepa, "peers": peers, "takeaways": items, "verdict": verdict(items), "history": hist}
+    from engine.key_facts import key_facts
+    from engine.stages import stage_now
+
+    facts = market_data._fast(f"keyfacts:{symbol}", 6 * 3600, lambda: key_facts(co, hist, stage_now(hist), sepa, peers))
+    return {"company": co, "quote": quote, "returns": returns, "sepa": sepa, "peers": peers, "takeaways": items, "verdict": verdict(items),
+            "key_facts": facts, "history": hist}
 
 
 @router.get("/{symbol}")

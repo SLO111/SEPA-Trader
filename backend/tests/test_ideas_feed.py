@@ -88,3 +88,31 @@ def test_ideas_and_feed_api(client, register):
     f = client.get("/api/feed", headers=h).json()
     assert f and any(x["kind"] == "idea" for x in f)
     assert all(x["kind"] == "idea" for x in client.get("/api/feed?kind=idea", headers=h).json())
+
+
+def test_daily_summary_feed_and_email_digest(client, register, monkeypatch):
+    from datetime import date
+
+    from app import notify
+    from app.ideas_service import _histories, publish_summary
+
+    h, _ = register("digest-user@test.ro")
+    wl = client.get("/api/watchlists", headers=h).json()[0]
+    client.post(f"/api/watchlists/{wl['id']}/items", headers=h, json={"symbol": "AAPL"})
+    assert client.get("/api/feed/digest", headers=h).json()["enabled"] is False
+    assert client.put("/api/feed/digest", headers=h, json={"enabled": True}).json()["enabled"] is True
+
+    sent = []
+    monkeypatch.setattr(notify, "email_configured", lambda: True)
+    monkeypatch.setattr(notify, "send_email", lambda to, subject, body: sent.append((to, subject, body)) or True)
+    day = date(2030, 1, 2)
+    with SessionLocal() as db:
+        item = publish_summary(db, day, _histories(), [])
+        assert item and item["key"] == "summary:2030-01-02"
+        assert publish_summary(db, day, _histories(), []) is None  # once per day
+    mine = [s for s in sent if s[0] == "digest-user@test.ro"]
+    assert len(mine) == 1 and "YOUR WATCHLISTS" in mine[0][2] and "AAPL" in mine[0][2]
+
+    s = client.get("/api/feed/summary", headers=h).json()
+    assert s["title"].startswith("Daily summary") and "breadth" in s and "indices" in s
+    assert all(x["kind"] != "summary" for x in client.get("/api/feed", headers=h).json())

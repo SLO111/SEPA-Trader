@@ -1,12 +1,13 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..ideas_service import latest_batch, refresh_statuses, run_ideas
-from ..models import FeedItem, TradeIdea, User
+from ..models import DailyDigest, FeedItem, TradeIdea, User
 from ..plans import limits_for
 from ..security import admin_user, current_user
 
@@ -21,11 +22,14 @@ def _live(symbol: str) -> dict:
 
     from .. import market_data
 
-    try:
-        df = market_data.history(symbol)
-    except Exception:
-        return {"structure": None, "stage": None}
-    return {"structure": structure.label(structure.analyze(df.iloc[-300:]).state), "stage": stages.stage_now(df)}
+    def build():
+        try:
+            df = market_data.history(symbol)
+        except Exception:
+            return {"structure": None, "stage": None}
+        return {"structure": structure.label(structure.analyze(df.iloc[-300:]).state), "stage": stages.stage_now(df)}
+
+    return market_data._fast(f"ideas-live:{symbol}", 600, build)
 
 
 def idea_out(r: TradeIdea, with_structure: bool = False) -> dict:
@@ -77,7 +81,7 @@ def regenerate(_: User = Depends(admin_user), db: Session = Depends(get_db)):
 
 @router.get("/feed")
 def feed(
-    kind: Literal["all", "earnings", "mover", "breakout", "high", "news", "idea"] = "all",
+    kind: Literal["all", "earnings", "mover", "breakout", "high", "news", "idea", "summary"] = "all",
     symbol: str | None = None,
     limit: int = Query(50, ge=1, le=200),
     before_id: int | None = None,
@@ -87,6 +91,8 @@ def feed(
     q = select(FeedItem)
     if kind != "all":
         q = q.where(FeedItem.kind == kind)
+    else:
+        q = q.where(FeedItem.kind != "summary")  # the daily summary has its own card
     if symbol:
         q = q.where(FeedItem.symbol == symbol.upper())
     if before_id:
@@ -97,3 +103,38 @@ def feed(
          "created_at": r.created_at.isoformat()}
         for r in rows
     ]
+
+
+@router.get("/feed/summary")
+def latest_summary(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """The latest end-of-day summary (sections as JSON), or null before the first one."""
+    import json
+
+    r = db.scalars(select(FeedItem).where(FeedItem.kind == "summary").order_by(FeedItem.id.desc()).limit(1)).first()
+    if not r:
+        return None
+    return {"id": r.id, "title": r.title, "created_at": r.created_at.isoformat(), **json.loads(r.body)}
+
+
+class DigestIn(BaseModel):
+    enabled: bool
+
+
+@router.get("/feed/digest")
+def get_digest(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..notify import email_configured
+
+    d = db.get(DailyDigest, user.id)
+    return {"enabled": bool(d and d.enabled), "email": user.email, "email_configured": email_configured()}
+
+
+@router.put("/feed/digest")
+def set_digest(body: DigestIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    d = db.get(DailyDigest, user.id)
+    if d is None:
+        d = DailyDigest(user_id=user.id, enabled=body.enabled)
+        db.add(d)
+    else:
+        d.enabled = body.enabled
+    db.commit()
+    return get_digest(user, db)

@@ -258,4 +258,5 @@ export type StockData = {
   peers: Peer[];
   takeaways: { tone: "positive" | "negative" | "neutral"; text: string }[];
   verdict: string;
+  key_facts?: { facts: string[]; headline: { title: string; url: string | null; publisher: string | null } | null };
 };
