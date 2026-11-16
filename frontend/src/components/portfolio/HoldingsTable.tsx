@@ -1,5 +1,7 @@
 "use client";
 
+import EarningsBadge from "@/components/EarningsBadge";
+
 import Link from "next/link";
 import { useState } from "react";
 import { post } from "@/lib/api";
@@ -95,6 +97,7 @@ export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Hol
                       {r.symbol}
                     </Link>
                     <div className="max-w-[180px] truncate text-xs text-muted">{r.sector}</div>
+                    <EarningsBadge days={r.earnings_in} />
                   </td>
                   <td className="tabular px-4 py-2 text-right">{num(r.shares)}</td>
                   <td className="tabular px-4 py-2 text-right">{usd(r.avg_cost)}</td>

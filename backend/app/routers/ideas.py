@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import market_data
 from ..db import get_db
 from ..ideas_service import latest_batch, refresh_statuses, run_ideas
 from ..models import DailyDigest, FeedItem, TradeIdea, User
@@ -83,7 +84,8 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     return {
         "updated": latest_batch(db).isoformat() if latest_batch(db) else None,
         "plan": {"ideas_limit": lim["ideas_limit"], "shorts": lim["ideas_shorts"], "ai_picks": lim["ai_picks"]},
-        "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken, "ai": ai_of.get(r.id)} for r in rows],
+        "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken, "ai": ai_of.get(r.id),
+                   "earnings_in": market_data.earnings_in_days(r.symbol) if r.status in OPEN else None} for r in rows],
         "summary": {
             "open": len(open_rows),
             "active": len(entered_open),

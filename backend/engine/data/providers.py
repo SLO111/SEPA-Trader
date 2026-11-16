@@ -43,6 +43,22 @@ class DataProvider(ABC):
         """Per-share cash dividends indexed by ex-dividend date."""
         return pd.Series(dtype=float)
 
+    def quarterly_revenue(self, symbol: str) -> list[dict]:
+        """Quarterly revenue, newest first: [{"date": quarter end, "revenue": $}]. Default: a demo series consistent with
+        the reference growth rate (offline providers)."""
+        from .fundamentals import reference
+
+        ref = reference(symbol)
+        cap = (ref.get("market_cap_b") or 50) * 1e9
+        g = (ref.get("eps_growth") or 8) / 100
+        q = pd.Timestamp.today().to_period("Q").start_time - pd.offsets.QuarterEnd(1)
+        base = cap / 25 / 4
+        out = []
+        for i in range(9):
+            d = (q - pd.offsets.QuarterEnd(i)).normalize()
+            out.append({"date": d.strftime("%Y-%m-%d"), "revenue": round(base / ((1 + g) ** (i / 4)) * (1 + 0.03 * ((i * 7) % 3 - 1)))})
+        return out
+
     def all_time_highs(self, symbols: list[str]) -> dict[str, dict]:
         """All-time high (split/dividend adjusted, like the prices) per symbol: {"ath": price, "date": "YYYY-MM"}.
         Default: the highest high in the available history."""
@@ -329,6 +345,16 @@ class YFinanceProvider(DataProvider):
             except Exception:
                 pass
         return self._yahoo_earnings(symbol)
+
+    def quarterly_revenue(self, symbol: str) -> list[dict]:
+        import yfinance as yf
+
+        try:
+            st = yf.Ticker(symbol).quarterly_income_stmt
+            row = st.loc["Total Revenue"].dropna()
+        except Exception:
+            return []
+        return [{"date": pd.Timestamp(d).strftime("%Y-%m-%d"), "revenue": float(v)} for d, v in sorted(row.items(), reverse=True)]
 
     def _yahoo_earnings(self, symbol: str) -> dict:
         import yfinance as yf

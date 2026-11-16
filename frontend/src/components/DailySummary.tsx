@@ -22,6 +22,7 @@ export type Summary = {
   earnings_next: { symbol: string }[];
   move_detector?: { locked?: boolean; bull?: MdRow[]; bear?: MdRow[] };
   pulse?: { locked?: boolean; best?: PulseRow[]; warning?: PulseRow[] };
+  exposure?: { exposure?: number; label: string; advice: string; locked?: boolean } | null;
 };
 type MdRow = { symbol: string; score: number; price: number; change_pct: number };
 type PulseRow = { symbol: string; conf: number; warn: number };
@@ -126,6 +127,14 @@ export default function DailySummary({ compact = false }: { compact?: boolean })
               </div>
             )}
           </div>
+          {s.exposure && (
+            <p className="rounded-lg bg-panel-2/60 px-3 py-2 text-sm">
+              <span className="text-muted">Market exposure: </span>
+              <b>{s.exposure.label}</b>
+              {s.exposure.exposure !== undefined ? <b className="tabular"> · {s.exposure.exposure}% invested</b> : <Link href="/billing" className="ml-1 text-xs text-amber-300">🔒 %</Link>}
+              <span className="text-muted"> — {s.exposure.advice}</span>
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Section title="Market mood">
               <p>

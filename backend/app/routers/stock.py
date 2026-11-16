@@ -73,6 +73,25 @@ def report(symbol: str, user: User = Depends(current_user)):
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
+@router.get("/{symbol}/quarterly")
+def quarterly(symbol: str, user: User = Depends(current_user)):
+    """Quarterly EPS and sales growth with acceleration. Free: the latest quarter only."""
+    from engine.quarterly import growth_table
+
+    sym = symbol.upper().strip()
+    e = market_data.cached("earnings", sym) or {}
+    t = growth_table(e.get("history") or [], market_data.quarterly_revenue(sym))
+    if not limits_for(user)["eps_history"]:
+        t = {"quarters": t["quarters"][:1], "eps_accelerating": None, "revenue_accelerating": None, "canslim_c": t["canslim_c"], "locked": True}
+    if limits_for(user)["industry_groups"]:
+        from engine.industry import symbol_ranks
+
+        from .markets import groups_ranked
+
+        t["group"] = symbol_ranks(groups_ranked()).get(sym)
+    return {"symbol": sym, **t}
+
+
 @router.get("/{symbol}/technicals")
 def technicals(symbol: str, interval: str = "1d", user: User = Depends(current_user)):
     """Technical rating (15 moving averages + 11 oscillators) on 1 hour, 1 day or 1 week bars."""

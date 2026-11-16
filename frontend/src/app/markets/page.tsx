@@ -6,6 +6,7 @@ import AppShell from "@/components/AppShell";
 import { EarningsTab, FearGreedTab, FedTab, ScreenerTab } from "@/components/markets/OtherTabs";
 import LazySection from "@/components/LazySection";
 import Heatmap from "@/components/markets/Heatmap";
+import GroupsTab from "@/components/markets/GroupsTab";
 import OverviewTab from "@/components/markets/OverviewTab";
 import type { Overview } from "@/components/markets/types";
 import { api } from "@/lib/api";
@@ -15,6 +16,7 @@ const TABS = [
   { id: "overview", label: "Overview" },
   { id: "heatmap", label: "Heatmap" },
   { id: "screener", label: "Screener" },
+  { id: "groups", label: "Groups" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 // Old tab links now point to a section of the Overview, or to a Screener preset.
@@ -152,6 +154,7 @@ function Markets() {
           ))}
         {tab === "heatmap" && <Heatmap />}
         {tab === "screener" && <ScreenerTab allowed={!!user?.limits.move_detector} initialPreset={preset} />}
+        {tab === "groups" && <GroupsTab allowed={!!user?.limits.industry_groups} />}
         <p className="mt-6 text-xs text-muted">For educational purposes only. Not financial advice.</p>
       </div>
     </div>

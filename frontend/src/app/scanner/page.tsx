@@ -1,5 +1,7 @@
 "use client";
 
+import EarningsBadge from "@/components/EarningsBadge";
+
 import { SimBadge } from "@/components/legal/LegalPage";
 import { useAuth } from "@/lib/auth";
 
@@ -156,6 +158,7 @@ function Scanner() {
                         <Link href={`/stock?s=${encodeURIComponent(r.symbol)}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-accent">
                           {r.symbol}
                         </Link>
+                        <EarningsBadge days={(r as { earnings_in?: number | null }).earnings_in} />
                       </span>
                       <div className="max-w-[200px] truncate text-xs text-muted">{r.name}</div>
                     </td>

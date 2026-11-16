@@ -227,3 +227,45 @@ def fed() -> dict:
     if settings.data_provider == "synthetic":
         return _fast("fed:demo", 6 * 3600, fedmod.demo)
     return _fast("fed:live", 6 * 3600, fedmod.live)
+
+
+def quarterly_revenue(symbol: str) -> list[dict]:
+    """Quarterly revenue (stored for a day in the market cache when it's active)."""
+    from datetime import timedelta
+
+    sym = symbol.upper().strip()
+    store = get_store()
+    if store is not None and not store.stale(f"revenue:{sym}", timedelta(days=1)):
+        v = store.get_slow("revenue", sym)
+        if v is not None:
+            return v.get("quarters", [])
+
+    def load():
+        try:
+            return get_provider(settings.data_provider).quarterly_revenue(sym)
+        except Exception:
+            return []
+
+    q = _slow("revenue", sym, load)
+    if store is not None and q:
+        store.put_slow("revenue", sym, {"quarters": q})
+    return q
+
+
+def earnings_in_days(symbol: str, within: int = 5) -> int | None:
+    """Trading days until the next earnings report, when it's within `within` trading days (else None)."""
+    import numpy as np
+
+    e = cached("earnings", symbol) or {}
+    nd = e.get("next_date")
+    if not nd:
+        return None
+    try:
+        today = pd.Timestamp.today().normalize()
+        d = pd.Timestamp(nd).normalize()
+    except Exception:
+        return None
+    if d < today:
+        return None
+    n = int(np.busday_count(today.date(), d.date()))
+    return n if n <= within else None

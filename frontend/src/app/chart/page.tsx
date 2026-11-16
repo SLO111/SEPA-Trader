@@ -1,5 +1,7 @@
 "use client";
 
+import EarningsBadge, { tradingDaysUntil } from "@/components/EarningsBadge";
+
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -201,6 +203,7 @@ function ChartWorkspace() {
             <span className="text-lg font-semibold">{data?.symbol ?? symbol}</span>
             <span className="hidden max-w-[220px] truncate text-sm text-muted sm:inline">{data?.name}</span>
           </Link>
+          <EarningsBadge days={tradingDaysUntil(info?.next_earnings, 5)} />
           {q?.price !== undefined && (
             <span className="tabular flex items-baseline gap-2">
               <span className="font-semibold">{q.price.toFixed(2)}</span>

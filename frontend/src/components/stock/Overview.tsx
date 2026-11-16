@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import GrowthTable from "./GrowthTable";
 import { useState } from "react";
 import { scoreColor } from "@/components/ScoreBadge";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
@@ -83,6 +84,10 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
             ))}
           </ul>
           <p className="mt-3 text-[11px] text-muted">Generated automatically from market data and technical rules.</p>
+        </Card>
+
+        <Card title="Earnings & sales growth" right={<span className="text-[11px] text-muted">Year over year, by quarter</span>}>
+          <GrowthTable symbol={c.symbol} />
         </Card>
 
         <Card title="Technicals" right={<span className="text-[11px] text-muted">26 indicators: 11 oscillators + 15 moving averages</span>}>

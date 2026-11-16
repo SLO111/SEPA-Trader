@@ -65,7 +65,7 @@ class DataStore:
         self._session_factory = session_factory
         self._lock = threading.RLock()
         self.prices: dict[str, pd.DataFrame] = {}
-        self.slow: dict[str, dict[str, dict]] = {"fundamentals": {}, "earnings": {}, "ath": {}}
+        self.slow: dict[str, dict[str, dict]] = {"fundamentals": {}, "earnings": {}, "ath": {}, "revenue": {}}
         self.updated: dict[str, datetime] = {}
         self.status = {"state": "idle", "message": "", "prices_refreshed_at": None, "slow_done": 0, "slow_total": 0}
         self._listeners: list[Callable[[], None]] = []

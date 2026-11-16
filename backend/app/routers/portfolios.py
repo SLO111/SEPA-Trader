@@ -115,6 +115,7 @@ def _summary(p: Portfolio, detail: bool = False) -> dict:
                 "classification": cls,
                 "positions": [{k: v for k, v in r.items() if k not in ("fundamentals", "metrics")} | {
                     "beta": r["metrics"]["beta"], "dividend_yield": r["fundamentals"].get("dividend_yield"), "pe": r["fundamentals"].get("pe"),
+                    "earnings_in": market_data.earnings_in_days(r["symbol"]),
                 } for r in rows],
                 "dividends": divs,
                 "dividends_total": round(sum(d["amount"] for d in divs), 2),

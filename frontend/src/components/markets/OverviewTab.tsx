@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ExposureCard from "./ExposureCard";
 import { useState } from "react";
 import { ScoreBar } from "@/components/ScoreBadge";
 import { fmt, pct, tone } from "@/lib/format";
@@ -116,6 +117,8 @@ export default function OverviewTab({ o, onFearGreed }: { o: Overview; onFearGre
           );
         })}
       </div>
+
+      <ExposureCard e={o.exposure} />
 
       <div id="ov-cycle" className="scroll-mt-28">{o.cycle?.length > 0 && <CyclePanel rows={o.cycle} />}</div>
 

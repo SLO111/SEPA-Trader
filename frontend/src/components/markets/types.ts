@@ -29,6 +29,7 @@ export type Overview = {
   sectors: SectorRow[];
   leaders: LeaderRow[];
   breadth: { advancing: number; declining: number; new_highs: number; new_lows: number; pct_above_ma50: number | null };
+  exposure?: import("./ExposureCard").Exposure | null;
 };
 
 export type EarningsCal = {
@@ -56,5 +57,5 @@ export type ScreenRow = {
   return_1m?: number; return_3m?: number | null; market_cap_b: number | null; pe: number | null; eps_growth: number | null; peg: number | null;
   dividend_yield: number | null; beta: number | null; rs_rating?: number | null; template_passed?: number | null; bull_score?: number | null;
   bear_score?: number | null; vcp?: boolean | null; sector_pe: number | null; pe_vs_sector_pct: number | null;
-  ath?: number | null; from_ath_pct?: number | null; at_ath?: boolean;
+  ath?: number | null; from_ath_pct?: number | null; at_ath?: boolean; group?: string | null; group_rank?: number | null;
 };

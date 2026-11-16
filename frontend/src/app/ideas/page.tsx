@@ -1,5 +1,7 @@
 "use client";
 
+import EarningsBadge from "@/components/EarningsBadge";
+
 import { SimBadge } from "@/components/legal/LegalPage";
 
 import Link from "next/link";
@@ -12,7 +14,7 @@ import { fmt, pct, tone } from "@/lib/format";
 
 type Idea = {
   id: number; date: string; symbol: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
-  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
+  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
 type Resp = {
@@ -172,6 +174,7 @@ function Ideas() {
                                 {i.symbol}
                               </Link>
                               <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${TF_STYLE[i.timeframe]}`}>{i.timeframe}</span>
+                              <EarningsBadge days={i.earnings_in} />
                             </div>
                             <div className="mt-0.5 text-[10px] text-muted" title={`Suggested weight ${i.weight}% of the account`}>{i.date.slice(5)} · {i.weight}%</div>
                           </td>

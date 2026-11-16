@@ -128,7 +128,8 @@ def idea_items(ideas: list[dict], day: str) -> list[dict]:
 
 
 def daily_summary(day: str, indices: list[dict], cycle: list[dict], fear_greed: dict, rows: list[dict],
-                  ideas: list[dict], earnings_next: list[dict], scan: list[dict] | None = None, pulse: dict[str, dict] | None = None) -> dict:
+                  ideas: list[dict], earnings_next: list[dict], scan: list[dict] | None = None, pulse: dict[str, dict] | None = None,
+                  exposure: dict | None = None) -> dict:
     """One end-of-day recap (feed item of kind "summary"); `body` holds the sections as JSON."""
     import json
 
@@ -150,6 +151,7 @@ def daily_summary(day: str, indices: list[dict], cycle: list[dict], fear_greed: 
         "earnings_next": earnings_next[:10],
         "move_detector": _md_section(scan or []),
         "pulse": _pulse_section(pulse or {}),
+        "exposure": {k: exposure[k] for k in ("exposure", "label", "advice")} if exposure else None,
     }
     tone = "higher" if spy and spy["change_pct"] > 0 else "lower" if spy and spy["change_pct"] < 0 else "flat"
     title = f"Daily summary {day}: S&P 500 {tone}" + (f" ({spy['change_pct']:+.2f}%)" if spy else "") + f", {adv} up / {dec} down"
@@ -180,6 +182,8 @@ def gate_summary(d: dict, limits: dict) -> dict:
         out["move_detector"] = {"locked": True}
     if not limits.get("pulse"):
         out["pulse"] = {"locked": True}
+    if d.get("exposure") and not limits.get("exposure_details"):
+        out["exposure"] = {"label": d["exposure"]["label"], "advice": d["exposure"]["advice"], "locked": True}
     return out
 
 
@@ -197,6 +201,9 @@ def summary_text(item: dict, watch: list[dict] | None = None, limits: dict | Non
         lines.append(f"  VIX: {d['vix']:.2f}")
     if d["fear_greed"].get("score") is not None:
         lines.append(f"  Fear & Greed: {round(d['fear_greed']['score'])} ({d['fear_greed']['label']})")
+    ex = d.get("exposure")
+    if ex:
+        lines.append(f"  Market exposure: {ex['label']}" + (f" ({ex['exposure']}% invested)" if ex.get("exposure") is not None else "") + f". {ex['advice']}")
     if d["cycle"]:
         lines.append("  Cycle: " + ", ".join(f"{c['label']} Stage {c['stage']} {c['name']}" for c in d["cycle"]))
     b = d["breadth"]

@@ -368,7 +368,7 @@ function ExtendedMovers({ session }: { session: "pre-market" | "after-hours" }) 
   );
 }
 
-type SortKey = "symbol" | "price" | "change_pct" | "market_cap_b" | "pe" | "pe_vs_sector_pct" | "eps_growth" | "dividend_yield" | "rsi14" | "rs_rating" | "template_passed" | "from_ath_pct" | "bull_score";
+type SortKey = "symbol" | "price" | "change_pct" | "market_cap_b" | "pe" | "pe_vs_sector_pct" | "eps_growth" | "dividend_yield" | "rsi14" | "rs_rating" | "template_passed" | "from_ath_pct" | "bull_score" | "group_rank";
 
 /** Stock screener. Free: every stock with the general information (price, market cap, P/E, growth, dividend), sortable.
  *  Pro / Premium: the screens (presets), filters, and the RSI, RS, Trend Template, Bull score and distance to the all-time high. */
@@ -425,7 +425,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
   // first click: A→Z for the symbol, largest first for numbers; second click reverses; third goes back to the default order
   const clickSort = (key: SortKey) =>
     setSort((s) => {
-      const first: 1 | -1 = key === "symbol" ? 1 : -1;
+      const first: 1 | -1 = key === "symbol" || key === "group_rank" ? 1 : -1;
       if (!s || s.key !== key) return { key, dir: first };
       return s.dir === first ? { key, dir: (-first) as 1 | -1 } : null;
     });
@@ -437,7 +437,8 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
       </button>
     </th>
   );
-  const cols = paid ? 13 : 8;
+  const hasGroups = !!rows?.some((r) => r.group_rank !== undefined);
+  const cols = paid ? (hasGroups ? 14 : 13) : 8;
 
   return (
     <div className="space-y-4">
@@ -499,6 +500,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
               {paid && (
                 <>
                   <Th k="from_ath_pct" label="To ATH" title="Distance to the all-time high" />
+                  {hasGroups && <Th k="group_rank" label="Group" title="Industry group rank (1 = strongest)" />}
                   <Th k="rsi14" label="RSI" />
                   <Th k="rs_rating" label="RS" />
                   <Th k="template_passed" label="TT" />
@@ -529,6 +531,9 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
                 <td className="tabular px-3 py-2 text-right">{fmt(r.dividend_yield, 2, "%")}</td>
                 {paid && (
                   <>
+                    {hasGroups && (
+                      <td className={`tabular px-3 py-2 text-right ${(r.group_rank ?? 999) <= 20 ? "text-up" : ""}`} title={r.group ?? ""}>{r.group_rank ?? "—"}</td>
+                    )}
                     <td className="tabular px-3 py-2 text-right" title={r.ath ? `All-time high ${fmt(r.ath)}` : undefined}>
                       {r.at_ath ? (
                         <span className="rounded bg-up/15 px-1.5 py-0.5 text-[11px] font-semibold text-up">ATH</span>

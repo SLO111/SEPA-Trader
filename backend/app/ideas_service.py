@@ -139,7 +139,13 @@ def publish_summary(db: Session, day: date, hist: dict[str, pd.DataFrame], ideas
         scan, pm = cached_scan(), pulse_map()
     except Exception:
         scan, pm = [], {}
-    item = feedmod.daily_summary(day.isoformat(), _indices(), cycle, fg, rows, ideas, earn, scan, pm)
+    try:
+        from .routers.markets import _exposure
+
+        ex = _exposure()
+    except Exception:
+        ex = None
+    item = feedmod.daily_summary(day.isoformat(), _indices(), cycle, fg, rows, ideas, earn, scan, pm, ex)
     if not add_feed(db, [item]):
         return None  # already published today
     send_digests(db, day, item, {r["symbol"]: r for r in rows})

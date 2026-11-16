@@ -79,6 +79,7 @@ def overview(user: User = Depends(current_user)):
         "active": mt.movers(rows, "active", 5),
         "sectors": mt.sector_rotation(rows, cached_scan()),
         "leaders": gate_rows(mt.leaders(cached_scan(), 8), limits_for(user)),
+        "exposure": _gate_exposure(_exposure(), limits_for(user)),
         "breadth": {
             "advancing": sum(r["change_pct"] > 0 for r in rows), "declining": sum(r["change_pct"] < 0 for r in rows),
             "new_highs": sum(r["new_high"] for r in rows), "new_lows": sum(r["new_low"] for r in rows),
@@ -192,8 +193,65 @@ def screener(
     aths = {s: market_data.cached("ath", s) for s in stock_symbols()}
     rows = mt.screen_rows(_rows(), cached_scan(), fundamentals, aths)
     out = mt.screen(rows, preset, sector, min_cap_b, max_pe, min_yield, min_rs, min_growth, template_only, above_ma50)
+    if limits_for(user)["industry_groups"]:
+        from engine.industry import symbol_ranks
+
+        ranks = symbol_ranks(groups_ranked())
+        out = [{**r, "group": ranks.get(r["symbol"], {}).get("group"), "group_rank": ranks.get(r["symbol"], {}).get("rank")} for r in out]
     if not paid:
         # Free: the general information only (price, market cap, valuation, dividend), largest companies first
         out = [{k: v for k, v in r.items() if k not in mt.PAID_SCREEN_FIELDS} for r in out]
         out.sort(key=lambda r: -(r.get("market_cap_b") or 0))
     return {"count": len(out), "results": out, "locked": not paid}
+
+
+
+# ------------------------------------------------------------------ exposure meter & industry groups
+
+def _exposure() -> dict | None:
+    def build():
+        from engine.exposure import exposure
+
+        spy = _opt("SPY")
+        if spy is None or len(spy) < 200:
+            return None
+        try:
+            fg = _fear_greed().get("score")
+        except Exception:
+            fg = None
+        return exposure(spy, _opt("QQQ"), _rows(), fg)
+
+    return market_data._fast(f"{settings.data_provider}:exposure", 300, build)
+
+
+def _gate_exposure(e: dict | None, lim: dict) -> dict | None:
+    """Free: the label and the advice; Pro / Premium: the percentage and the reasons too."""
+    if e is None or lim["exposure_details"]:
+        return e
+    return {"label": e["label"], "advice": e["advice"], "locked": True}
+
+
+@router.get("/exposure")
+def exposure_meter(user: User = Depends(current_user)):
+    e = _exposure()
+    if e is None:
+        raise HTTPException(503, "Not enough index history yet")
+    return _gate_exposure(e, limits_for(user))
+
+
+def groups_ranked() -> list[dict]:
+    def build():
+        from engine.industry import rank_groups
+
+        inds = {s: (market_data.cached("fundamentals", s) or {}).get("industry", "") for s in stock_symbols()}
+        return rank_groups(_rows(), cached_scan(), inds)
+
+    return market_data._fast(f"{settings.data_provider}:groups", 1800, build)
+
+
+@router.get("/groups")
+def industry_groups(user: User = Depends(current_user)):
+    if not limits_for(user)["industry_groups"]:
+        raise HTTPException(403, "Industry group rankings are part of Premium.")
+    g = groups_ranked()
+    return {"count": len(g), "groups": g}
