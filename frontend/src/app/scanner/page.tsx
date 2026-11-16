@@ -8,11 +8,12 @@ import { ScoreBar } from "@/components/ScoreBadge";
 import { ApiError, api } from "@/lib/api";
 import type { ScanRow } from "@/lib/types";
 
-type Tab = "bull" | "bear" | "rs";
+type Tab = "bull" | "bear" | "rs" | "ai";
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "bull", label: "Upside candidates", hint: "Stocks set up for a major move up (Bull Score)." },
   { id: "bear", label: "Downside risk", hint: "Stocks showing signs of deterioration (Bear Score)." },
   { id: "rs", label: "RS leaders", hint: "The strongest stocks relative to the rest of the market." },
+  { id: "ai", label: "✦ vnicornAI", hint: "vnicornAI's estimated chance of a major move: +20% before −10% within 3 months, learned from similar setups in the past." },
 ];
 
 function Scanner() {
@@ -100,6 +101,7 @@ function Scanner() {
                 <th className="px-4 py-3 text-right">Chg.</th>
                 <th className="px-4 py-3">Bull</th>
                 <th className="px-4 py-3">Bear</th>
+                <th className="px-4 py-3 text-right" title="vnicornAI: chance of +20% before -10% within 3 months">AI +20%</th>
                 <th className="px-4 py-3 text-right">RS</th>
                 <th className="px-4 py-3 text-right">TT</th>
                 <th className="px-4 py-3 text-right">Pivot</th>
@@ -109,12 +111,12 @@ function Scanner() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-muted">Scanning the market…</td>
+                  <td colSpan={10} className="px-4 py-10 text-center text-muted">Scanning the market…</td>
                 </tr>
               )}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-muted">No stocks match these filters.</td>
+                  <td colSpan={10} className="px-4 py-10 text-center text-muted">No stocks match these filters.</td>
                 </tr>
               )}
               {!loading &&
@@ -133,6 +135,9 @@ function Scanner() {
                     </td>
                     <td className="px-4 py-2.5"><ScoreBar score={r.bull_score} kind="bull" /></td>
                     <td className="px-4 py-2.5"><ScoreBar score={r.bear_score} kind="bear" /></td>
+                    <td className={`tabular px-4 py-2.5 text-right ${(r.ai_prob ?? 0) >= 0.3 ? "font-semibold text-cyan-300" : "text-muted"}`}>
+                      {r.ai_prob !== null && r.ai_prob !== undefined ? `${Math.round(r.ai_prob * 100)}%` : "—"}
+                    </td>
                     <td className={`tabular px-4 py-2.5 text-right ${(r.rs_rating ?? 0) >= 80 ? "text-up" : ""}`}>{r.rs_rating ?? "—"}</td>
                     <td className={`tabular px-4 py-2.5 text-right ${r.template_passed === 8 ? "text-up" : "text-muted"}`}>{r.template_passed}/8</td>
                     <td className="tabular px-4 py-2.5 text-right text-muted">

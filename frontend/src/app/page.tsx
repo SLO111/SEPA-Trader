@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 const STATS = [
   { value: "500+", label: "US stocks scanned every day" },
   { value: "Top 50", label: "trade ideas after each close" },
-  { value: "4/4", label: "structure & cycle filters on every idea" },
+  { value: "AI", label: "odds & expected value on every plan" },
   { value: "24/7", label: "alerts from your watchlists" },
 ];
 
@@ -40,6 +40,7 @@ const BENTO = [
 ];
 
 const FEATURES = [
+  ["vnicornAI", "A machine-learning model that builds the plan (stop, trim, target) with the best expected value and tells you its odds. Published only where its walk-forward test beats the baseline."],
   ["Move Detector", "Bull and Bear scores that flag stocks set up for a major move, before it is obvious."],
   ["Market cycle", "Accumulation, Markup, Distribution, Markdown, measured on the 30-week average."],
   ["Structure Count 4/4", "A step count that confirms who is in control, with a trailing defence line."],
@@ -119,7 +120,7 @@ export default function Home() {
         {/* hero */}
         <section className="mx-auto max-w-6xl px-4 pb-10 pt-16 text-center sm:pt-24">
           <span className="vn-fade inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs text-violet-200">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" /> New: daily summary by email · Buy / Short ideas in one click
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" /> New: vnicornAI builds and rates every trade plan
           </span>
           <h1 className="vn-fade mx-auto mt-6 max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl" style={{ animationDelay: "80ms" }}>
             Spot the next{" "}

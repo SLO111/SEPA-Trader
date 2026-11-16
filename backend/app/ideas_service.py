@@ -60,6 +60,11 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
     if not force and latest_batch(db) == day:
         return []
     if force:
+        from .models import AIPick
+
+        ids = [i for (i,) in db.query(TradeIdea.id).filter(TradeIdea.batch_date == day).all()]
+        if ids:
+            db.query(AIPick).filter(AIPick.idea_id.in_(ids)).delete(synchronize_session=False)
         db.query(TradeIdea).filter(TradeIdea.batch_date == day).delete()
     ideas = generate(hist, _scan(), max_long=40, max_short=10)  # top 50 per day
     rows = []
@@ -68,6 +73,11 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
         db.add(row)
         rows.append(row)
     db.commit()
+    try:
+        rows += _vnicorn(db, day, hist, rows)
+    except Exception:
+        log.exception("vnicornAI failed")
+        db.rollback()
     add_feed(db, feedmod.idea_items([i.to_dict() for i in ideas], day.isoformat()))
     log.info("Generated %d ideas for %s", len(rows), day)
     try:
@@ -75,6 +85,26 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
     except Exception:
         log.exception("Daily summary failed")
     return rows
+
+
+def _vnicorn(db: Session, day: date, hist: dict[str, pd.DataFrame], rows: list[TradeIdea]) -> list[TradeIdea]:
+    """vnicornAI: rate the ideas, add its own, refresh major-move probabilities (trains weekly, on demand)."""
+    from engine.stages import stage_now
+
+    from . import vnicorn_service
+
+    try:
+        bench = market_data.history("SPY")
+    except Exception:
+        bench = None
+    stage_of = {}
+    for s, df in hist.items():
+        try:
+            st = stage_now(df)
+            stage_of[s] = st["stage"] if st else 0
+        except Exception:
+            continue
+    return vnicorn_service.rate_and_create(db, day, hist, bench, rows, stage_of)
 
 
 def _next_trading_day(day: date) -> date:

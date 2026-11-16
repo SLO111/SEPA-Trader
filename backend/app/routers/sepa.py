@@ -54,7 +54,7 @@ def _rs_for(symbol: str) -> int | None:
 
 @router.get("/scan")
 def scan(
-    sort: Literal["bull", "bear", "rs"] = "bull",
+    sort: Literal["bull", "bear", "rs", "ai"] = "bull",
     min_score: float = Query(0, ge=0, le=100),
     template_only: bool = False,
     vcp_only: bool = False,
@@ -62,12 +62,17 @@ def scan(
 ):
     if not limits_for(user)["move_detector"]:
         raise HTTPException(403, "Move Detector and the scanner are available on Pro and Premium plans.")
-    rows = cached_scan()
-    key = {"bull": "bull_score", "bear": "bear_score", "rs": "rs_rating"}[sort]
+    from .. import vnicorn_service
+    from ..db import SessionLocal
+
+    with SessionLocal() as db:
+        vnicorn_service.load(db)  # makes the stored major-move probabilities available after a restart
+    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"])} for r in cached_scan()]
+    key = {"bull": "bull_score", "bear": "bear_score", "rs": "rs_rating", "ai": "ai_prob"}[sort]
     out = [
         r
         for r in rows
-        if (r[key] or 0) >= (min_score if sort != "rs" else 0)
+        if (r[key] or 0) >= (min_score if sort in ("bull", "bear") else 0)
         and (not template_only or r["template_passed"] == 8)
         and (not vcp_only or r["vcp"])
     ]

@@ -56,13 +56,17 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     from ..models import PaperTrade
 
     taken = set(db.scalars(select(PaperTrade.idea_id).where(PaperTrade.user_id == user.id)).all())
+    from ..models import AIPick
+
+    ai_of = {a.idea_id: {"prob": a.prob, "ev": a.ev, "stop": a.stop, "trim": a.trim, "target": a.target, "rr": a.rr, "pick": a.pick}
+             for a in db.scalars(select(AIPick).where(AIPick.idea_id.in_([r.id for r in rows]))).all()} if rows else {}
     open_rows = [r for r in allrows if r.status in OPEN]
     done = [r for r in allrows if r.status in ("TARGET", "STOPPED") or (r.status not in OPEN and r.r_multiple is not None)]
     entered_open = [r for r in open_rows if r.pnl_pct is not None]
     wins = [r for r in done if (r.r_multiple or 0) > 0]
     return {
         "updated": latest_batch(db).isoformat() if latest_batch(db) else None,
-        "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken} for r in rows],
+        "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken, "ai": ai_of.get(r.id)} for r in rows],
         "summary": {
             "open": len(open_rows),
             "active": len(entered_open),
@@ -70,7 +74,11 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
             "closed": len(done),
             "win_rate": round(len(wins) / len(done) * 100, 1) if done else None,
             "avg_r": round(sum(r.r_multiple or 0 for r in done) / len(done), 2) if done else None,
-            "by_timeframe": {tf: sum(1 for r in open_rows if r.timeframe == tf) for tf in ("SWING", "TRADE", "INVEST", "SHORT")},
+            "by_timeframe": {tf: sum(1 for r in open_rows if r.timeframe == tf) for tf in ("SWING", "TRADE", "INVEST", "SHORT", "AI")},
+            # vnicornAI vs. the rules: closed results of each, so the comparison is public
+            "ai_closed": len([r for r in done if r.timeframe == "AI"]),
+            "ai_avg_r": round(sum(r.r_multiple or 0 for r in done if r.timeframe == "AI") / max(1, len([r for r in done if r.timeframe == "AI"])), 2) if any(r.timeframe == "AI" for r in done) else None,
+            "rules_avg_r": round(sum(r.r_multiple or 0 for r in done if r.timeframe != "AI") / max(1, len([r for r in done if r.timeframe != "AI"])), 2) if any(r.timeframe != "AI" for r in done) else None,
         },
     }
 
@@ -227,3 +235,11 @@ def delete_paper(trade_id: int, user: User = Depends(current_user), db: Session 
         raise HTTPException(404, "Trade not found")
     db.delete(t)
     db.commit()
+
+
+@router.get("/ai/status")
+def ai_status(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """vnicornAI: when it was trained, on how much data, and its walk-forward report."""
+    from .. import vnicorn_service
+
+    return vnicorn_service.status(db)

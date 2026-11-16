@@ -102,6 +102,7 @@ export type SepaReport = {
 };
 
 export type ScanRow = {
+  ai_prob?: number | null;
   symbol: string;
   name: string;
   sector: string;

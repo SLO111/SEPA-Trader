@@ -287,3 +287,28 @@ class PaperTrade(Base):
     exit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ModelBlob(Base):
+    """A trained machine-learning model (pickled) and when it was trained, so restarts don't retrain it."""
+
+    __tablename__ = "model_blobs"
+
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AIPick(Base):
+    """vnicornAI's rating and plan for a trade idea."""
+
+    __tablename__ = "ai_picks"
+
+    idea_id: Mapped[int] = mapped_column(ForeignKey("trade_ideas.id", ondelete="CASCADE"), primary_key=True)
+    prob: Mapped[float] = mapped_column(Float)
+    ev: Mapped[float] = mapped_column(Float)
+    stop: Mapped[float] = mapped_column(Float)
+    trim: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target: Mapped[float] = mapped_column(Float)
+    rr: Mapped[float] = mapped_column(Float)
+    pick: Mapped[bool] = mapped_column(Boolean, default=False)

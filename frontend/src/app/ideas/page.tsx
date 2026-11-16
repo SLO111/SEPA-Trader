@@ -3,22 +3,27 @@
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import VnicornAICard from "@/components/VnicornAICard";
 import { ApiError, api, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmt, pct, tone } from "@/lib/format";
 
 type Idea = {
-  id: number; date: string; symbol: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT"; side: "long" | "short";
-  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
+  id: number; date: string; symbol: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
+  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
 type Resp = {
   updated: string | null; ideas: Idea[];
-  summary: { open: number; active: number; unrealized_pct: number | null; closed: number; win_rate: number | null; avg_r: number | null; by_timeframe: Record<string, number> };
+  summary: { open: number; active: number; unrealized_pct: number | null; closed: number; win_rate: number | null; avg_r: number | null; by_timeframe: Record<string, number>; ai_closed?: number; ai_avg_r?: number | null; rules_avg_r?: number | null };
 };
+
+type Filter = "ALL" | "AIPICKS" | "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI";
+const match = (i: Idea, f: Filter) => f === "ALL" || (f === "AIPICKS" ? !!i.ai?.pick : i.timeframe === f);
 
 const TF_STYLE: Record<string, string> = {
   SWING: "bg-blue-600/80 text-white", TRADE: "bg-violet-600/80 text-white", INVEST: "bg-teal-500/80 text-white", SHORT: "bg-red-600/80 text-white",
+  AI: "bg-gradient-to-r from-violet-500 to-cyan-500 text-white",
 };
 const STATUS: Record<string, [string, string]> = {
   WAIT: ["WAIT", "bg-slate-500/30 text-slate-200"], BUY: ["BUY", "bg-up/80 text-white"], TRIM: ["TRIM", "bg-amber-500/80 text-black"],
@@ -47,7 +52,7 @@ function Ideas() {
   const [locked, setLocked] = useState("");
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
-  const [tf, setTf] = useState<"ALL" | "SWING" | "TRADE" | "INVEST" | "SHORT">("ALL");
+  const [tf, setTf] = useState<"ALL" | "AIPICKS" | "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI">("ALL");
 
   const load = () =>
     api<Resp>(`/api/ideas?view=${view}`)
@@ -120,11 +125,11 @@ function Ideas() {
               ))}
             </div>
             <div className="flex flex-wrap gap-1 border-b border-line px-2 py-1.5">
-              {(["ALL", "SWING", "TRADE", "INVEST", "SHORT"] as const).map((t) => {
-                const n = t === "ALL" ? data?.ideas.length : data?.ideas.filter((i) => i.timeframe === t).length;
+              {(["ALL", "AIPICKS", "AI", "SWING", "TRADE", "INVEST", "SHORT"] as const).map((t) => {
+                const n = data?.ideas.filter((i) => match(i, t)).length;
                 return (
                   <button key={t} onClick={() => setTf(t)} className={`rounded-full px-3 py-0.5 text-xs ${tf === t ? "bg-accent text-white" : "text-muted hover:bg-panel-2 hover:text-text"}`}>
-                    {t === "ALL" ? "All" : t} <span className="tabular opacity-70">{n ?? 0}</span>
+                    {t === "ALL" ? "All" : t === "AIPICKS" ? "✦ vnicornAI picks" : t === "AI" ? "AI ideas" : t} <span className="tabular opacity-70">{n ?? 0}</span>
                   </button>
                 );
               })}
@@ -133,15 +138,15 @@ function Ideas() {
               <table className="w-full min-w-[1100px] text-sm">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
                   <tr>
-                    {["Ticker", "TF", "Date", "Weight", "Entry", "Current", "%", "Stop", "Trim", "Target", "R/R", "Stage", "Structure", "Range", "Status", ""].map((h) => (
+                    {["Ticker", "TF", "Date", "Weight", "Entry", "Current", "%", "Stop", "Trim", "Target", "R/R", "vnicornAI", "Stage", "Structure", "Range", "Status", ""].map((h) => (
                       <th key={h} className={`px-3 py-2.5 ${["Weight", "Entry", "Current", "%", "Stop", "Trim", "Target"].includes(h) ? "text-right" : ""} ${h === "Ticker" ? "sticky left-0 z-[1] bg-panel" : ""}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {!data && <tr><td colSpan={16} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
-                  {data?.ideas.length === 0 && <tr><td colSpan={16} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
-                  {data?.ideas.filter((i) => tf === "ALL" || i.timeframe === tf).map((i) => {
+                  {!data && <tr><td colSpan={17} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
+                  {data?.ideas.length === 0 && <tr><td colSpan={17} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
+                  {data?.ideas.filter((i) => match(i, tf)).sort((a, b) => (tf === "AIPICKS" ? (b.ai?.ev ?? -9) - (a.ai?.ev ?? -9) : 0)).map((i) => {
                     const move = i.current !== null ? ((i.current / i.entry - 1) * 100 * (i.side === "short" ? -1 : 1)) : null;
                     return (
                       <Fragment key={i.id}>
@@ -163,6 +168,20 @@ function Ideas() {
                           <td className="tabular px-3 py-2 text-right text-up/90">${fmt(i.target)}</td>
                           <td className="px-3 py-2">
                             <span className={`tabular rounded px-2 py-1 text-xs font-semibold ${i.rr >= 3 ? "bg-up/80 text-white" : i.rr >= 2 ? "bg-up/40 text-white" : "bg-amber-500/60 text-black"}`}>{i.rr}</span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {i.ai ? (
+                              <span
+                                title={`vnicornAI: ${Math.round(i.ai.prob * 100)}% chance to reach the target before the stop; expected value ${i.ai.ev > 0 ? "+" : ""}${i.ai.ev}R`}
+                                className={`tabular whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold ${i.ai.pick ? "bg-gradient-to-r from-violet-500/30 to-cyan-500/30 text-cyan-100" : i.ai.ev > 0 ? "bg-panel-2 text-text" : "bg-panel-2 text-muted"}`}
+                              >
+                                {i.ai.pick && "✦ "}
+                                {Math.round(i.ai.prob * 100)}% · {i.ai.ev > 0 ? "+" : ""}
+                                {i.ai.ev}R
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             {i.stage ? (
@@ -198,10 +217,17 @@ function Ideas() {
                         </tr>
                         {open === i.id && (
                           <tr className="bg-panel-2/30">
-                            <td colSpan={16} className="px-4 py-3 text-sm text-muted">
+                            <td colSpan={17} className="px-4 py-3 text-sm text-muted">
                               <b className="text-text">Why:</b> {i.reason} {i.side === "short" ? "Short" : "Buy"} near ${fmt(i.entry)}, stop ${fmt(i.stop)}
                               {i.trim ? `, trim part at $${fmt(i.trim)}` : ""}, target ${fmt(i.target)}. Suggested weight {i.weight}% risks about 1% of the account at the stop.
                               {i.closed_at && ` Closed ${i.closed_at}.`}
+                              {i.ai && i.timeframe !== "AI" && (
+                                <div className="mt-2">
+                                  <b className="text-text">vnicornAI plan:</b> {Math.round(i.ai.prob * 100)}% estimated chance to reach the target first (EV {i.ai.ev > 0 ? "+" : ""}
+                                  {i.ai.ev}R). Its best plan: stop ${fmt(i.ai.stop)}{i.ai.trim ? `, trim $${fmt(i.ai.trim)}` : ""}, target ${fmt(i.ai.target)} (R/R {i.ai.rr}).
+                                  {i.ai.pick ? " ✦ A vnicornAI pick." : i.ai.ev <= 0 ? " The model sees a negative expected value here: consider skipping or a smaller size." : ""}
+                                </div>
+                              )}
                               <div className="mt-2">
                                 <b className="text-text">Position plan:</b>{" "}
                                 {i.side === "short"
@@ -230,7 +256,7 @@ function Ideas() {
                 <div className={`tabular text-3xl font-semibold ${tone(s?.unrealized_pct)}`}>{pct(s?.unrealized_pct, 1)}</div>
                 <div className="text-xs text-muted">{s?.active ?? 0} active · {s?.open ?? 0} open</div>
               </div>
-              <div className="mt-3 grid grid-cols-4 gap-1 text-center text-[11px]">
+              <div className="mt-3 grid grid-cols-5 gap-1 text-center text-[11px]">
                 {Object.entries(s?.by_timeframe ?? {}).map(([tf, n]) => (
                   <div key={tf} className="rounded bg-panel-2/60 py-1.5">
                     <div className="text-muted">{tf}</div>
@@ -239,6 +265,7 @@ function Ideas() {
                 ))}
               </div>
             </section>
+            <VnicornAICard aiAvgR={s?.ai_avg_r} rulesAvgR={s?.rules_avg_r} aiClosed={s?.ai_closed} />
             <section className="rounded-xl border border-line bg-panel p-4">
               <h2 className="mb-2 font-semibold">Track record</h2>
               <div className="flex justify-between py-1 text-sm"><span className="text-muted">Closed ideas</span><span className="tabular">{s?.closed ?? 0}</span></div>
