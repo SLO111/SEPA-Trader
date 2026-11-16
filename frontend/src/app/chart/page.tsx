@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import ChartLegend from "@/components/chart/ChartLegend";
 import IndicatorPicker from "@/components/chart/IndicatorPicker";
 import SymbolInfoPanel from "@/components/chart/SymbolInfoPanel";
+import SepaStrip from "@/components/SepaStrip";
 import WatchlistPanel from "@/components/WatchlistPanel";
 import { api, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -193,6 +194,7 @@ function ChartWorkspace() {
             </button>
           </div>
         </div>
+        <SepaStrip symbol={symbol} />
         {error && <div className="bg-down/10 px-4 py-2 text-sm text-down">{error}</div>}
         <div className="relative min-h-0 flex-1">
           <ChartLegend active={active} defs={defs} onChange={setActive} />
