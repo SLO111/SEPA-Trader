@@ -36,7 +36,7 @@ function RangeBar({ i }: { i: Idea }) {
   const pos = (x: number) => `${Math.min(100, Math.max(0, ((x - lo) / (hi - lo)) * 100))}%`;
   const cur = i.current ?? i.entry;
   return (
-    <div className="relative mx-1 h-1.5 w-32 rounded-full bg-gradient-to-r from-red-500/50 via-slate-500/40 to-green-500/60" title={`Stop ${i.stop} · entry ${i.entry} · target ${i.target}`}>
+    <div className="relative mx-1 h-1.5 w-20 rounded-full xl:w-28 bg-gradient-to-r from-red-500/50 via-slate-500/40 to-green-500/60" title={`Stop ${i.stop} · entry ${i.entry} · target ${i.target}`}>
       {i.side === "short" && <div className="absolute inset-0 rounded-full bg-gradient-to-r from-green-500/60 via-slate-500/40 to-red-500/50" />}
       <div className="absolute -top-1 h-3.5 w-px bg-white/60" style={{ left: pos(i.entry) }} />
       {i.trim && <div className="absolute -top-0.5 h-2.5 w-px bg-amber-300/80" style={{ left: pos(i.trim) }} />}
@@ -90,7 +90,7 @@ function Ideas() {
   const s = data?.summary;
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-[1400px] p-4 sm:p-6">
+      <div className="mx-auto max-w-[1680px] p-3 sm:p-6">
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div>
             <h1 className="text-xl font-semibold">Trade ideas</h1>
@@ -115,7 +115,7 @@ function Ideas() {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
+        <div className="grid gap-5 2xl:grid-cols-[1fr_300px]">
           <section className="min-w-0 rounded-xl border border-line bg-panel">
             <div className="flex gap-1 border-b border-line p-2">
               {(["open", "closed", "all"] as const).map((v) => (
@@ -135,45 +135,53 @@ function Ideas() {
               })}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-sm">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
                   <tr>
-                    {["Ticker", "TF", "Date", "Weight", "Entry", "Current", "%", "Stop", "Trim", "Target", "R/R", "vnicornAI", "Stage", "Structure", "Range", "Status", ""].map((h) => (
-                      <th key={h} className={`px-3 py-2.5 ${["Weight", "Entry", "Current", "%", "Stop", "Trim", "Target"].includes(h) ? "text-right" : ""} ${h === "Ticker" ? "sticky left-0 z-[1] bg-panel" : ""}`}>{h}</th>
+                    {[
+                      ["Ticker", ""], ["Entry / now", "text-right"], ["Stop", "text-right"], ["Trim", "text-right"], ["Target", "text-right"],
+                      ["R/R", "text-center"], ["vnicornAI", ""], ["Setup", ""], ["Range", ""], ["Status", ""], ["", "sticky right-0 z-[1] bg-panel"],
+                    ].map(([h, cls]) => (
+                      <th key={h || "action"} className={`whitespace-nowrap px-2 py-2.5 ${cls} ${h === "Ticker" ? "sticky left-0 z-[1] bg-panel pl-3" : ""}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {!data && <tr><td colSpan={17} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
-                  {data?.ideas.length === 0 && <tr><td colSpan={17} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
+                  {!data && <tr><td colSpan={11} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
+                  {data?.ideas.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
                   {data?.ideas.filter((i) => match(i, tf)).sort((a, b) => (tf === "AIPICKS" ? (b.ai?.ev ?? -9) - (a.ai?.ev ?? -9) : 0)).map((i) => {
                     const move = i.current !== null ? ((i.current / i.entry - 1) * 100 * (i.side === "short" ? -1 : 1)) : null;
                     return (
                       <Fragment key={i.id}>
                         <tr onClick={() => setOpen(open === i.id ? null : i.id)} className="cursor-pointer border-t border-line hover:bg-panel-2/40">
-                          <td className="sticky left-0 z-[1] bg-panel px-3 py-2">
-                            <Link href={`/chart?s=${encodeURIComponent(i.symbol)}`} onClick={(e) => e.stopPropagation()}
-                              className={`inline-block min-w-[56px] rounded px-2 py-1 text-center text-xs font-bold ${i.side === "short" ? "bg-down/20 text-down" : "bg-up/20 text-up"}`}>
-                              {i.symbol}
-                            </Link>
+                          <td className="sticky left-0 z-[1] bg-panel py-2 pl-3 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              <Link href={`/chart?s=${encodeURIComponent(i.symbol)}`} onClick={(e) => e.stopPropagation()}
+                                className={`inline-block min-w-[52px] rounded px-1.5 py-1 text-center text-xs font-bold ${i.side === "short" ? "bg-down/20 text-down" : "bg-up/20 text-up"}`}>
+                                {i.symbol}
+                              </Link>
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${TF_STYLE[i.timeframe]}`}>{i.timeframe}</span>
+                            </div>
+                            <div className="mt-0.5 text-[10px] text-muted" title={`Suggested weight ${i.weight}% of the account`}>{i.date.slice(5)} · {i.weight}%</div>
                           </td>
-                          <td className="px-3 py-2"><span className={`rounded px-2 py-1 text-[11px] font-semibold ${TF_STYLE[i.timeframe]}`}>{i.timeframe}</span></td>
-                          <td className="tabular whitespace-nowrap px-3 py-2 text-muted">{i.date.slice(5)}</td>
-                          <td className="tabular px-3 py-2 text-right">{i.weight}%</td>
-                          <td className="tabular px-3 py-2 text-right">${fmt(i.entry)}</td>
-                          <td className="tabular px-3 py-2 text-right">{i.current !== null ? `$${fmt(i.current)}` : "—"}</td>
-                          <td className={`tabular px-3 py-2 text-right text-xs ${tone(i.pnl_pct ?? move)}`}>{pct(i.pnl_pct ?? move, 1)}</td>
-                          <td className="tabular px-3 py-2 text-right text-down/90">${fmt(i.stop)}</td>
-                          <td className="tabular px-3 py-2 text-right text-amber-300/90">{i.trim ? `$${fmt(i.trim)}` : "N/A"}</td>
-                          <td className="tabular px-3 py-2 text-right text-up/90">${fmt(i.target)}</td>
-                          <td className="px-3 py-2">
-                            <span className={`tabular rounded px-2 py-1 text-xs font-semibold ${i.rr >= 3 ? "bg-up/80 text-white" : i.rr >= 2 ? "bg-up/40 text-white" : "bg-amber-500/60 text-black"}`}>{i.rr}</span>
+                          <td className="tabular whitespace-nowrap px-2 py-2 text-right">
+                            <div>${fmt(i.entry)}</div>
+                            <div className="text-[11px] text-muted">
+                              {i.current !== null ? `$${fmt(i.current)} ` : ""}
+                              <span className={tone(i.pnl_pct ?? move)}>{pct(i.pnl_pct ?? move, 1)}</span>
+                            </div>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="tabular whitespace-nowrap px-2 py-2 text-right text-down/90">${fmt(i.stop)}</td>
+                          <td className="tabular whitespace-nowrap px-2 py-2 text-right text-amber-300/90">{i.trim ? `$${fmt(i.trim)}` : "—"}</td>
+                          <td className="tabular whitespace-nowrap px-2 py-2 text-right text-up/90">${fmt(i.target)}</td>
+                          <td className="px-2 py-2 text-center">
+                            <span className={`tabular rounded px-1.5 py-1 text-xs font-semibold ${i.rr >= 3 ? "bg-up/80 text-white" : i.rr >= 2 ? "bg-up/40 text-white" : "bg-amber-500/60 text-black"}`}>{i.rr}</span>
+                          </td>
+                          <td className="px-2 py-2">
                             {i.ai ? (
                               <span
                                 title={`vnicornAI: ${Math.round(i.ai.prob * 100)}% chance to reach the target before the stop; expected value ${i.ai.ev > 0 ? "+" : ""}${i.ai.ev}R`}
-                                className={`tabular whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold ${i.ai.pick ? "bg-gradient-to-r from-violet-500/30 to-cyan-500/30 text-cyan-100" : i.ai.ev > 0 ? "bg-panel-2 text-text" : "bg-panel-2 text-muted"}`}
+                                className={`tabular whitespace-nowrap rounded px-1.5 py-1 text-[11px] font-semibold ${i.ai.pick ? "bg-gradient-to-r from-violet-500/30 to-cyan-500/30 text-cyan-100" : i.ai.ev > 0 ? "bg-panel-2 text-text" : "bg-panel-2 text-muted"}`}
                               >
                                 {i.ai.pick && "✦ "}
                                 {Math.round(i.ai.prob * 100)}% · {i.ai.ev > 0 ? "+" : ""}
@@ -183,26 +191,26 @@ function Ideas() {
                               <span className="text-xs text-muted">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-2">
-                            {i.stage ? (
-                              <span title={`${i.stage.name} for ${i.stage.weeks} weeks`} className={`whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold ${STAGE_STYLE[i.stage.stage]}`}>
-                                S{i.stage.stage} {i.stage.name}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted">—</span>
-                            )}
+                          <td className="px-2 py-2">
+                            <div className="flex flex-col items-start gap-1">
+                              {i.stage && (
+                                <span title={`Market cycle: ${i.stage.name} for ${i.stage.weeks} weeks`} className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${STAGE_STYLE[i.stage.stage]}`}>
+                                  S{i.stage.stage} {i.stage.name}
+                                </span>
+                              )}
+                              <StructureBadge s={i.structure} />
+                            </div>
                           </td>
-                          <td className="px-3 py-2"><StructureBadge s={i.structure} /></td>
-                          <td className="px-3 py-2"><RangeBar i={i} /></td>
-                          <td className="px-3 py-2">
-                            <span className={`rounded px-2 py-1 text-[11px] font-semibold ${STATUS[i.status][1]}`}>{STATUS[i.status][0]}</span>
-                            {i.r_multiple !== null && i.status !== "WAIT" && <span className={`tabular ml-2 text-xs ${tone(i.r_multiple)}`}>{i.r_multiple > 0 ? "+" : ""}{i.r_multiple}R</span>}
+                          <td className="px-2 py-2"><RangeBar i={i} /></td>
+                          <td className="whitespace-nowrap px-2 py-2">
+                            <span className={`rounded px-1.5 py-1 text-[11px] font-semibold ${STATUS[i.status][1]}`}>{STATUS[i.status][0]}</span>
+                            {i.r_multiple !== null && i.status !== "WAIT" && <span className={`tabular ml-1.5 text-xs ${tone(i.r_multiple)}`}>{i.r_multiple > 0 ? "+" : ""}{i.r_multiple}R</span>}
                           </td>
-                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <td className="sticky right-0 z-[1] bg-panel px-2 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                             {["WAIT", "BUY", "TRIM"].includes(i.status) &&
                               (i.taken ? (
                                 <Link href="/backtest" className="whitespace-nowrap rounded border border-line px-2 py-1 text-[11px] text-muted hover:text-text" title="Followed in Backtest → My trades">
-                                  ✓ In my trades
+                                  ✓ Taken
                                 </Link>
                               ) : (
                                 <button
@@ -217,7 +225,7 @@ function Ideas() {
                         </tr>
                         {open === i.id && (
                           <tr className="bg-panel-2/30">
-                            <td colSpan={17} className="px-4 py-3 text-sm text-muted">
+                            <td colSpan={11} className="px-4 py-3 text-sm text-muted">
                               <b className="text-text">Why:</b> {i.reason} {i.side === "short" ? "Short" : "Buy"} near ${fmt(i.entry)}, stop ${fmt(i.stop)}
                               {i.trim ? `, trim part at $${fmt(i.trim)}` : ""}, target ${fmt(i.target)}. Suggested weight {i.weight}% risks about 1% of the account at the stop.
                               {i.closed_at && ` Closed ${i.closed_at}.`}
@@ -248,7 +256,7 @@ function Ideas() {
             </div>
           </section>
 
-          <aside className="space-y-4">
+          <aside className="grid content-start gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-1">
             <section className="rounded-xl border border-line bg-panel p-4">
               <h2 className="mb-3 font-semibold">Summary</h2>
               <div className="rounded-lg bg-panel-2/60 p-3 text-center">
