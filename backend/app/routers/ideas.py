@@ -15,8 +15,22 @@ router = APIRouter(prefix="/api", tags=["ideas"])
 OPEN = ("WAIT", "BUY", "TRIM")
 
 
-def idea_out(r: TradeIdea) -> dict:
+def _structure(symbol: str) -> dict | None:
+    """Current Structure Count 4/4 for the symbol (live, from daily prices)."""
+    from engine import structure
+
+    from .. import market_data
+
+    try:
+        df = market_data.history(symbol)
+        return structure.label(structure.analyze(df.iloc[-300:]).state)
+    except Exception:
+        return None
+
+
+def idea_out(r: TradeIdea, with_structure: bool = False) -> dict:
     return {
+        **({"structure": _structure(r.symbol)} if with_structure else {}),
         "id": r.id, "date": r.batch_date.isoformat(), "symbol": r.symbol, "timeframe": r.timeframe, "side": r.side,
         "entry": r.entry, "stop": r.stop, "trim": r.trim, "target": r.target, "rr": r.rr, "weight": r.weight,
         "score": r.score, "reason": r.reason, "status": r.status, "current": r.current, "pnl_pct": r.pnl_pct,
@@ -41,7 +55,7 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     wins = [r for r in done if (r.r_multiple or 0) > 0]
     return {
         "updated": latest_batch(db).isoformat() if latest_batch(db) else None,
-        "ideas": [idea_out(r) for r in rows],
+        "ideas": [idea_out(r, with_structure=r.status in OPEN) for r in rows],
         "summary": {
             "open": len(open_rows),
             "active": len(entered_open),
