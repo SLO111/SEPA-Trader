@@ -54,16 +54,16 @@ function PlanCard({ p, symbol, onTaken }: { p: Plan; symbol: string; onTaken: ()
 }
 
 /** "Ask vnicornAI": a plain-English read of the chart with vnicornAI's long and short plans. */
-export default function AskVnicorn({ symbol, onClose }: { symbol: string; onClose: () => void }) {
+export default function AskVnicorn({ symbol, onClose, locked = false }: { symbol: string; onClose: () => void; locked?: boolean }) {
   const [a, setA] = useState<Analysis | null>(null);
   const [error, setError] = useState("");
   const [taken, setTaken] = useState(false);
   useEffect(() => {
-    api<Analysis>(`/api/market/analysis/${encodeURIComponent(symbol)}`).then(setA).catch((e) => setError(e.message));
+    if (!locked) api<Analysis>(`/api/market/analysis/${encodeURIComponent(symbol)}`).then(setA).catch((e) => setError(e.message));
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
-  }, [symbol, onClose]);
+  }, [symbol, onClose, locked]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onMouseDown={onClose}>
@@ -77,8 +77,30 @@ export default function AskVnicorn({ symbol, onClose }: { symbol: string; onClos
           <button onClick={onClose} className="rounded px-2 py-1 text-muted hover:bg-panel-2" aria-label="Close">✕</button>
         </div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          {locked && (
+            <div className="space-y-4">
+              <div className="space-y-2 opacity-60 blur-[2px]" aria-hidden>
+                {["Trend & cycle", "Structure", "Setup", "Behaviour & volume", "vnicornAI plans"].map((t) => (
+                  <div key={t}>
+                    <div className="text-sm font-semibold text-violet-200">{t}</div>
+                    <div className="mt-1 h-10 rounded bg-panel-2/70" />
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-xl border border-violet-500/40 bg-violet-500/10 p-4">
+                <p className="font-semibold">Ask vnicornAI is part of Pro</p>
+                <p className="mt-1 text-sm text-muted">
+                  A plain-English read of any chart in seconds: trend and cycle, structure, setup, volume behaviour, key levels and risk, plus vnicornAI&apos;s best
+                  long and short plans with their odds, ready to take with one click.
+                </p>
+                <Link href="/billing" className="mt-3 inline-block rounded-md bg-gradient-to-r from-violet-500 to-cyan-500 px-4 py-2 text-sm font-semibold text-white">
+                  Unlock with Pro
+                </Link>
+              </div>
+            </div>
+          )}
           {error && <p className="text-sm text-down">{error}</p>}
-          {!a && !error && (
+          {!locked && !a && !error && (
             <div className="space-y-3">
               {[0, 1, 2, 3].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg bg-panel-2/50" />)}
             </div>

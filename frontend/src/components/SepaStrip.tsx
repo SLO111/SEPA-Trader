@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { ScoreBlock, SepaReport } from "@/lib/types";
+import Locked from "./Locked";
 import { scoreColor } from "./ScoreBadge";
 
 function Chip({ label, value, tone = "text-text" }: { label: string; value: React.ReactNode; tone?: string }) {
@@ -57,11 +58,18 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
       <button onClick={() => setOpen((o) => !o)} className="flex w-full flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 text-left hover:bg-panel/60">
         <Chip label="RS" value={rep.rs_rating ?? "—"} tone={(rep.rs_rating ?? 0) >= 80 ? "text-up" : "text-text"} />
         <Chip label="Trend Template" value={`${tt.passed_count}/8`} tone={tt.all_passed ? "text-up" : tt.passed_count <= 3 ? "text-down" : "text-amber-300"} />
+        {v.locked ? (
+          <span className="flex items-baseline gap-1.5 whitespace-nowrap">
+            <span className="text-[11px] uppercase tracking-wide text-muted">VCP</span>
+            <Locked feature="VCP + pivot" compact />
+          </span>
+        ) : (
         <Chip
           label="VCP"
           value={v.detected ? `yes · pivot ${v.pivot} (${v.distance_pct! > 0 ? "-" : "+"}${Math.abs(v.distance_pct!)}%)` : "no"}
           tone={v.detected ? "text-up" : "text-muted"}
         />
+        )}
         {md ? (
           <>
             <Chip label="Bull" value={md.bull.score ?? "—"} tone={scoreColor(md.bull.score, "bull")} />
@@ -80,12 +88,26 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
             <ul className="space-y-1.5 text-xs">
               {tt.criteria.map((c) => (
                 <li key={c.label} className="flex gap-2">
-                  <span className={c.passed ? "text-up" : "text-down"}>{c.passed ? "✓" : "✗"}</span>
-                  <span className={c.passed ? "" : "text-muted"}>{c.label}</span>
+                  {c.locked ? (
+                    <>
+                      <span className="text-muted">🔒</span>
+                      <span className="text-muted/60 blur-[1.5px]">{c.label}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className={c.passed ? "text-up" : "text-down"}>{c.passed ? "✓" : "✗"}</span>
+                      <span className={c.passed ? "" : "text-muted"}>{c.label}</span>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
+            {tt.locked && <p className="mt-2 text-[11px] text-amber-300">The other criteria are part of Pro.</p>}
             <h4 className="mb-2 mt-5 text-sm font-semibold">VCP</h4>
+            {v.locked ? (
+              <Locked feature="VCP + pivot" text="Volatility contractions, the exact pivot (buy point), the logical stop and the risk %, on every stock." />
+            ) : (
+            <>
             {v.contractions.length > 0 && (
               <p className="mb-2 text-xs text-muted">Contractions: {v.contractions.map((c) => `−${c.depth_pct}%`).join(" → ")}</p>
             )}
@@ -105,6 +127,8 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
               <p className="tabular mt-2 text-xs">
                 Pivot <b>{v.pivot}</b> · Stop <b>{v.stop}</b> · Risk {v.risk_pct}%
               </p>
+            )}
+            </>
             )}
           </div>
           {md ? (

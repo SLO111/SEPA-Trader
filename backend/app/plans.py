@@ -18,6 +18,10 @@ PLANS: dict[str, dict] = {
         "backtesting": False,
         "trade_review": False,
         "max_journal_trades": 20,
+        # paid features: flip these to open or close the paywall
+        "pulse": False,  # vnicorn Pulse: daily confirmations / warnings
+        "sepa_details": False,  # full Trend Template criteria + VCP (free sees the score and the chart-readable criteria)
+        "ask_ai": False,  # Ask vnicornAI chart analysis
     },
     "pro": {
         "label": "Pro",
@@ -34,6 +38,9 @@ PLANS: dict[str, dict] = {
         "backtesting": False,
         "trade_review": False,
         "max_journal_trades": UNLIMITED,
+        "pulse": True,
+        "sepa_details": True,
+        "ask_ai": True,
     },
     "premium": {
         "label": "Premium",
@@ -50,6 +57,9 @@ PLANS: dict[str, dict] = {
         "backtesting": True,
         "trade_review": True,
         "max_journal_trades": UNLIMITED,
+        "pulse": True,
+        "sepa_details": True,
+        "ask_ai": True,
     },
 }
 
@@ -66,3 +76,16 @@ def limits_for(user) -> dict:
     if user.role == "admin":
         return PLANS["premium"]
     return PLANS.get(user.plan, PLANS["free"])
+
+
+# Trend Template criteria a free user sees: the ones anyone can read off the chart (price vs. the moving averages).
+FREE_TEMPLATE_CRITERIA = {0, 3, 4}
+
+
+def gate_sepa(rep: dict, limits: dict) -> dict:
+    """Free plan: Trend Template score + the chart-readable criteria; the other criteria and the VCP are locked."""
+    if limits.get("sepa_details"):
+        return rep
+    tt = rep.get("trend_template") or {}
+    crit = [c if i in FREE_TEMPLATE_CRITERIA else {"label": c["label"], "passed": None, "locked": True} for i, c in enumerate(tt.get("criteria", []))]
+    return {**rep, "trend_template": {**tt, "criteria": crit, "locked": True}, "vcp": {"locked": True, "detected": None, "contractions": []}}

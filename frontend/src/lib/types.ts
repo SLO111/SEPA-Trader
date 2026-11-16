@@ -13,6 +13,9 @@ export type PlanLimits = {
   trade_review: boolean;
   max_journal_trades: number;
   max_alert_rules: number;
+  pulse?: boolean;
+  sepa_details?: boolean;
+  ask_ai?: boolean;
 };
 
 export type User = {
@@ -75,11 +78,11 @@ export type SymbolInfo = {
   week52: { high: number; low: number };
   volume: { today: number; avg_50d: number; relative: number | null };
   stats: { market_cap_b: number | null; pe: number | null; dividend_yield: number | null; eps_growth: number | null; beta: number | null };
-  pulse?: { conf: number; warn: number; tone: string; today: { conf: string[]; warn: string[] }; recent: { date: string; conf: string[]; warn: string[] }[] } | null;
+  pulse?: { conf: number; warn: number; tone: string; today: { conf: string[]; warn: string[] }; recent: { date: string; conf: string[]; warn: string[] }[] } | { locked: true } | null;
   next_earnings: string | null;
   extended: { session: "pre_market" | "after_hours"; price: number; change: number; change_pct: number; reference_close: number; time: string } | null;
   overnight: null;
-  sepa: { rs_rating: number | null; template_passed: number; vcp: boolean; pivot: number | null; bull_score: number; bear_score: number; signals: string[] } | null;
+  sepa: { rs_rating: number | null; template_passed: number; vcp: boolean | null; pivot: number | null; bull_score: number; bear_score: number; signals: string[]; locked?: boolean } | null;
 };
 
 export type Factor = { key: string; label: string; value: number; weight: number; contribution: number };
@@ -88,9 +91,10 @@ export type ScoreBlock = { score: number | null; label: string; factors: Factor[
 export type SepaReport = {
   symbol: string;
   rs_rating: number | null;
-  trend_template: { criteria: { label: string; passed: boolean }[]; passed_count: number; all_passed: boolean };
+  trend_template: { criteria: { label: string; passed: boolean | null; locked?: boolean }[]; passed_count: number; all_passed: boolean; locked?: boolean };
   vcp: {
-    detected: boolean;
+    locked?: boolean;
+    detected: boolean | null;
     reason?: string;
     contractions: { start: string; end: string; high: number; low: number; depth_pct: number }[];
     pivot?: number;

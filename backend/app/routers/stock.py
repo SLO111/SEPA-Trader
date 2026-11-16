@@ -40,7 +40,10 @@ def _build(symbol: str, user: User) -> dict:
     co = market_data.company(symbol)
     quote = market_data.quote(symbol)
     returns = period_returns(hist["close"])
-    sepa = sepa_report(market_data.history, symbol, _rs_for(symbol))
+    from ..plans import gate_sepa
+
+    sepa_full = sepa_report(market_data.history, symbol, _rs_for(symbol))
+    sepa = gate_sepa(sepa_full, limits_for(user))
     if not limits_for(user)["move_detector"]:
         sepa["move_detector"] = None
     peers = _peers(symbol, co.get("sector") or SYMBOLS.get(symbol, {}).get("sector", ""))

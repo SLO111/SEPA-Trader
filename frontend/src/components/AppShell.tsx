@@ -17,6 +17,7 @@ const NAV: { label: string; tabs: { href: string; label: string; hidden?: boolea
     tabs: [
       { href: "/ideas", label: "Trade ideas" },
       { href: "/scanner", label: "Move Detector" },
+      { href: "/pulse", label: "Pulse" },
       { href: "/backtest", label: "Backtest" },
     ],
   },

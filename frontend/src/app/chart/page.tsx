@@ -232,7 +232,7 @@ function ChartWorkspace() {
             onClick={() => setAsk(true)}
             className="rounded-md bg-gradient-to-r from-violet-500/80 to-cyan-500/80 px-2.5 py-1 text-sm font-medium text-white shadow shadow-violet-500/20 hover:from-violet-500 hover:to-cyan-500"
           >
-            ✦ Ask vnicornAI
+            ✦ Ask vnicornAI{!user?.limits.ask_ai && <span className="ml-1.5 rounded bg-black/30 px-1 text-[10px]">🔒 Pro</span>}
           </button>
           <Link href={`/alerts?symbol=${encodeURIComponent(symbol)}`} className="rounded px-2 py-1 text-sm text-muted hover:bg-panel-2 hover:text-text">
             🔔 Alert
@@ -264,7 +264,7 @@ function ChartWorkspace() {
         <SymbolInfoPanel symbol={symbol} info={info} error={infoError} />
       </aside>
 
-      {ask && <AskVnicorn symbol={symbol} onClose={() => setAsk(false)} />}
+      {ask && <AskVnicorn symbol={symbol} locked={!user?.limits.ask_ai} onClose={() => setAsk(false)} />}
       {picker && (
         <IndicatorPicker
           defs={defs}

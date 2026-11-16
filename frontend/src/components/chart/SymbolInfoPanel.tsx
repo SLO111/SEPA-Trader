@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Locked from "@/components/Locked";
 import { scoreColor } from "@/components/ScoreBadge";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
 import type { SymbolInfo } from "@/lib/types";
@@ -103,7 +104,13 @@ export default function SymbolInfoPanel({ symbol, info, error }: { symbol: strin
         <Row k="Next earnings" v={info.next_earnings ?? "—"} />
       </div>
 
-      {info.pulse && (
+      {info.pulse && "locked" in info.pulse && (
+        <div className="border-b border-line p-4">
+          <div className="mb-2 text-[11px] uppercase tracking-wide text-muted">vnicorn Pulse · 10 days</div>
+          <Locked feature="vnicorn Pulse" text="Daily confirmations and warnings: up on volume, closes near the high, RS new highs… or lower lows and MA breaks. See if a stock is acting right." />
+        </div>
+      )}
+      {info.pulse && !("locked" in info.pulse) && (
         <div className="border-b border-line p-4">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] uppercase tracking-wide text-muted">vnicorn Pulse · 10 days</span>
@@ -146,7 +153,7 @@ export default function SymbolInfoPanel({ symbol, info, error }: { symbol: strin
           <Row k="Trend Template" v={`${sepa.template_passed}/8`} cls={sepa.template_passed === 8 ? "text-up" : sepa.template_passed <= 3 ? "text-down" : "text-amber-300"} />
           <Row k="Bull Score" v={Math.round(sepa.bull_score)} cls={scoreColor(sepa.bull_score, "bull")} />
           <Row k="Bear Score" v={Math.round(sepa.bear_score)} cls={scoreColor(sepa.bear_score, "bear")} />
-          <Row k="VCP" v={sepa.vcp ? `Yes · pivot ${sepa.pivot}` : "No"} cls={sepa.vcp ? "text-up" : "text-muted"} />
+          <Row k="VCP" v={"locked" in sepa ? <Locked feature="VCP" compact /> : sepa.vcp ? `Yes · pivot ${sepa.pivot}` : "No"} cls={sepa.vcp ? "text-up" : "text-muted"} />
           {sepa.signals.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {sepa.signals.map((x) => (

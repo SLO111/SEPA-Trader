@@ -193,3 +193,20 @@ def test_pdf_statement_text_and_file():
 def test_csv_dotted_dates_without_time():
     r = broker_csv.parse("Date;Symbol;Side;Quantity;Price\n03.04.2025;AAPL;BUY;1;200,5\n2025-04-05T10:00:00.123;AAPL;SELL;1;210\n")
     assert [t["date"] for t in r["txns"]] == ["2025-04-03", "2025-04-05"]
+
+
+def test_pulse_and_ask_ai_are_paid_features(client, register):
+    from app.db import SessionLocal
+    from app.models import User
+
+    h, _ = register("free-pulse@test.ro")
+    info = client.get("/api/market/info/AAPL", headers=h).json()
+    assert info["pulse"] == {"locked": True}
+    assert client.get("/api/market/analysis/AAPL", headers=h).status_code == 403
+    assert client.get("/api/sepa/pulse/leaders", headers=h).status_code == 403
+    with SessionLocal() as db:
+        db.query(User).filter_by(email="free-pulse@test.ro").one().plan = "pro"
+        db.commit()
+    lead = client.get("/api/sepa/pulse/leaders?limit=5", headers=h).json()
+    assert len(lead["constructive"]) == 5 and lead["constructive"][0]["net"] >= lead["warning"][0]["net"]
+    assert client.get("/api/market/analysis/AAPL", headers=h).status_code == 200  # paid plans include Ask vnicornAI

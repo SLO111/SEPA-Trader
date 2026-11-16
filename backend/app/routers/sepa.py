@@ -89,7 +89,7 @@ def scan(
 
     with SessionLocal() as db:
         vnicorn_service.load(db)  # makes the stored major-move probabilities available after a restart
-    pm = pulse_map()
+    pm = pulse_map() if limits_for(user)["pulse"] else {}
     rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"]), "pulse": pm.get(r["symbol"])} for r in cached_scan()]
     key = {"bull": "bull_score", "bear": "bear_score", "rs": "rs_rating", "ai": "ai_prob"}[sort]
     out = [
@@ -103,6 +103,26 @@ def scan(
     return {"provider": settings.data_provider, "count": len(out), "results": out}
 
 
+@router.get("/pulse/leaders")
+def pulse_leaders(limit: int = Query(25, ge=5, le=100), user: User = Depends(current_user)):
+    """vnicorn Pulse across the market: stocks acting best (most confirmations) and worst (most warnings) over 10 days."""
+    from engine.data.universe import SYMBOLS
+
+    if not limits_for(user)["pulse"]:
+        raise HTTPException(403, "vnicorn Pulse is available on the Pro and Premium plans.")
+    rows = [{"symbol": s, "name": SYMBOLS.get(s, {}).get("name", s), "sector": SYMBOLS.get(s, {}).get("sector", ""), **p,
+             "net": p["conf"] - p["warn"]} for s, p in pulse_map().items()]
+    for r in rows:
+        try:
+            q = market_data.quote(r["symbol"])
+            r["price"], r["change_pct"] = q["price"], q["change_pct"]
+        except Exception:
+            r["price"] = r["change_pct"] = None
+    best = sorted(rows, key=lambda r: (-r["net"], -r["conf"]))[:limit]
+    worst = sorted(rows, key=lambda r: (r["net"], -r["warn"]))[:limit]
+    return {"constructive": best, "warning": worst, "count": len(rows)}
+
+
 @router.get("/{symbol}")
 def report(symbol: str, user: User = Depends(current_user)):
     symbol = symbol.upper()
@@ -110,7 +130,9 @@ def report(symbol: str, user: User = Depends(current_user)):
         market_data.history(symbol)
     except Exception:
         raise HTTPException(404, f"No data found for {symbol}")
-    rep = sepa_report(market_data.history, symbol, _rs_for(symbol))
+    from ..plans import gate_sepa
+
+    rep = gate_sepa(sepa_report(market_data.history, symbol, _rs_for(symbol)), limits_for(user))
     if not limits_for(user)["move_detector"]:
         # Free plan sees Trend Template and VCP, but not the Move Detector scores.
         rep["move_detector"] = None

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { scoreColor } from "@/components/ScoreBadge";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
 import type { Candle, StockData } from "@/lib/types";
+import Locked from "@/components/Locked";
 import Gauge from "./Gauge";
 import Technicals from "./Technicals";
 import type { Range } from "./MiniChart";
@@ -271,14 +272,25 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
           <ul className="mt-3 space-y-1 text-xs">
             {tt.criteria.map((x) => (
               <li key={x.label} className="flex gap-2">
-                <span className={x.passed ? "text-up" : "text-down"}>{x.passed ? "✓" : "✗"}</span>
-                <span className={x.passed ? "" : "text-muted"}>{x.label}</span>
+                {x.locked ? (
+                  <>
+                    <span className="text-muted">🔒</span>
+                    <span className="text-muted/60 blur-[1.5px]">{x.label}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className={x.passed ? "text-up" : "text-down"}>{x.passed ? "✓" : "✗"}</span>
+                    <span className={x.passed ? "" : "text-muted"}>{x.label}</span>
+                  </>
+                )}
               </li>
             ))}
           </ul>
           <p className="mt-3 text-sm">
             VCP:{" "}
-            {d.sepa.vcp.detected ? (
+            {d.sepa.vcp.locked ? (
+              <Locked feature="VCP + pivot" compact />
+            ) : d.sepa.vcp.detected ? (
               <span className="text-up">
                 detected · pivot {d.sepa.vcp.pivot} · stop {d.sepa.vcp.stop}
               </span>

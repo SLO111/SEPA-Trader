@@ -57,7 +57,7 @@ const STEPS = [
 
 const PLANS = [
   { name: "Free", price: "0", items: ["15-minute delayed data", "1 watchlist, up to 10 tickers", "3 indicators per chart", "Market overview & heatmap"] },
-  { name: "Pro", price: "29", items: ["Real-time data", "Unlimited watchlists", "Daily trade ideas + Move Detector", "Automatic alerts & daily email"], highlight: true },
+  { name: "Pro", price: "29", items: ["Real-time data", "Daily trade ideas + Move Detector", "vnicorn Pulse + Ask vnicornAI", "Full Trend Template + VCP", "Automatic alerts & daily email"], highlight: true },
   { name: "Premium", price: "59", items: ["Everything in Pro", "Backtesting & validation", "Company PDF reports", "Trade Review"] },
 ];
 

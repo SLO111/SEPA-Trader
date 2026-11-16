@@ -143,7 +143,11 @@ def info(symbol: str, user: User = Depends(current_user)):
     try:
         from engine import pulse as pulse_mod
 
+        if not limits_for(user)["pulse"]:
+            raise PermissionError
         pulse_info = market_data._fast(f"pulse1:{sym}", 300, lambda: pulse_mod.summary(d, market_data.history("SPY")))
+    except PermissionError:
+        pulse_info = {"locked": True}
     except Exception:
         pulse_info = None
     avg_vol = float(d["volume"].iloc[-51:-1].mean())
@@ -164,7 +168,9 @@ def info(symbol: str, user: User = Depends(current_user)):
         "extended": ext,
         # Overnight (8 PM - 4 AM ET, e.g. Blue Ocean ATS) needs a paid feed; Yahoo and Finnhub free don't provide it.
         "overnight": None,
-        "sepa": {k: scan[k] for k in ("rs_rating", "template_passed", "vcp", "pivot", "bull_score", "bear_score", "signals")} if scan else None,
+        "sepa": ({k: scan[k] for k in ("rs_rating", "template_passed", "vcp", "pivot", "bull_score", "bear_score", "signals")}
+                 if limits_for(user)["sepa_details"] else {**{k: scan[k] for k in ("rs_rating", "template_passed", "bull_score", "bear_score")},
+                                                           "vcp": None, "pivot": None, "signals": [], "locked": True}) if scan else None,
     }
 
 
@@ -177,6 +183,8 @@ def analysis(symbol: str, user: User = Depends(current_user)):
     from .. import vnicorn_service
     from ..db import SessionLocal
 
+    if not limits_for(user)["ask_ai"]:
+        raise HTTPException(403, "Ask vnicornAI is available on the Pro and Premium plans.")
     sym = symbol.upper().strip()
     market_data.watch(sym)
     try:

@@ -37,6 +37,7 @@ class VcpStrategy(Strategy):
     id = "vcp"
     name = "VCP + pivot"
     category = "SEPA"
+    requires = "sepa_details"
     description = "Detects volatility contractions and shows the pivot (breakout point) and suggested stop."
     params = [Param("lookback", "Lookback (days)", 130, 40, 300), Param("swing", "Swing %", 4, 2, 15)]
 
@@ -189,6 +190,7 @@ class PulseStrategy(Strategy):
     id = "pulse"
     name = "vnicorn Pulse (confirmations / warnings)"
     category = "SEPA"
+    requires = "pulse"
     description = (
         "Daily confirmations (up on volume, close near high, RS line new high, good closes, breakouts…) vs. warnings "
         "(down on volume, close near low, lower lows, MA breaks, outside reversals…). Lower pane: confirmations minus warnings per day; "
