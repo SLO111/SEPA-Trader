@@ -32,8 +32,11 @@ def test_breakout_fires_exactly_on_breakout_bar():
 
 
 def test_breakout_requires_volume():
+    from datetime import datetime, timezone
+
     df = _append(vcp_stock(), [(95.6, 99.5, 1.2e6)])  # below 1.4x average
-    assert not evaluate(df, None, ["breakout"])
+    after_close = datetime(2030, 1, 1, tzinfo=timezone.utc)  # no intraday volume projection, whatever the time of the test run
+    assert not evaluate(df, None, ["breakout"], now=after_close)
 
 
 def test_failed_breakout():

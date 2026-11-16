@@ -167,6 +167,36 @@ class DataStore:
             self.prices[symbol] = pd.concat([df[df.index < day], row])
             self.live_at[symbol] = f"{bar['date']} {bar.get('time', '')}".strip()
 
+    def refresh_quotes(self, symbols: list[str], limit: int = 25) -> int:
+        """Real-time last price for the symbols people are looking at, from Finnhub quotes (Yahoo throttles cloud servers).
+        Today's volume is kept from the last Yahoo update (quotes have no volume)."""
+        from zoneinfo import ZoneInfo
+
+        from engine.data.providers import _finnhub
+
+        fh = _finnhub()
+        if fh is None:
+            return 0
+        et = ZoneInfo("America/New_York")
+        n = 0
+        for s in symbols[:limit]:
+            try:
+                q = fh.quote(s)
+            except Exception as e:
+                self.status["live_error"] = f"Finnhub quote: {type(e).__name__}"
+                continue
+            if not q or not q.get("c") or not q.get("t"):
+                continue
+            ts = datetime.fromtimestamp(int(q["t"]), tz=timezone.utc).astimezone(et)
+            df = self.get_prices(s)
+            vol = float(df["volume"].iloc[-1]) if df is not None and len(df) and df.index[-1].date() == ts.date() else 0.0
+            self.merge_bar(s, {"date": ts.strftime("%Y-%m-%d"), "open": float(q.get("o") or q["c"]), "high": float(q.get("h") or q["c"]),
+                               "low": float(q.get("l") or q["c"]), "close": float(q["c"]), "volume": vol, "time": ts.strftime("%H:%M ET")})
+            n += 1
+        if n:
+            self.status.update(live_source="finnhub", live_error=None)
+        return n
+
     def refresh_live(self, symbols: list[str], persist: bool = False) -> int:
         provider = self._provider_factory()
         n = 0
@@ -174,8 +204,9 @@ class DataStore:
             chunk = symbols[i : i + CHUNK]
             try:
                 bars = provider.live_bars(chunk)
-            except Exception:
+            except Exception as e:
                 log.warning("Live price update failed", exc_info=True)
+                self.status["live_error"] = f"Yahoo: {type(e).__name__}"
                 continue
             for s, bar in bars.items():
                 self.merge_bar(s, bar)
@@ -346,7 +377,11 @@ class DataStore:
                     try:
                         hot = self.hot_symbols()
                         if hot:
-                            self.refresh_live(hot)
+                            # real-time quotes first (Finnhub); Yahoo 1-minute bars for whatever is left
+                            done = self.refresh_quotes(hot)
+                            rest = hot if done == 0 else hot[25:]
+                            if rest:
+                                self.refresh_live(rest)
                         if time.monotonic() - last_full >= FULL_INTERVAL:
                             self.refresh_live(symbols_fn(), persist=True)
                             last_full = time.monotonic()

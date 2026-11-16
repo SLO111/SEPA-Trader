@@ -148,7 +148,7 @@ def test_md_trades_grader_analytics_import(client, register):
     g = client.get(f"/api/grader?source=portfolio&portfolio_id={pf['id']}", headers=h).json()
     assert g["summary"]["closed"] == 1 and g["trades"][0]["exit_class"] in ("Perfect", "Early", "Late", "Fair")
     md_g = client.get("/api/grader?source=md", headers=h).json()
-    assert len(md_g["trades"]) == 1 and md_g["trades"][0]["entry_class"] == "Pending"  # taken today: too soon to judge
+    assert len(md_g["trades"]) == 1 and md_g["trades"][0]["entry_class"] is None  # taken today: too soon to judge
     a = client.get(f"/api/analytics?source=portfolio&portfolio_id={pf['id']}", headers=h).json()
     assert a["trades"] == 1
     assert client.get(f"/api/grader/chart?symbol=MSFT&start=2025-06-02&end=2025-07-01", headers=h).json()

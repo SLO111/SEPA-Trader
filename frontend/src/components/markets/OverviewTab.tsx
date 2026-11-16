@@ -117,7 +117,7 @@ export default function OverviewTab({ o, onFearGreed }: { o: Overview; onFearGre
         })}
       </div>
 
-      {o.cycle?.length > 0 && <CyclePanel rows={o.cycle} />}
+      <div id="ov-cycle" className="scroll-mt-28">{o.cycle?.length > 0 && <CyclePanel rows={o.cycle} />}</div>
 
       <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
         <Panel title="Fear & Greed" right={<button onClick={onFearGreed} className="text-xs text-accent hover:underline">Details</button>}>

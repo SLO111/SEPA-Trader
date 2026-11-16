@@ -74,7 +74,7 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
     else:
         adverse = 0.0
     if xi is None and len(df) - 1 - ei < 5 and not extended:
-        entry_class = "Pending"
+        entry_class = None
         notes.append("Too soon to judge the entry: it needs at least 5 trading days after the buy.")
     elif extended:
         entry_class = "Late"
@@ -155,7 +155,7 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
 
 
 def aggregate(graded: list[dict]) -> dict:
-    ok = [g for g in graded if g.get("entry_class") and g["entry_class"] != "Pending"]
+    ok = [g for g in graded if g.get("entry_class")]
     closed = [g for g in ok if g.get("exit_class")]
     def dist(rows, key):
         c = Counter(r[key] for r in rows)

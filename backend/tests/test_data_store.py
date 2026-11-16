@@ -143,3 +143,23 @@ def test_universe_sp500_plus_uses_bundled_list_when_offline(monkeypatch):
     finally:
         universe.SYMBOLS.clear()
         universe.SYMBOLS.update(saved)
+
+
+def test_realtime_quotes_from_finnhub(monkeypatch):
+    import time as _t
+
+    import engine.data.providers as prov
+
+    s = ds.DataStore(LiveFake, SessionLocal)
+    s.put_prices("AAPL", SyntheticProvider().history("AAPL", "1d", 1))
+    last_day = s.get_prices("AAPL").index[-1]
+    t = int(pd.Timestamp(last_day.date()).tz_localize("America/New_York").replace(hour=10, minute=31).timestamp())
+
+    class Fake:
+        def quote(self, sym):
+            return {"c": 123.45, "o": 120, "h": 125, "l": 119, "pc": 118, "t": t}
+
+    monkeypatch.setattr(prov, "_finnhub", lambda: Fake())
+    assert s.refresh_quotes(["AAPL"]) == 1
+    df = s.get_prices("AAPL")
+    assert float(df["close"].iloc[-1]) == 123.45 and s.live_at["AAPL"].endswith("10:31 ET") and s.status["live_source"] == "finnhub"

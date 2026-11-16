@@ -1,5 +1,6 @@
 "use client";
 
+import AddToWatchlist from "@/components/AddToWatchlist";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -467,7 +468,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
             {rows?.map((r) => (
               <tr key={r.symbol} className="border-t border-line hover:bg-panel/60">
                 <td className="sticky left-0 z-[1] bg-bg px-3 py-2">
-                  <StockLink s={r.symbol} />
+                  <span className="flex items-center gap-1"><AddToWatchlist symbol={r.symbol} /><StockLink s={r.symbol} /></span>
                   <div className="max-w-[170px] truncate text-xs text-muted">{r.sector}</div>
                 </td>
                 <td className="tabular px-3 py-2 text-right">{fmt(r.price)}</td>

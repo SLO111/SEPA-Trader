@@ -9,17 +9,17 @@ import type { Candle, StrategyOutput } from "@/lib/types";
 
 const PriceChart = dynamic(() => import("@/components/PriceChart"), { ssr: false });
 
-type Cls = "Perfect" | "Early" | "Late" | "Fair" | "Pending";
+type Cls = "Perfect" | "Early" | "Late" | "Fair";
 type Graded = {
   ref: string; source: string; symbol: string; side: "long" | "short"; entry_date: string; entry_price: number; exit_date: string | null; exit_price: number | null;
-  stop?: number; entry_class?: Cls; exit_class?: Cls | null; grade?: string | null; score?: number | null; pnl_pct?: number; r_multiple?: number | null;
+  stop?: number; entry_class?: Cls | null; exit_class?: Cls | null; grade?: string | null; score?: number | null; pnl_pct?: number; r_multiple?: number | null;
   mfe_pct?: number; mae_pct?: number; left_on_table_pct?: number; days?: number; open?: boolean; notes: string[];
 };
 type Dist = { label: Cls; count: number; pct: number }[];
 type Resp = { trades: Graded[]; summary: { trades: number; closed: number; bought: Dist; sold: Dist; avg_score: number | null; avg_grade: string | null; top_mistake: string | null; grades: Record<string, number> } };
 
-const CLS: Record<Cls, string> = { Perfect: "bg-up/20 text-up", Early: "bg-amber-500/20 text-amber-300", Late: "bg-down/20 text-down", Fair: "bg-slate-500/25 text-slate-200", Pending: "border border-line text-muted" };
-const BAR: Record<Cls, string> = { Perfect: "bg-up", Early: "bg-amber-400", Late: "bg-down", Fair: "bg-slate-400", Pending: "bg-line" };
+const CLS: Record<Cls, string> = { Perfect: "bg-up/20 text-up", Early: "bg-amber-500/20 text-amber-300", Late: "bg-down/20 text-down", Fair: "bg-slate-500/25 text-slate-200" };
+const BAR: Record<Cls, string> = { Perfect: "bg-up", Early: "bg-amber-400", Late: "bg-down", Fair: "bg-slate-400" };
 const GRADE: Record<string, string> = { A: "bg-up text-white", B: "bg-up/60 text-white", C: "bg-amber-500 text-black", D: "bg-orange-600 text-white", F: "bg-down text-white" };
 
 function DistCard({ title, rows, verb }: { title: string; rows: Dist; verb: string }) {
@@ -63,54 +63,8 @@ function TradeChart({ t }: { t: Graded }) {
   );
 }
 
-/** TradeGrader: how well each buy and sell was timed, plus an A-F grade, for trades from Backtest and Portfolios. */
-export default function TradeGrader({ source: initial = "all", portfolioId }: { source?: string; portfolioId?: number }) {
-  const [source, setSource] = useState(initial);
-  const [data, setData] = useState<Resp | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    setData(null);
-    setError("");
-    api<Resp>(`/api/grader?source=${source}${portfolioId ? `&portfolio_id=${portfolioId}` : ""}`).then(setData).catch((e) => setError(e.message));
-  }, [source, portfolioId]);
-
-  const s = data?.summary;
+function GradeTable({ rows, open, setOpen }: { rows: Graded[]; open: string | null; setOpen: (v: string | null) => void }) {
   return (
-    <div className="space-y-4">
-      {!portfolioId && (
-        <div className="flex flex-wrap gap-1">
-          {[["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["portfolio", "Portfolios"]].map(([id, label]) => (
-            <button key={id} onClick={() => setSource(id)} className={`rounded-full px-3 py-1 text-sm ${source === id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-      {error && <p className="text-sm text-down">{error}</p>}
-      {!data && !error && <p className="text-sm text-muted">Grading your trades…</p>}
-      {data && data.trades.length === 0 && (
-        <div className="rounded-xl border border-line bg-panel p-6 text-center text-sm text-muted">
-          No trades to grade yet. Take trades from <Link href="/ideas" className="text-accent hover:underline">Trade ideas</Link> or the{" "}
-          <Link href="/scanner" className="text-accent hover:underline">Move Detector</Link>, or add / import trades in{" "}
-          <Link href="/portfolios" className="text-accent hover:underline">Portfolios</Link>.
-        </div>
-      )}
-      {s && data!.trades.length > 0 && (
-        <>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="flex items-center gap-4 rounded-xl border border-line bg-panel p-4">
-              <span className={`grid h-16 w-16 place-items-center rounded-xl text-3xl font-bold ${s.avg_grade ? GRADE[s.avg_grade] : "bg-panel-2 text-muted"}`}>{s.avg_grade ?? "—"}</span>
-              <div className="text-sm">
-                <div className="text-muted">Average grade</div>
-                <div className="tabular">{s.closed} closed · {s.trades - s.closed} open</div>
-                {s.top_mistake && <div className="mt-1 text-xs text-amber-300">Most common: {s.top_mistake.toLowerCase()}</div>}
-              </div>
-            </div>
-            <DistCard title="Entries" rows={s.bought} verb="Bought" />
-            <DistCard title="Exits" rows={s.sold} verb="Sold" />
-          </div>
           <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full min-w-[820px] text-sm">
               <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">
@@ -121,7 +75,7 @@ export default function TradeGrader({ source: initial = "all", portfolioId }: { 
                 </tr>
               </thead>
               <tbody>
-                {data!.trades.map((t) => (
+                {rows.map((t) => (
                   <Fragment key={t.ref}>
                     <tr onClick={() => setOpen(open === t.ref ? null : t.ref)} className="cursor-pointer border-t border-line hover:bg-panel-2/40">
                       <td className="px-3 py-2">
@@ -134,7 +88,7 @@ export default function TradeGrader({ source: initial = "all", portfolioId }: { 
                       <td className="tabular whitespace-nowrap px-3 py-2 text-xs">{t.entry_date}<div className="text-muted">${fmt(t.entry_price)}</div></td>
                       <td className="tabular whitespace-nowrap px-3 py-2 text-xs">{t.exit_date ?? "open"}<div className="text-muted">{t.exit_price ? `$${fmt(t.exit_price)}` : ""}</div></td>
                       <td className={`tabular px-3 py-2 text-right ${tone(t.pnl_pct)}`}>{pct(t.pnl_pct)}</td>
-                      <td className="px-3 py-2">{t.entry_class && <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${CLS[t.entry_class]}`}>{t.entry_class}</span>}</td>
+                      <td className="px-3 py-2">{t.entry_class ? <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${CLS[t.entry_class]}`}>{t.entry_class}</span> : <span className="text-xs text-muted">—</span>}</td>
                       <td className="px-3 py-2">{t.exit_class ? <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${CLS[t.exit_class]}`}>{t.exit_class}</span> : <span className="text-xs text-muted">—</span>}</td>
                       <td className="tabular px-3 py-2 text-right text-xs text-muted">{t.left_on_table_pct ? `${t.left_on_table_pct}%` : "—"}</td>
                     </tr>
@@ -161,6 +115,86 @@ export default function TradeGrader({ source: initial = "all", portfolioId }: { 
               </tbody>
             </table>
           </div>
+  );
+}
+
+/** TradeGrader: how well each buy and sell was timed, plus an A-F grade, for trades from Backtest and Portfolios. */
+export default function TradeGrader({ source: initial = "all", portfolioId }: { source?: string; portfolioId?: number }) {
+  const [source, setSource] = useState(initial);
+  const [pf, setPf] = useState<number | "">("");
+  const [portfolios, setPortfolios] = useState<{ id: number; name: string }[]>([]);
+  useEffect(() => {
+    api<{ id: number; name: string }[]>("/api/portfolios").then(setPortfolios).catch(() => {});
+  }, []);
+  const pid = portfolioId ?? (source === "portfolio" && pf !== "" ? pf : undefined);
+  const [data, setData] = useState<Resp | null>(null);
+  const [open_, setOpen] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setData(null);
+    setError("");
+    api<Resp>(`/api/grader?source=${source}${pid ? `&portfolio_id=${pid}` : ""}`).then(setData).catch((e) => setError(e.message));
+  }, [source, pid]);
+
+  const s = data?.summary;
+  return (
+    <div className="space-y-4">
+      {!portfolioId && (
+        <div className="flex flex-wrap gap-1">
+          {[["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["portfolio", "Portfolios"]].map(([id, label]) => (
+            <button key={id} onClick={() => setSource(id)} className={`rounded-full px-3 py-1 text-sm ${source === id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
+              {label}
+            </button>
+          ))}
+{source === "portfolio" && portfolios.length > 0 && (
+          <select value={pf} onChange={(e) => setPf(e.target.value === "" ? "" : Number(e.target.value))}
+            className="ml-1 rounded-full border border-line bg-panel px-3 py-1 text-sm text-text">
+            <option value="">All portfolios</option>
+            {portfolios.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        )}
+        </div>
+      )}
+      {error && <p className="text-sm text-down">{error}</p>}
+      {!data && !error && <p className="text-sm text-muted">Grading your trades…</p>}
+      {data && data.trades.length === 0 && (
+        <div className="rounded-xl border border-line bg-panel p-6 text-center text-sm text-muted">
+          No trades to grade yet. Take trades from <Link href="/ideas" className="text-accent hover:underline">Trade ideas</Link> or the{" "}
+          <Link href="/scanner" className="text-accent hover:underline">Move Detector</Link>, or add / import trades in{" "}
+          <Link href="/portfolios" className="text-accent hover:underline">Portfolios</Link>.
+        </div>
+      )}
+      {s && data!.trades.length > 0 && (
+        <>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="flex items-center gap-4 rounded-xl border border-line bg-panel p-4">
+              <span className={`grid h-16 w-16 place-items-center rounded-xl text-3xl font-bold ${s.avg_grade ? GRADE[s.avg_grade] : "bg-panel-2 text-muted"}`}>{s.avg_grade ?? "—"}</span>
+              <div className="text-sm">
+                <div className="text-muted">Average grade</div>
+                <div className="tabular">{s.closed} closed · {s.trades - s.closed} open</div>
+                {s.top_mistake && <div className="mt-1 text-xs text-amber-300">Most common: {s.top_mistake.toLowerCase()}</div>}
+              </div>
+            </div>
+            <DistCard title="Entries" rows={s.bought} verb="Bought" />
+            <DistCard title="Exits" rows={s.sold} verb="Sold" />
+          </div>
+          {(() => {
+            const open = data!.trades.filter((t) => t.open);
+            const closed = data!.trades.filter((t) => !t.open);
+            return (
+              <>
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold">Closed trades <span className="text-muted">({closed.length})</span></h3>
+                  {closed.length ? <GradeTable rows={closed} open={open_} setOpen={setOpen} /> : <p className="text-sm text-muted">No closed trades yet.</p>}
+                </section>
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold">Open trades <span className="text-muted">({open.length})</span> <span className="text-xs font-normal text-muted">· the buy is graded after 5 trading days, the sale when the trade closes</span></h3>
+                  {open.length ? <GradeTable rows={open} open={open_} setOpen={setOpen} /> : <p className="text-sm text-muted">No open trades.</p>}
+                </section>
+              </>
+            );
+          })()}
           <p className="text-[11px] text-muted">
             Buy timing: Perfect = near the breakout / the low and it never went against you; Early = it dropped more than 1.5 ATR after you bought; Late = bought
             extended. Sell timing: Perfect = within 3% of the best price around the sale; Early = it rose another 10% after; Late = gave back more than half of the gain.

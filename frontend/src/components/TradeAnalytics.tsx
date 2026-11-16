@@ -27,11 +27,17 @@ function Stat({ label, value, cls = "", hint }: { label: string; value: string; 
 /** Trading statistics over your closed trades: expectancy, win/loss efficiency, consistency by month. */
 export default function TradeAnalytics() {
   const [source, setSource] = useState("all");
+  const [pf, setPf] = useState<number | "">("");
+  const [portfolios, setPortfolios] = useState<{ id: number; name: string }[]>([]);
+  useEffect(() => {
+    api<{ id: number; name: string }[]>("/api/portfolios").then(setPortfolios).catch(() => {});
+  }, []);
+  const pid = source === "portfolio" && pf !== "" ? pf : undefined;
   const [a, setA] = useState<A | null>(null);
   useEffect(() => {
     setA(null);
-    api<A>(`/api/analytics?source=${source}`).then(setA).catch(() => setA({ trades: 0 }));
-  }, [source]);
+    api<A>(`/api/analytics?source=${source}${pid ? `&portfolio_id=${pid}` : ""}`).then(setA).catch(() => setA({ trades: 0 }));
+  }, [source, pid]);
   const max = Math.max(1, ...(a?.histogram ?? []).map((h) => h.value));
   return (
     <div className="space-y-4">
@@ -41,6 +47,13 @@ export default function TradeAnalytics() {
             {label}
           </button>
         ))}
+{source === "portfolio" && portfolios.length > 0 && (
+          <select value={pf} onChange={(e) => setPf(e.target.value === "" ? "" : Number(e.target.value))}
+            className="ml-1 rounded-full border border-line bg-panel px-3 py-1 text-sm text-text">
+            <option value="">All portfolios</option>
+            {portfolios.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        )}
       </div>
       {!a && <p className="text-sm text-muted">Calculating…</p>}
       {a && a.trades === 0 && <p className="rounded-xl border border-line bg-panel p-6 text-center text-sm text-muted">Statistics appear once you have closed trades.</p>}

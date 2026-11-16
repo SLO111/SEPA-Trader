@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import MoveDetectorValidation from "@/components/MoveDetectorValidation";
 import { api, patch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { User } from "@/lib/types";
@@ -136,6 +137,11 @@ function AdminPanel() {
             </tbody>
           </table>
         </div>
+        <section className="mt-8">
+          <h2 className="mb-1 text-lg font-semibold">Move Detector validation</h2>
+          <p className="mb-4 text-sm text-muted">For calibrating the algorithm: do high Bull/Bear scores precede major moves more often than chance? Not shown to clients.</p>
+          <MoveDetectorValidation />
+        </section>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import AddToWatchlist from "@/components/AddToWatchlist";
 import AppShell from "@/components/AppShell";
 import { ScoreBar } from "@/components/ScoreBadge";
 import { ApiError, api, post } from "@/lib/api";
@@ -144,9 +145,12 @@ function Scanner() {
                 rows.map((r) => (
                   <tr key={r.symbol} onClick={() => router.push(`/chart?s=${encodeURIComponent(r.symbol)}`)} className="cursor-pointer border-t border-line hover:bg-panel/70">
                     <td className="px-4 py-2.5">
-                      <Link href={`/stock?s=${encodeURIComponent(r.symbol)}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-accent">
-                        {r.symbol}
-                      </Link>
+                      <span className="flex items-center gap-1">
+                        <AddToWatchlist symbol={r.symbol} />
+                        <Link href={`/stock?s=${encodeURIComponent(r.symbol)}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-accent">
+                          {r.symbol}
+                        </Link>
+                      </span>
                       <div className="max-w-[200px] truncate text-xs text-muted">{r.name}</div>
                     </td>
                     <td className="tabular px-4 py-2.5 text-right">{r.price.toFixed(2)}</td>

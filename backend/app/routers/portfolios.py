@@ -1,3 +1,4 @@
+from typing import Literal
 from datetime import date
 
 import pandas as pd
@@ -408,3 +409,52 @@ def import_csv(pid: int, body: ImportIn, user: User = Depends(current_user), db:
                             shares=x["shares"], price=x["price"], fees=x["fees"]))
     db.commit()
     return {**res, "error": None, "saved": len(res["txns"])}
+
+
+class ImportPreviewIn(BaseModel):
+    filename: str = Field(default="import.csv", max_length=200)
+    content_base64: str = Field(max_length=14_000_000)  # up to ~10 MB files
+    mapping: dict[str, int] | None = None  # manual column mapping: field -> column index
+    header_row: int | None = None
+    table: int = 0
+
+
+class ImportApplyIn(BaseModel):
+    kind: Literal["trades", "positions"]
+    as_of: str
+    rows: list[dict] = Field(max_length=20_000)
+    close_missing: bool = True
+
+
+def _own(db: Session, user: User, pid: int) -> Portfolio:
+    p = db.get(Portfolio, pid)
+    if p is None or p.user_id != user.id:
+        raise HTTPException(404, "Portfolio not found")
+    return p
+
+
+@router.post("/portfolios/{pid}/import/preview")
+def import_preview(pid: int, body: ImportPreviewIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Any broker file (CSV, Excel, PDF): trades or a statement of positions, with symbols resolved and what would change."""
+    import base64
+
+    from .. import import_service
+
+    _own(db, user, pid)
+    try:
+        data = base64.b64decode(body.content_base64.split(",")[-1])
+    except ValueError:
+        raise HTTPException(400, "The file could not be decoded")
+    return import_service.preview(db, pid, body.filename, data, body.mapping, body.header_row, body.table)
+
+
+@router.post("/portfolios/{pid}/import/apply")
+def import_apply(pid: int, body: ImportApplyIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Save the import: new trades only (no duplicates), or reconcile the portfolio to the statement of positions."""
+    from .. import import_service
+
+    _own(db, user, pid)
+    try:
+        return import_service.apply(db, pid, body.kind, body.as_of, body.rows, body.close_missing)
+    except LedgerError as e:
+        raise HTTPException(400, str(e))

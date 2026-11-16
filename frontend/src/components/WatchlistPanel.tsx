@@ -74,6 +74,9 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
       setLists(ls);
       setActiveId(ls[0]?.id ?? null);
     });
+    const refresh = () => api<Watchlist[]>("/api/watchlists").then(setLists).catch(() => {});
+    window.addEventListener("watchlists-changed", refresh);
+    return () => window.removeEventListener("watchlists-changed", refresh);
   }, []);
 
   const loadQuotes = useCallback(async (symbols: string[]) => {

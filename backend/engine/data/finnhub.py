@@ -66,6 +66,14 @@ class Finnhub:
     def recommendations(self, symbol: str) -> list[dict]:
         return self.get("/stock/recommendation", symbol=symbol) or []
 
+    def search(self, query: str) -> list[dict]:
+        """Symbol lookup by ticker, name or ISIN."""
+        return (self.get("/search", q=query) or {}).get("result") or []
+
+    def quote(self, symbol: str) -> dict:
+        """Real-time quote: c (last), o, h, l, pc (previous close), t (unix time)."""
+        return self.get("/quote", symbol=symbol) or {}
+
     def insider_transactions(self, symbol: str) -> list[dict]:
         return (self.get("/stock/insider-transactions", symbol=symbol) or {}).get("data") or []
 
