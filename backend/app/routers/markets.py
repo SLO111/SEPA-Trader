@@ -69,6 +69,7 @@ def overview(user: User = Depends(current_user)):
         "demo": settings.data_provider == "synthetic",
         "indices": _indices(),
         "fear_greed": {k: fg.get(k) for k in ("score", "label", "previous", "as_of")},
+        "cycle": _cycle(),
         "gainers": mt.movers(rows, "gainers", 5),
         "losers": mt.movers(rows, "losers", 5),
         "active": mt.movers(rows, "active", 5),
@@ -80,6 +81,21 @@ def overview(user: User = Depends(current_user)):
             "pct_above_ma50": round(100 * sum(r["above_ma50"] for r in rows) / len(rows)) if rows else None,
         },
     }
+
+
+def _cycle() -> list[dict]:
+    """Market cycle stage (Accumulation / Markup / Distribution / Markdown) of the main indexes."""
+    from engine.stages import stage_now
+
+    out = []
+    for sym, label in (("SPY", "S&P 500"), ("QQQ", "Nasdaq 100"), ("IWM", "Russell 2000")):
+        try:
+            st = stage_now(market_data.history(sym))
+        except Exception:
+            st = None
+        if st:
+            out.append({"symbol": sym, "label": label, **st})
+    return out
 
 
 @router.get("/fear-greed")

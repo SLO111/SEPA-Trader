@@ -57,6 +57,44 @@ function MoverTable({ rows }: { rows: MoverRow[] }) {
   );
 }
 
+const STAGES = [
+  { n: 1, name: "Accumulation", hint: "Base after a decline. Watch, build a watchlist.", cls: "bg-slate-500/30 text-slate-200" },
+  { n: 2, name: "Markup", hint: "Uptrend. The stage to own stocks.", cls: "bg-up/30 text-up" },
+  { n: 3, name: "Distribution", hint: "Topping. Take profits, tighten stops.", cls: "bg-amber-500/30 text-amber-300" },
+  { n: 4, name: "Markdown", hint: "Downtrend. Cash or shorts, no new longs.", cls: "bg-down/30 text-down" },
+];
+
+function CyclePanel({ rows }: { rows: Overview["cycle"] }) {
+  return (
+    <Panel title="Market cycle" right={<span className="text-xs text-muted">Stage analysis on the 30-week average</span>}>
+      <div className="grid gap-3 md:grid-cols-3">
+        {rows.map((r) => {
+          const cur = STAGES[r.stage - 1];
+          return (
+            <Link key={r.symbol} href={`/chart?s=${r.symbol}`} className="rounded-lg bg-panel-2/50 p-3 hover:bg-panel-2">
+              <div className="flex items-baseline justify-between">
+                <span className="font-medium">{r.label}</span>
+                <span className="text-[11px] text-muted">{r.weeks} wk · since {r.since}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-4 gap-1">
+                {STAGES.map((s) => (
+                  <div key={s.n} className={`rounded py-1 text-center text-[10px] font-semibold ${s.n === r.stage ? s.cls : "bg-line/40 text-muted/60"}`}>
+                    {s.n}. {s.name}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-muted">
+                {cur.hint} 30-wk MA {fmt(r.ma30w)} ({r.slope_pct >= 0 ? "+" : ""}
+                {r.slope_pct}% / 4 wk)
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
 export default function OverviewTab({ o, onFearGreed }: { o: Overview; onFearGreed: () => void }) {
   const [moverTab, setMoverTab] = useState<"gainers" | "losers" | "active">("gainers");
   const b = o.breadth;
@@ -78,6 +116,8 @@ export default function OverviewTab({ o, onFearGreed }: { o: Overview; onFearGre
           );
         })}
       </div>
+
+      {o.cycle?.length > 0 && <CyclePanel rows={o.cycle} />}
 
       <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
         <Panel title="Fear & Greed" right={<button onClick={onFearGreed} className="text-xs text-accent hover:underline">Details</button>}>

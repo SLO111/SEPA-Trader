@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from .indicators import atr, ema, sma
-from . import structure
+from . import stages, structure
 from .swings import zigzag
 
 MAX_RISK = 0.09  # reject setups that need a stop further than 9% away
@@ -139,6 +139,12 @@ def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long
         st = structure.analyze(df.iloc[-300:]).state
         # Structure count: no longs while sellers defend lower highs after a Bear 4/4, no shorts during a Bull 4/4.
         long_ok, short_ok = st["regime"] != "bear", st["regime"] != "bull"
+        # Market cycle: own stocks only in Stage 2 (INVEST may start in a late Stage 1 base); short only in Stage 3-4.
+        sn = stages.stage_now(df)
+        stage = sn["stage"] if sn else 0
+        trade_ok = long_ok and stage == 2
+        invest_ok = long_ok and stage in (1, 2)
+        short_ok = short_ok and stage in (3, 4)
         bull += 8 if st["regime"] == "bull" else 0
         bear += 8 if st["regime"] == "bear" else 0
         supports = _below(lv["support"] + [e21, s50], price)
@@ -147,7 +153,7 @@ def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long
         # TRADE: fresh breakout above the 20-day high on volume
         prior_high = float(h.iloc[-21:-1].max())
         rvol = float(v.iloc[-1]) / float(v.iloc[-51:-1].mean())
-        if long_ok and price > prior_high and rvol >= 1.5 and tr["daily"] >= 0 and bull >= 55:
+        if trade_ok and price > prior_high and rvol >= 1.5 and tr["daily"] >= 0 and bull >= 55:
             stop = max(float(df["low"].iloc[-1]), price - 1.5 * a)
             idea = _long(sym, "TRADE", price, stop, lv, hi52, bull + rs / 4 + rvol * 5, f"Broke out above the 20-day high ({prior_high:.2f}) on {rvol:.1f}× volume.")
             if idea:
@@ -155,7 +161,7 @@ def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long
                 continue
 
         # SWING: daily + weekly uptrend, leader, pullback to support or tight base near the pivot
-        if long_ok and tr["daily"] >= 0 and tr["weekly"] == 1 and tt >= 6 and rs >= 70:
+        if trade_ok and tr["daily"] >= 0 and tr["weekly"] == 1 and tt >= 6 and rs >= 70:
             pullback = (price - near_support) / price <= 0.05
             base = bool(s.get("vcp")) and s.get("pivot") and 0 <= (s["pivot"] - price) / price <= 0.04
             if pullback or base:
@@ -171,7 +177,7 @@ def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long
         # INVEST: weekly + monthly uptrend, near long-term support
         w = c.resample("W-FRI").last().dropna()
         sma30w = float(sma(w, 30).iloc[-1]) if len(w) >= 30 else np.nan
-        if long_ok and tr["weekly"] == 1 and tr["monthly"] == 1 and rs >= 60 and not np.isnan(sma30w) and 0 <= (price - sma30w) / price <= 0.08:
+        if invest_ok and tr["weekly"] == 1 and tr["monthly"] == 1 and rs >= 60 and not np.isnan(sma30w) and 0 <= (price - sma30w) / price <= 0.08:
             stop = sma30w * 0.95
             idea = _long(sym, "INVEST", price, stop, {"resistance": []}, hi52, rs + tr["daily"] * 5 + bull / 4,
                          f"Long-term uptrend; near the 30-week average ({sma30w:.2f}), a historical support.")

@@ -24,6 +24,7 @@ export type Overview = {
   demo: boolean;
   indices: { symbol: string; label: string; price: number; change: number; change_pct: number; spark: number[] }[];
   fear_greed: FearGreed;
+  cycle: { symbol: string; label: string; stage: 1 | 2 | 3 | 4; name: string; since: string; weeks: number; ma30w: number; slope_pct: number }[];
   gainers: MoverRow[]; losers: MoverRow[]; active: MoverRow[];
   sectors: SectorRow[];
   leaders: LeaderRow[];

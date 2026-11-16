@@ -9,7 +9,7 @@ import { fmt, pct, tone } from "@/lib/format";
 
 type Idea = {
   id: number; date: string; symbol: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT"; side: "long" | "short";
-  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
+  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
 type Resp = {
@@ -111,14 +111,14 @@ function Ideas() {
               <table className="w-full min-w-[1100px] text-sm">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
                   <tr>
-                    {["Ticker", "TF", "Date", "Weight", "Entry", "Current", "%", "Stop", "Trim", "Target", "R/R", "Structure", "Range", "Status"].map((h) => (
+                    {["Ticker", "TF", "Date", "Weight", "Entry", "Current", "%", "Stop", "Trim", "Target", "R/R", "Stage", "Structure", "Range", "Status"].map((h) => (
                       <th key={h} className={`px-3 py-2.5 ${["Weight", "Entry", "Current", "%", "Stop", "Trim", "Target"].includes(h) ? "text-right" : ""}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {!data && <tr><td colSpan={14} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
-                  {data?.ideas.length === 0 && <tr><td colSpan={14} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
+                  {!data && <tr><td colSpan={15} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
+                  {data?.ideas.length === 0 && <tr><td colSpan={15} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
                   {data?.ideas.map((i) => {
                     const move = i.current !== null ? ((i.current / i.entry - 1) * 100 * (i.side === "short" ? -1 : 1)) : null;
                     return (
@@ -142,6 +142,15 @@ function Ideas() {
                           <td className="px-3 py-2">
                             <span className={`tabular rounded px-2 py-1 text-xs font-semibold ${i.rr >= 3 ? "bg-up/80 text-white" : i.rr >= 2 ? "bg-up/40 text-white" : "bg-amber-500/60 text-black"}`}>{i.rr}</span>
                           </td>
+                          <td className="px-3 py-2">
+                            {i.stage ? (
+                              <span title={`${i.stage.name} for ${i.stage.weeks} weeks`} className={`whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold ${STAGE_STYLE[i.stage.stage]}`}>
+                                S{i.stage.stage} {i.stage.name}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted">—</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2"><StructureBadge s={i.structure} /></td>
                           <td className="px-3 py-2"><RangeBar i={i} /></td>
                           <td className="px-3 py-2">
@@ -151,10 +160,18 @@ function Ideas() {
                         </tr>
                         {open === i.id && (
                           <tr className="bg-panel-2/30">
-                            <td colSpan={14} className="px-4 py-3 text-sm text-muted">
+                            <td colSpan={15} className="px-4 py-3 text-sm text-muted">
                               <b className="text-text">Why:</b> {i.reason} {i.side === "short" ? "Short" : "Buy"} near ${fmt(i.entry)}, stop ${fmt(i.stop)}
                               {i.trim ? `, trim part at $${fmt(i.trim)}` : ""}, target ${fmt(i.target)}. Suggested weight {i.weight}% risks about 1% of the account at the stop.
                               {i.closed_at && ` Closed ${i.closed_at}.`}
+                              <div className="mt-2">
+                                <b className="text-text">Position plan:</b>{" "}
+                                {i.side === "short"
+                                  ? `Short half at $${fmt(i.entry)}; add the other half only after it closes below $${fmt(i.entry - (i.stop - i.entry))} (1R in your favor), never on a rally against you. `
+                                  : `Buy half (${(i.weight / 2).toFixed(1)}%) at $${fmt(i.entry)}; add the other half only after it closes above $${fmt(i.entry + (i.entry - i.stop))} (1R in profit) — never add below the entry. `}
+                                {i.trim ? `Sell half at $${fmt(i.trim)} and move the stop to break-even; ` : "Once up 2R, move the stop to break-even; "}
+                                let the rest run to ${fmt(i.target)} or until the structure defence breaks. The stop at ${fmt(i.stop)} applies to the whole position.
+                              </div>
                               {i.structure?.step === 4 && i.structure.defence && ` Structure ${i.structure.text}: defend at $${fmt(i.structure.defence)} (${i.structure.side === "bull" ? "higher lows" : "lower highs"}).`}
                             </td>
                           </tr>
@@ -198,6 +215,13 @@ function Ideas() {
     </div>
   );
 }
+
+const STAGE_STYLE: Record<number, string> = {
+  1: "bg-slate-500/25 text-slate-200",
+  2: "bg-up/25 text-up",
+  3: "bg-amber-500/25 text-amber-300",
+  4: "bg-down/25 text-down",
+};
 
 /** Structure Count 4/4: who is in control (4/4 = confirmed, 1–3 = count in progress). */
 function StructureBadge({ s }: { s?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null }) {

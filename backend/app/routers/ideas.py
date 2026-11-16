@@ -15,22 +15,22 @@ router = APIRouter(prefix="/api", tags=["ideas"])
 OPEN = ("WAIT", "BUY", "TRIM")
 
 
-def _structure(symbol: str) -> dict | None:
-    """Current Structure Count 4/4 for the symbol (live, from daily prices)."""
-    from engine import structure
+def _live(symbol: str) -> dict:
+    """Current Structure Count 4/4 and market cycle stage for the symbol (live, from daily prices)."""
+    from engine import stages, structure
 
     from .. import market_data
 
     try:
         df = market_data.history(symbol)
-        return structure.label(structure.analyze(df.iloc[-300:]).state)
     except Exception:
-        return None
+        return {"structure": None, "stage": None}
+    return {"structure": structure.label(structure.analyze(df.iloc[-300:]).state), "stage": stages.stage_now(df)}
 
 
 def idea_out(r: TradeIdea, with_structure: bool = False) -> dict:
     return {
-        **({"structure": _structure(r.symbol)} if with_structure else {}),
+        **(_live(r.symbol) if with_structure else {}),
         "id": r.id, "date": r.batch_date.isoformat(), "symbol": r.symbol, "timeframe": r.timeframe, "side": r.side,
         "entry": r.entry, "stop": r.stop, "trim": r.trim, "target": r.target, "rr": r.rr, "weight": r.weight,
         "score": r.score, "reason": r.reason, "status": r.status, "current": r.current, "pnl_pct": r.pnl_pct,

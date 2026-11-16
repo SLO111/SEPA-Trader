@@ -148,3 +148,37 @@ class StructureCountStrategy(Strategy):
             res.levels.append({"price": r.state["defence_level"], "color": "#f87171" if r.state["regime"] == "bear" else "#4ade80", "title": "Defence"})
         res.markers.sort(key=lambda m: m["time"])
         return res
+
+
+@register
+class MarketStageStrategy(Strategy):
+    id = "market_stage"
+    name = "Market Cycle Stage (1–4)"
+    category = "SEPA"
+    description = (
+        "Accumulation → Markup → Distribution → Markdown, measured with the 30-week average and its slope (Weinstein Stage Analysis). "
+        "Colored band below the chart; markers where a new stage is confirmed. Buy only in Stage 2, avoid longs in Stage 4."
+    )
+    params = [
+        Param("ma", "Show 30-week average", 1, 0, 1, type="select", options=[[0, "No"], [1, "Yes"]]),
+        Param("flat", "Flat slope (% over 4 weeks)", 1.0, 0.2, 5.0, type="float"),
+    ]
+
+    def compute(self, df, p, bench=None):
+        from ..stages import COLORS, NAMES, weekly_stages
+
+        if len(df) < 60:
+            return StrategyResult()
+        w = weekly_stages(df, flat_pct=p["flat"])
+        st = w["stage"].shift(1).reindex(df.index, method="ffill").fillna(0).astype(int)
+        res = StrategyResult()
+        res.histograms.append(
+            {"name": "Stage", "pane": "lower", "data": [{"time": t(ts), "value": 1, "color": COLORS[s] + "99"} for ts, s in st.items() if s]}
+        )
+        change = st != st.shift(1)
+        for ts, s in st[change & (st > 0)].items():
+            res.markers.append({"time": t(ts), "position": "aboveBar", "shape": "square", "color": COLORS[s], "text": f"S{s} {NAMES[s]}"})
+        if p.get("ma"):
+            ma = w["ma"].shift(1).reindex(df.index, method="ffill")
+            res.lines.append(line("30-week MA", ma, "#e2e8f0", width=1))
+        return res
