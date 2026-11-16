@@ -189,10 +189,15 @@ class YFinanceProvider(DataProvider):
         meta = SYMBOLS.get(symbol.upper(), {})
         base = {"name": meta.get("name", symbol.upper()), "sector": meta.get("sector", "Other"),
                 "market_cap_b": None, "pe": None, "dividend_yield": None, "eps_growth": None, "beta": None}
+        t = yf.Ticker(symbol)
         try:
-            info = yf.Ticker(symbol).info or {}
+            info = t.info or {}
         except Exception:
-            return base
+            info = {}
+        if not info.get("marketCap") and not info.get("trailingPE"):
+            # Yahoo often refuses its quoteSummary endpoint from cloud servers ("Invalid Crumb").
+            # Fall back to data served by the chart endpoint, which keeps working.
+            return {**base, **self._fallback_fundamentals(t, symbol)}
         cap = info.get("marketCap")
         div = info.get("trailingAnnualDividendYield")  # a fraction, e.g. 0.027
         growth = info.get("earningsGrowth")  # a fraction
@@ -297,6 +302,25 @@ class YFinanceProvider(DataProvider):
             out.append({"symbol": s, "session": session, "price": round(price, 2), "reference_close": round(ref, 2),
                         "change": round(price - ref, 2), "change_pct": round((price / ref - 1) * 100, 2),
                         "volume": int(ext["Volume"].sum()) if len(ext) else 0, "time": last_ts.strftime("%Y-%m-%d %H:%M ET")})
+        return out
+
+    def _fallback_fundamentals(self, t, symbol: str) -> dict:
+        out: dict = {}
+        try:
+            fi = t.fast_info
+            cap = fi.get("marketCap") if hasattr(fi, "get") else getattr(fi, "market_cap", None)
+            if cap:
+                out["market_cap_b"] = round(float(cap) / 1e9, 1)
+        except Exception:
+            pass
+        try:
+            close = float(self.history(symbol)["close"].iloc[-1])
+            divs = self.dividends(symbol)
+            last_year = divs[divs.index >= pd.Timestamp.now() - pd.Timedelta(days=365)]
+            out["dividend_yield"] = round(float(last_year.sum()) / close * 100, 2) if close else None
+        except Exception:
+            pass
+        out["partial"] = True  # P/E, growth and beta need the blocked endpoint
         return out
 
     def dividends(self, symbol: str) -> pd.Series:

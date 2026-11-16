@@ -33,6 +33,8 @@ SLOW_TTL = timedelta(hours=24)
 UNIVERSE_TTL = timedelta(days=7)
 CHUNK = 100
 SLOW_PAUSE = 1.2  # seconds between per-symbol requests, to stay polite with the provider
+BREAKER_FAILURES = 5  # consecutive refusals before backing off
+BREAKER_PAUSE = timedelta(hours=6)
 
 
 def _now() -> datetime:
@@ -68,6 +70,7 @@ class DataStore:
         self.status = {"state": "idle", "message": "", "prices_refreshed_at": None, "slow_done": 0, "slow_total": 0}
         self._listeners: list[Callable[[], None]] = []
         self.hot: dict[str, datetime] = {}
+        self.slow_paused_until: datetime | None = None
         self.live_at: dict[str, str] = {}
         self._thread: threading.Thread | None = None
 
@@ -229,20 +232,33 @@ class DataStore:
 
     def refresh_slow(self, symbols: list[str], stop: threading.Event | None = None) -> int:
         """Fundamentals and earnings, one symbol at a time, only where missing or older than a day."""
+        if self.slow_paused_until and _now() < self.slow_paused_until:
+            return 0
         provider = self._provider_factory()
         todo = [s for s in symbols if self.stale(f"fundamentals:{s}", SLOW_TTL) or self.stale(f"earnings:{s}", SLOW_TTL)]
         self.status.update(slow_total=len(symbols), slow_done=len(symbols) - len(todo))
         n = 0
+        failures = 0
         for s in todo:
             if stop is not None and stop.is_set():
                 break
             for kind, fn in (("fundamentals", provider.fundamentals), ("earnings", provider.earnings)):
                 if self.stale(f"{kind}:{s}", SLOW_TTL):
                     try:
-                        self.put_slow(kind, s, fn(s))
+                        value = fn(s)
+                        empty = not value or (kind == "earnings" and not value.get("history") and not value.get("next_date"))
+                        failures = failures + 1 if empty else 0
+                        self.put_slow(kind, s, value)
                     except Exception:
+                        failures += 1
                         log.debug("%s failed for %s", kind, s, exc_info=True)
                     time.sleep(SLOW_PAUSE)
+                    if failures >= BREAKER_FAILURES:
+                        # The provider is refusing us: back off so the server doesn't get blocked for prices too.
+                        self.slow_paused_until = _now() + BREAKER_PAUSE
+                        self.status["message"] = "The data provider is refusing fundamentals requests; paused for 6 hours (prices keep updating)"
+                        log.warning("Fundamentals/earnings refused %d times in a row; pausing until %s", failures, self.slow_paused_until)
+                        return n
             n += 1
             self.status["slow_done"] += 1
         return n

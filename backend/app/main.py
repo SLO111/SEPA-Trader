@@ -91,7 +91,8 @@ def health():
         st = store.status
         data = {"state": st["state"], "message": st["message"], "symbols_with_prices": len(store.prices),
                 "prices_refreshed_at": st["prices_refreshed_at"], "live_updated_at": st.get("live_updated_at"),
-                "fundamentals_loaded": f"{st['slow_done']}/{st['slow_total']}"}
+                "fundamentals_loaded": f"{st['slow_done']}/{st['slow_total']}",
+                "fundamentals_paused_until": store.slow_paused_until}
     config = {
         # Booleans only: never expose secrets or emails on a public endpoint.
         "data_provider": settings.data_provider,

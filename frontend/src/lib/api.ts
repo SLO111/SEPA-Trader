@@ -36,6 +36,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   } catch {
     throw new ApiError(0, "The server is not responding. Make sure the backend is running (see README).");
   }
+  if (res.status === 401 && token && !path.startsWith("/api/auth/")) {
+    // Session expired or the server's secret changed: sign out and go to the login page.
+    setToken(null);
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) window.location.href = "/login";
+    throw new ApiError(401, "Your session has expired. Please log in again.");
+  }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

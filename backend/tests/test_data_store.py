@@ -104,3 +104,19 @@ def test_market_data_reads_store_and_tracks_views(monkeypatch, store):
     market_data.watch("AMD")
     assert "AMD" in store.hot_symbols()
     assert market_data.history("AMD", "1wk").index.dayofweek.max() == 4  # weekly bars resampled from the store
+
+
+def test_circuit_breaker_pauses_slow_refresh(store, monkeypatch):
+    class Refusing(LiveFake):
+        def fundamentals(self, symbol):
+            raise RuntimeError("HTTP Error 401: Invalid Crumb")
+
+        def earnings(self, symbol):
+            raise RuntimeError("HTTP Error 401: Invalid Crumb")
+
+    s = ds.DataStore(Refusing, SessionLocal)
+    s.refresh_slow(["AAPL", "MSFT", "NVDA", "KO", "PG", "JPM"])
+    assert s.slow_paused_until is not None and "paused" in s.status["message"]
+    calls = []
+    monkeypatch.setattr(Refusing, "fundamentals", lambda self, sym: calls.append(sym))
+    assert s.refresh_slow(["AAPL"]) == 0 and calls == []  # no requests while paused
