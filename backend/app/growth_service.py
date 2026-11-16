@@ -62,6 +62,11 @@ def purge(db: Session, user_id: int) -> None:
                         (Referral, or_(Referral.referred_id == user_id, Referral.owner_id == user_id)),
                         (Usage, Usage.user_id == user_id), (TermsAcceptance, TermsAcceptance.user_id == user_id)):
         db.execute(delete(model).where(cond))
+    from .models import CommunityProfile, CopyFollow, LessonDone
+
+    for model, cond in ((CommunityProfile, CommunityProfile.user_id == user_id), (LessonDone, LessonDone.user_id == user_id),
+                        (CopyFollow, or_(CopyFollow.follower_id == user_id, CopyFollow.leader_id == user_id))):
+        db.execute(delete(model).where(cond))
 
 
 def on_signup(db: Session, user: User, ref: str | None, accepted_terms: bool) -> None:

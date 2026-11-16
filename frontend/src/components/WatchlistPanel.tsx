@@ -171,6 +171,22 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
           {menuOpen && active && (
             <div className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-line bg-panel-2 p-1 text-sm shadow-xl">
               <button onClick={renameList} className="block w-full rounded px-2 py-1.5 text-left hover:bg-line">Rename</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const r = await post<{ slug: string }>(`/api/watchlists/${active.id}/share`, {});
+                    const url = `${window.location.origin}/w?s=${r.slug}`;
+                    await navigator.clipboard?.writeText(url).catch(() => {});
+                    prompt("Public link copied. Anyone with it can view and copy this list:", url);
+                  } catch (e) {
+                    alert(e instanceof Error ? e.message : "Could not share");
+                  }
+                  setMenuOpen(false);
+                }}
+                className="block w-full rounded px-2 py-1.5 text-left hover:bg-line"
+              >
+                Share link…
+              </button>
               <div className="flex gap-1 px-2 py-1.5">
                 {COLORS.map((c) => (
                   <button key={c} onClick={() => recolorList(c)} className="h-4 w-4 rounded-full" style={{ background: c }} aria-label={`Color ${c}`} />

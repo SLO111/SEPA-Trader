@@ -122,7 +122,7 @@ def feed(
     if kind != "all":
         q = q.where(FeedItem.kind == kind)
     else:
-        q = q.where(FeedItem.kind != "summary")  # the daily summary has its own card
+        q = q.where(FeedItem.kind.notin_(("summary", "letter")))  # the daily summary and the weekly letter have their own cards
     if symbol:
         q = q.where(FeedItem.symbol == symbol.upper())
     if before_id:
@@ -133,7 +133,12 @@ def feed(
     from engine.feed import gate_summary
 
     lim = limits_for(user)
-    body = lambda r: json.dumps(gate_summary(json.loads(r.body), lim)) if r.kind == "summary" and r.body else r.body
+    def body(r):
+        if r.kind == "summary" and r.body:
+            return json.dumps(gate_summary(json.loads(r.body), lim))
+        if r.kind == "letter" and r.body and not lim["weekly_letter"]:
+            return json.dumps({"locked": True, "paragraphs": json.loads(r.body).get("paragraphs", [])[:1]})
+        return r.body
     return [
         {"id": r.id, "kind": r.kind, "symbol": r.symbol, "severity": r.severity, "title": r.title, "body": body(r), "url": r.url,
          "created_at": r.created_at.isoformat()}
@@ -153,6 +158,20 @@ def latest_summary(user: User = Depends(current_user), db: Session = Depends(get
 
     return {"id": r.id, "day": r.key.split(":", 1)[1], "title": r.title, "created_at": r.created_at.isoformat(),
             **gate_summary(json.loads(r.body), limits_for(user))}
+
+
+@router.get("/feed/letter")
+def latest_letter(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """The latest weekly letter (Premium; others get the first paragraph and a lock)."""
+    import json
+
+    r = db.scalars(select(FeedItem).where(FeedItem.kind == "letter").order_by(FeedItem.id.desc()).limit(1)).first()
+    if not r:
+        return None
+    d = json.loads(r.body)
+    if not limits_for(user)["weekly_letter"]:
+        d = {"week": d.get("week"), "paragraphs": d["paragraphs"][:1], "locked": True}
+    return {"id": r.id, "title": r.title, "created_at": r.created_at.isoformat(), **d}
 
 
 class DigestIn(BaseModel):
@@ -230,8 +249,10 @@ def _paper_filter(q, source: str):
         return q.where(PaperTrade.timeframe == "MD")
     if source == "chart":
         return q.where(PaperTrade.timeframe == "CH")
+    if source == "copy":
+        return q.where(PaperTrade.timeframe == "CP")
     if source == "ideas":
-        return q.where(PaperTrade.timeframe.notin_(["MD", "CH"]))
+        return q.where(PaperTrade.timeframe.notin_(["MD", "CH", "CP"]))
     return q
 
 
@@ -277,6 +298,9 @@ def take_chart(body: ChartTradeIn, user: User = Depends(current_user), db: Sessi
                    entry=round(entry, 4), stop=round(stop, 4), trim=round(trim, 4) if trim else None, target=round(target, 4), weight=weight)
     db.add(t)
     db.commit()
+    from .community import copy_new_trade
+
+    copy_new_trade(db, t)  # simulated copy trading: followers get the same trade
     return _paper_out(t, df)
 
 
@@ -297,6 +321,10 @@ def sell_chart(body: dict, user: User = Depends(current_user), db: Session = Dep
     if not closed:
         raise HTTPException(404, f"You have no open chart position in {sym}. Use Short to sell short.")
     db.commit()
+    from .community import close_copies
+
+    for t in closed:
+        close_copies(db, t)
     return [_paper_out(t, df) for t in closed]
 
 
@@ -364,7 +392,7 @@ def take_scan(body: dict, user: User = Depends(current_user), db: Session = Depe
 
 
 @router.get("/paper-trades")
-def paper_trades(source: Literal["all", "ideas", "md", "chart"] = "all", user: User = Depends(current_user), db: Session = Depends(get_db)):
+def paper_trades(source: Literal["all", "ideas", "md", "chart", "copy"] = "all", user: User = Depends(current_user), db: Session = Depends(get_db)):
     from engine.paper import summary
 
     from .. import market_data
@@ -424,7 +452,7 @@ def _trades_for(user: User, db: Session, source: str, portfolio_id: int | None =
     from ..models import PaperTrade, Portfolio, PortfolioTxn
 
     out = []
-    if source in ("all", "backtest", "ideas", "md", "chart"):
+    if source in ("all", "backtest", "ideas", "md", "chart", "copy"):
         q = _paper_filter(select(PaperTrade).where(PaperTrade.user_id == user.id), source if source != "backtest" else "all")
         for t in db.scalars(q).all():
             try:
@@ -432,7 +460,7 @@ def _trades_for(user: User, db: Session, source: str, portfolio_id: int | None =
             except Exception:
                 continue
             f = _paper_out(t, df)
-            out.append({"source": {"MD": "Move Detector", "CH": "Charts"}.get(t.timeframe, "Trade ideas"), "symbol": t.symbol, "side": t.side,
+            out.append({"source": {"MD": "Move Detector", "CH": "Charts", "CP": "Copied"}.get(t.timeframe, "Trade ideas"), "symbol": t.symbol, "side": t.side,
                         "entry_date": t.entry_date.isoformat(), "entry_price": t.entry, "stop": t.stop,
                         "exit_date": f["closed_at"], "exit_price": f["exit_price"], "ref": f"paper:{t.id}"})
     if source in ("all", "portfolio"):
@@ -466,12 +494,12 @@ def _graded(user: User, db: Session, source: str, portfolio_id: int | None) -> l
 
 
 @router.get("/grader")
-def grader(source: Literal["all", "backtest", "ideas", "md", "chart", "portfolio"] = "all", portfolio_id: int | None = None,
+def grader(source: Literal["all", "backtest", "ideas", "md", "chart", "copy", "portfolio"] = "all", portfolio_id: int | None = None,
            user: User = Depends(current_user), db: Session = Depends(get_db)):
     """TradeGrader: Bought / Sold Perfect, Early or Late, plus an A-F grade for every trade."""
     from engine.trade_grader import aggregate
 
-    if not limits_for(user)["backtesting"] and source not in ("chart", "portfolio"):
+    if not limits_for(user)["backtesting"] and source not in ("chart", "portfolio", "copy"):
         source = "chart"  # Free: your own trades (charts, portfolios); Trade ideas / Move Detector trades are Pro
     rows = _graded(user, db, source, portfolio_id)
     return {"trades": rows, "summary": aggregate(rows)}
@@ -495,12 +523,12 @@ def grader_chart(symbol: str, start: str, end: str | None = None, user: User = D
 
 
 @router.get("/analytics")
-def trade_analytics(source: Literal["all", "backtest", "ideas", "md", "chart", "portfolio"] = "all", portfolio_id: int | None = None,
+def trade_analytics(source: Literal["all", "backtest", "ideas", "md", "chart", "copy", "portfolio"] = "all", portfolio_id: int | None = None,
                     user: User = Depends(current_user), db: Session = Depends(get_db)):
     """TradingLogger-style statistics over your closed trades."""
     from engine.trade_grader import analytics
 
-    if not limits_for(user)["backtesting"] and source not in ("chart", "portfolio"):
+    if not limits_for(user)["backtesting"] and source not in ("chart", "portfolio", "copy"):
         source = "chart"
     from ..models import TradeNote
 

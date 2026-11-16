@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { api, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
 import type { PlanLimits } from "@/lib/types";
 
 type Sub = { status: string; plan: string; interval?: string | null; amount?: number; currency?: string; current_period_end?: string | null; cancel_at_period_end?: boolean };
@@ -35,8 +36,37 @@ function features(l: PlanLimits): [string, boolean][] {
   ];
 }
 
+const FEATURE_RO: [RegExp, string][] = [
+  [/^Charts, indicators, free screener, market overview$/, "Grafice, indicatori, screener gratuit, prezentarea pieței"],
+  [/^(\S+) watchlists?, (\S+) symbols each$/, "$1 watchlist-uri, câte $2 simboluri"],
+  [/^(\S+) indicators per chart$/, "$1 indicatori pe grafic"],
+  [/^(\S+) portfolios?$/, "$1 portofolii"],
+  [/^Full Trend Template, VCP & vnicorn Pulse$/, "Trend Template complet, VCP și vnicorn Pulse"],
+  [/^Move Detector, screens & filters$/, "Move Detector, filtre și screen-uri"],
+  [/^Trade ideas: top (\d+) a day, incl. shorts$/, "Idei: top $1 pe zi, inclusiv short"],
+  [/^Trade ideas: top (\d+) a day, longs$/, "Idei: top $1 pe zi, doar long"],
+  [/^Trade ideas$/, "Idei de tranzacționare"],
+  [/^Backtesting, TradeGrader & analytics$/, "Backtesting, TradeGrader și statistici"],
+  [/^Quarterly EPS & sales acceleration$/, "Accelerarea trimestrială a EPS și vânzărilor"],
+  [/^Email alerts(.*)$/, "Alerte pe email$1"],
+  [/^Ask vnicornAI: unlimited$/, "Ask vnicornAI: nelimitat"],
+  [/^vnicornAI picks & move probabilities$/, "vnicornAI picks și probabilități de mișcare"],
+  [/^Industry group rankings$/, "Clasamentul grupurilor de industrie"],
+  [/^Weekly market letter$/, "Scrisoare săptămânală despre piață"],
+  [/^Custom strategy backtests$/, "Backtest pe strategii proprii"],
+  [/^Instant Telegram alerts$/, "Alerte instant pe Telegram"],
+  [/^CSV export$/, "Export CSV"],
+];
+
+function trFeature(f: string, t: (s: string) => string): string {
+  if (t("Monthly") === "Monthly") return f;
+  for (const [re, ro] of FEATURE_RO) if (re.test(f)) return f.replace(re, ro).replace("Unlimited", "Nelimitat").replace("rules", "reguli");
+  return f;
+}
+
 function Billing() {
   const { user, refresh } = useAuth();
+  const t = useT();
   const params = useSearchParams();
   const status = params.get("status");
   const [data, setData] = useState<Plans | null>(null);
@@ -76,7 +106,7 @@ function Billing() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
-        <h1 className="text-xl font-semibold">Plans & billing</h1>
+        <h1 className="text-xl font-semibold">{t("Plans & billing")}</h1>
         <p className="mb-5 text-sm text-muted">Upgrade, switch or cancel at any time. Payments are processed securely by Stripe; card details never touch our servers.</p>
 
         {status === "success" && <p className="mb-4 rounded-lg border border-up/30 bg-up/10 px-3 py-2 text-sm text-up">Payment received. Your plan updates within a few seconds. Thank you!</p>}
@@ -118,8 +148,8 @@ function Billing() {
           <div className="inline-flex rounded-lg border border-line bg-panel p-1 text-sm">
             {(["monthly", "yearly"] as const).map((iv) => (
               <button key={iv} onClick={() => setInterval(iv)} className={`rounded-md px-4 py-1.5 ${interval === iv ? "bg-accent text-white" : "text-muted hover:text-text"}`}>
-                {iv === "monthly" ? "Monthly" : "Yearly"}
-                {iv === "yearly" && <span className={`ml-1.5 text-[11px] ${interval === iv ? "text-white/80" : "text-up"}`}>2 months free</span>}
+                {t(iv === "monthly" ? "Monthly" : "Yearly")}
+                {iv === "yearly" && <span className={`ml-1.5 text-[11px] ${interval === iv ? "text-white/80" : "text-up"}`}>{t("2 months free")}</span>}
               </button>
             ))}
           </div>
@@ -134,9 +164,9 @@ function Billing() {
               <div key={p.id} className={`flex flex-col rounded-xl border p-5 ${highlight ? "border-accent bg-accent/5" : "border-line bg-panel"}`}>
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">{p.label}</h2>
-                  {current && <span className="rounded bg-up/15 px-2 py-0.5 text-xs text-up">Current plan</span>}
-                  {!current && data.trial_until && p.id === "premium" && <span className="rounded bg-violet-500/20 px-2 py-0.5 text-xs text-violet-200">On trial</span>}
-                  {!current && highlight && <span className="rounded bg-accent/20 px-2 py-0.5 text-xs text-blue-300">Most popular</span>}
+                  {current && <span className="rounded bg-up/15 px-2 py-0.5 text-xs text-up">{t("Current plan")}</span>}
+                  {!current && data.trial_until && p.id === "premium" && <span className="rounded bg-violet-500/20 px-2 py-0.5 text-xs text-violet-200">{t("On trial")}</span>}
+                  {!current && highlight && <span className="rounded bg-accent/20 px-2 py-0.5 text-xs text-blue-300">{t("Most popular")}</span>}
                 </div>
                 <p className="mt-2">
                   <span className="text-3xl font-bold">{cur}{price}</span>
@@ -146,13 +176,13 @@ function Billing() {
                 <ul className="mt-4 flex-1 space-y-1.5 text-sm">
                   {features(p.limits).map(([f, ok]) => (
                     <li key={f} className={ok ? "" : "text-muted/60 line-through"}>
-                      <span className={ok ? "text-up" : ""}>{ok ? "✓" : "–"}</span> {f}
+                      <span className={ok ? "text-up" : ""}>{ok ? "✓" : "–"}</span> {trFeature(f, t)}
                     </li>
                   ))}
                 </ul>
                 <div className="mt-5">
                   {p.id === "free" ? (
-                    <p className="text-center text-xs text-muted">{subscribed ? "Cancel in Manage billing to return to Free." : "Free forever"}</p>
+                    <p className="text-center text-xs text-muted">{subscribed ? "Cancel in Manage billing to return to Free." : t("Free forever")}</p>
                   ) : current && subscribed ? (
                     <button onClick={() => go("portal", "/api/billing/portal")} className="w-full rounded-md bg-panel-2 py-2 text-sm hover:bg-line">Manage billing</button>
                   ) : subscribed ? (

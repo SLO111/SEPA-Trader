@@ -136,11 +136,11 @@ function Locked({ what }: { what: string }) {
 
 function Backtest() {
   const { user } = useAuth();
-  type Tab = "trades" | "mdtrades" | "chart" | "grader" | "analytics" | "md" | "strategy" | "builder";
+  type Tab = "trades" | "mdtrades" | "chart" | "copy" | "grader" | "analytics" | "md" | "strategy" | "builder";
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return "chart";
     const t = new URLSearchParams(window.location.search).get("tab");
-    return t === "md" ? "mdtrades" : (["trades", "mdtrades", "chart", "grader", "analytics", "validation", "strategy", "builder"].includes(t ?? "") ? (t === "validation" ? "md" : t) : "chart") as Tab;
+    return t === "md" ? "mdtrades" : (["trades", "mdtrades", "chart", "copy", "grader", "analytics", "validation", "strategy", "builder"].includes(t ?? "") ? (t === "validation" ? "md" : t) : "chart") as Tab;
   });
   const paid = !!user?.limits.backtesting;
   return (
@@ -149,7 +149,7 @@ function Backtest() {
         <h1 className="text-xl font-semibold">Backtesting</h1>
         <p className="mb-4 text-sm text-muted">Does it actually work? Follow the ideas you took, and test the algorithm and strategies on historical data before trusting them with money.</p>
         <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
-          {([["chart", "Chart trades"], ["trades", "Idea trades"], ["mdtrades", "Move Detector trades"], ["grader", "TradeGrader"], ["analytics", "Analytics"], ["strategy", "Strategy backtest"], ["builder", "Strategy builder"]] as const).map(([id, label]) => (
+          {([["chart", "Chart trades"], ["copy", "Copied trades"], ["trades", "Idea trades"], ["mdtrades", "Move Detector trades"], ["grader", "TradeGrader"], ["analytics", "Analytics"], ["strategy", "Strategy backtest"], ["builder", "Strategy builder"]] as const).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === id ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}>
               {label}
               {((!paid && ["trades", "mdtrades", "strategy"].includes(id)) || (id === "builder" && !user?.limits.custom_backtest)) && <span className="ml-1 text-[10px]">🔒</span>}
@@ -166,6 +166,8 @@ function Backtest() {
           <TradeGrader source={paid ? "all" : "chart"} chartOnly={!paid} />
         ) : tab === "analytics" ? (
           <TradeAnalytics chartOnly={!paid} />
+        ) : tab === "copy" ? (
+          <PaperTrades source="copy" />
         ) : tab === "builder" ? (
           <RulesBuilder allowed={!!user?.limits.custom_backtest} />
         ) : !paid ? (

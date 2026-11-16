@@ -33,6 +33,7 @@ PLANS: dict[str, dict] = {
         "csv_export": False,
         "eps_history": False,  # quarterly EPS / sales acceleration table
         "exposure_details": False,  # market exposure % and reasons (free sees the label)
+        "max_copy_follows": 1,  # traders you can copy (simulated)
     },
     "pro": {
         "label": "Pro",
@@ -63,6 +64,7 @@ PLANS: dict[str, dict] = {
         "csv_export": False,
         "eps_history": True,
         "exposure_details": True,
+        "max_copy_follows": 5,
     },
     "premium": {
         "label": "Premium",
@@ -93,6 +95,7 @@ PLANS: dict[str, dict] = {
         "csv_export": True,
         "eps_history": True,
         "exposure_details": True,
+        "max_copy_follows": UNLIMITED,
     },
 }
 

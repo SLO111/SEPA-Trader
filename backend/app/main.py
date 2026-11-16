@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .alerts_service import check_rules
 from .db import Base, SessionLocal, engine
-from .routers import admin, alerts, auth, backtest, billing, ideas, journal, journal_notes, market, markets, portfolios, sepa, stock, watchlists
+from .routers import admin, alerts, auth, backtest, billing, community, ideas, journal, journal_notes, market, markets, portfolios, sepa, stock, watchlists
 
 Base.metadata.create_all(engine)
 
@@ -136,7 +136,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for r in (auth.router, watchlists.router, market.router, sepa.router, alerts.router, portfolios.router, stock.router, markets.router, journal.router, backtest.router, billing.router, ideas.router, admin.router, journal_notes.router):
+for r in (auth.router, watchlists.router, market.router, sepa.router, alerts.router, portfolios.router, stock.router, markets.router, journal.router, backtest.router, billing.router, ideas.router, admin.router, journal_notes.router, community.router):
     app.include_router(r)
 
 

@@ -242,3 +242,72 @@ def tick(db: Session) -> None:
         run_ideas(db)  # also publishes the daily summary
     refresh_statuses(db)
     build_feed(db)
+    try:
+        publish_weekly_letter(db)
+    except Exception:
+        log.exception("Weekly letter failed")
+
+
+def publish_weekly_letter(db: Session, today: date | None = None, force: bool = False) -> dict | None:
+    """Saturday / Sunday: the week's letter (once per ISO week), then emailed to Premium readers who opted in."""
+    import pandas as pd
+
+    from engine.letter import letter_text, weekly_letter
+
+    today = today or date.today()
+    if today.weekday() < 5 and not force:
+        return None
+    y, w, _ = today.isocalendar()
+    week = f"{y}-W{w:02d}"
+    if db.scalar(select(FeedItem).where(FeedItem.key == f"letter:{week}")):
+        return None
+    from .routers.markets import _exposure, groups_ranked
+    from .routers.sepa import cached_scan, pulse_map
+
+    indices = []
+    for sym, label in (("SPY", "S&P 500"), ("QQQ", "Nasdaq 100"), ("IWM", "Russell 2000")):
+        try:
+            c = market_data.history(sym)["close"]
+            indices.append({"symbol": sym, "label": label, "week_pct": round(float(c.iloc[-1] / c.iloc[-6] - 1) * 100, 2)})
+        except Exception:
+            continue
+    try:
+        ex = _exposure()
+    except Exception:
+        ex = None
+    try:
+        groups = groups_ranked()
+    except Exception:
+        groups = []
+    scan = cached_scan()
+    leaders = [{"symbol": r["symbol"], "rs": r["rs_rating"], "bull": r.get("bull_score")} for r in
+               sorted([r for r in scan if (r.get("rs_rating") or 0) >= 90 and r.get("template_passed") == 8], key=lambda r: -r["rs_rating"])]
+    try:
+        pm = pulse_map()
+    except Exception:
+        pm = {}
+    warnings = sorted([{"symbol": s, "warn": p["warn"]} for s, p in pm.items() if p.get("warn", 0) > p.get("conf", 0) + 2], key=lambda x: -x["warn"])
+    end = (pd.Timestamp(today) + pd.offsets.BDay(5)).date()
+    earnings = []
+    for s in stock_symbols():
+        e = market_data.cached("earnings", s) or {}
+        nd = e.get("next_date")
+        if nd and today.isoformat() < nd <= end.isoformat():
+            earnings.append({"symbol": s, "date": nd})
+    earnings.sort(key=lambda e: e["date"])
+    week_start = today - pd.Timedelta(days=today.weekday())
+    closed = db.scalars(select(TradeIdea).where(TradeIdea.closed_at >= week_start, TradeIdea.r_multiple.is_not(None),
+                                                TradeIdea.status.in_(("TARGET", "STOPPED")))).all()
+    rs = [r.r_multiple for r in closed]
+    record = {"closed": len(rs), "win_rate": round(100 * sum(r > 0 for r in rs) / len(rs)) if rs else None, "total_r": round(sum(rs), 1)}
+    item = weekly_letter(week, indices, ex, groups, leaders, warnings, earnings, record)
+    if not add_feed(db, [item]):
+        return None
+    from .notify import email_configured, send_email
+    from .plans import limits_for
+
+    if email_configured():
+        for sub, user in db.execute(select(DailyDigest, User).join(User, User.id == DailyDigest.user_id).where(DailyDigest.enabled.is_(True))).all():
+            if limits_for(user)["weekly_letter"]:
+                send_email(user.email, f"[Vnicorn] {item['title']}", letter_text(item))
+    return item

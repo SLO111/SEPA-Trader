@@ -415,3 +415,57 @@ class SavedStrategy(Base):
     name: Mapped[str] = mapped_column(String(80))
     rules: Mapped[str] = mapped_column(Text)  # JSON
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class LessonDone(Base):
+    __tablename__ = "academy_progress"
+    __table_args__ = (UniqueConstraint("user_id", "lesson"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    lesson: Mapped[str] = mapped_column(String(40))
+    done_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SharedWatchlist(Base):
+    """A watchlist published as a read-only public link."""
+
+    __tablename__ = "shared_watchlists"
+
+    slug: Mapped[str] = mapped_column(String(16), primary_key=True)
+    watchlist_id: Mapped[int] = mapped_column(ForeignKey("watchlists.id", ondelete="CASCADE"), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CommunityProfile(Base):
+    """Opt-in public identity for the leaderboard and copy trading."""
+
+    __tablename__ = "community_profiles"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    public: Mapped[bool] = mapped_column(Boolean, default=True)  # shown on the leaderboard
+    allow_copy: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class CopyFollow(Base):
+    """Simulated copy trading: the follower's account mirrors the leader's new chart trades."""
+
+    __tablename__ = "copy_follows"
+    __table_args__ = (UniqueConstraint("follower_id", "leader_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    follower_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    leader_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CopiedTrade(Base):
+    """Links a follower's simulated trade to the leader's trade it copies (closed together)."""
+
+    __tablename__ = "copied_trades"
+
+    paper_id: Mapped[int] = mapped_column(ForeignKey("paper_trades.id", ondelete="CASCADE"), primary_key=True)
+    leader_paper_id: Mapped[int] = mapped_column(ForeignKey("paper_trades.id", ondelete="CASCADE"), index=True)
+    leader_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
