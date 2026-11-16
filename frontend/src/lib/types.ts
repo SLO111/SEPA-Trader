@@ -75,6 +75,7 @@ export type SymbolInfo = {
   week52: { high: number; low: number };
   volume: { today: number; avg_50d: number; relative: number | null };
   stats: { market_cap_b: number | null; pe: number | null; dividend_yield: number | null; eps_growth: number | null; beta: number | null };
+  pulse?: { conf: number; warn: number; tone: string; today: { conf: string[]; warn: string[] }; recent: { date: string; conf: string[]; warn: string[] }[] } | null;
   next_earnings: string | null;
   extended: { session: "pre_market" | "after_hours"; price: number; change: number; change_pct: number; reference_close: number; time: string } | null;
   overnight: null;
@@ -103,6 +104,7 @@ export type SepaReport = {
 
 export type ScanRow = {
   ai_prob?: number | null;
+  pulse?: { conf: number; warn: number; tone: string } | null;
   symbol: string;
   name: string;
   sector: string;
@@ -245,7 +247,8 @@ export type Company = {
   ownership: {
     institutional_pct: number | null; insider_pct: number | null;
     top_holders: { name: string; pct: number | null; shares: number | null; value: number | null }[];
-    insider_transactions: { date: string | null; insider: string; position: string; transaction: string; shares: number | null; value: number | null }[];
+    insider_transactions: { date: string | null; insider: string; position: string; transaction: string; shares: number | null; value: number | null; price?: number | null }[];
+    insider_sentiment?: { months: { month: string; mspr: number; change: number | null }[]; avg_3m: number } | null;
   };
   news: { title: string; url: string; publisher: string | null; published: string | null }[];
 };

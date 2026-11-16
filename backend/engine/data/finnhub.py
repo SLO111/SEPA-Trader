@@ -66,6 +66,13 @@ class Finnhub:
     def recommendations(self, symbol: str) -> list[dict]:
         return self.get("/stock/recommendation", symbol=symbol) or []
 
+    def insider_transactions(self, symbol: str) -> list[dict]:
+        return (self.get("/stock/insider-transactions", symbol=symbol) or {}).get("data") or []
+
+    def insider_sentiment(self, symbol: str) -> list[dict]:
+        today = date.today()
+        return (self.get("/stock/insider-sentiment", symbol=symbol, **{"from": (today - timedelta(days=200)).isoformat(), "to": today.isoformat()}) or {}).get("data") or []
+
     def general_news(self) -> list[dict]:
         """Latest general market headlines."""
         return self.get("/news", category="general") or []
@@ -170,6 +177,30 @@ class Finnhub:
         if not (co.get("earnings") or {}).get("history"):
             try:
                 co["earnings"] = self.earnings(sym)
+            except Exception:
+                pass
+        own = co.setdefault("ownership", {"institutional_pct": None, "insider_pct": None, "top_holders": [], "insider_transactions": []})
+        if not own.get("insider_transactions"):
+            try:
+                codes = {"P": "Purchase", "S": "Sale", "A": "Award / grant", "M": "Option exercise", "F": "Tax withholding", "G": "Gift", "D": "Disposition", "C": "Conversion", "X": "Option exercise"}
+                rows = sorted(self.insider_transactions(sym), key=lambda x: x.get("transactionDate") or "", reverse=True)
+                own["insider_transactions"] = [{
+                    "date": x.get("transactionDate"), "insider": (x.get("name") or "").title(), "position": "",
+                    "transaction": codes.get(x.get("transactionCode"), x.get("transactionCode") or ""),
+                    "shares": x.get("change"), "value": round(abs(x["change"] * x["transactionPrice"]), 0) if x.get("change") and x.get("transactionPrice") else None,
+                    "price": x.get("transactionPrice"), "holding": x.get("share"),
+                } for x in rows[:20]]
+            except Exception:
+                pass
+        if own.get("insider_sentiment") is None:
+            try:
+                data = sorted(self.insider_sentiment(sym), key=lambda x: (x.get("year", 0), x.get("month", 0)))[-6:]
+                if data:
+                    mspr = [x.get("mspr") or 0 for x in data]
+                    own["insider_sentiment"] = {
+                        "months": [{"month": f"{x['year']}-{x['month']:02d}", "mspr": round(x.get("mspr") or 0, 1), "change": x.get("change")} for x in data],
+                        "avg_3m": round(sum(mspr[-3:]) / len(mspr[-3:]), 1),
+                    }
             except Exception:
                 pass
         return co

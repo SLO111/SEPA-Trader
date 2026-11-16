@@ -98,3 +98,21 @@ def remove_item(wl_id: int, symbol: str, user: User = Depends(current_user), db:
         i.position = pos
     db.commit()
     return wl_out(w)
+
+
+class OrderIn(BaseModel):
+    symbols: list[str] = Field(max_length=1000)
+
+
+@router.put("/{wl_id}/order")
+def reorder(wl_id: int, body: OrderIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Save the order of the symbols in a watchlist (drag & drop)."""
+    w = _get_owned(db, user, wl_id)
+    rank = {s.upper(): i for i, s in enumerate(body.symbols)}
+    items = sorted(w.items, key=lambda i: (rank.get(i.symbol, len(rank) + i.position)))
+    for pos, i in enumerate(items):
+        i.position = pos
+    w.items = items
+    db.commit()
+    db.refresh(w)
+    return wl_out(w)

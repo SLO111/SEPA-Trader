@@ -367,3 +367,44 @@ def price_on(symbol: str, on: date | None = None, user: User = Depends(current_u
 
 
 __all__ = ["router", "PERIODS"]
+
+
+class ImportIn(BaseModel):
+    csv: str = Field(default="", max_length=5_000_000)
+    pdf_base64: str = Field(default="", max_length=8_000_000)  # a broker statement as PDF
+    dry_run: bool = True
+
+
+@router.post("/portfolios/{pid}/import")
+def import_csv(pid: int, body: ImportIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Import a broker's trade export (CSV or PDF statement). dry_run=true returns a preview; false saves the transactions."""
+    import base64
+
+    from engine.broker_csv import parse, parse_pdf
+
+    p = db.get(Portfolio, pid)
+    if p is None or p.user_id != user.id:
+        raise HTTPException(404, "Portfolio not found")
+    if body.pdf_base64:
+        try:
+            res = parse_pdf(base64.b64decode(body.pdf_base64.split(",")[-1]))
+        except ValueError:
+            raise HTTPException(400, "The PDF file could not be decoded")
+    else:
+        res = parse(body.csv)
+    existing = [Txn(date=pd.Timestamp(x.date).date(), symbol=x.symbol, side=x.side, shares=x.shares, price=x.price, fees=x.fees)
+                for x in db.scalars(select(PortfolioTxn).where(PortfolioTxn.portfolio_id == pid)).all()]
+    new = [Txn(date=pd.Timestamp(x["date"]).date(), symbol=x["symbol"], side=x["side"], shares=x["shares"], price=x["price"], fees=x["fees"])
+           for x in res["txns"]]
+    error = None
+    try:
+        validate(existing + new)
+    except ValueError as e:
+        error = str(e)
+    if body.dry_run or error:
+        return {**res, "error": error, "saved": 0}
+    for x in res["txns"]:
+        db.add(PortfolioTxn(portfolio_id=pid, date=pd.Timestamp(x["date"]).date(), symbol=x["symbol"], side=x["side"],
+                            shares=x["shares"], price=x["price"], fees=x["fees"]))
+    db.commit()
+    return {**res, "error": None, "saved": len(res["txns"])}

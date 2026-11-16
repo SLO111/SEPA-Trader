@@ -182,3 +182,35 @@ class MarketStageStrategy(Strategy):
             ma = w["ma"].shift(1).reindex(df.index, method="ffill")
             res.lines.append(line("30-week MA", ma, "#e2e8f0", width=1))
         return res
+
+
+@register
+class PulseStrategy(Strategy):
+    id = "pulse"
+    name = "vnicorn Pulse (confirmations / warnings)"
+    category = "SEPA"
+    description = (
+        "Daily confirmations (up on volume, close near high, RS line new high, good closes, breakouts…) vs. warnings "
+        "(down on volume, close near low, lower lows, MA breaks, outside reversals…). Lower pane: confirmations minus warnings per day; "
+        "markers on days with 3 or more of one kind."
+    )
+    params = [Param("lookback", "Bars to show", 120, 30, 500)]
+
+    def compute(self, df, p, bench=None):
+        from .. import pulse
+
+        n = int(p["lookback"])
+        s = pulse.signals(df, bench, last=n)
+        res = StrategyResult()
+        res.histograms.append({
+            "name": "Pulse", "pane": "lower",
+            "data": [{"time": t(ts), "value": len(r.conf) - len(r.warn),
+                      "color": "#22c55eaa" if len(r.conf) > len(r.warn) else "#ef4444aa" if len(r.warn) > len(r.conf) else "#64748b88"}
+                     for ts, r in s.iterrows()],
+        })
+        for ts, r in s.iterrows():
+            if len(r.conf) >= 3 and len(r.conf) > len(r.warn):
+                res.markers.append({"time": t(ts), "position": "belowBar", "shape": "circle", "color": "#22c55e", "text": f"+{len(r.conf)}"})
+            elif len(r.warn) >= 3 and len(r.warn) > len(r.conf):
+                res.markers.append({"time": t(ts), "position": "aboveBar", "shape": "circle", "color": "#ef4444", "text": f"−{len(r.warn)}"})
+        return res

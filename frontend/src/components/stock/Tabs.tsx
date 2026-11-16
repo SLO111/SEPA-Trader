@@ -6,7 +6,7 @@ import type { Company, FinRow } from "@/lib/types";
 import { Card, KV } from "./Overview";
 
 function LiveOnly({ what }: { what: string }) {
-  return <p className="text-sm text-muted">{what} require a live data provider and are not available in demo mode.</p>;
+  return <p className="text-sm text-muted">{what}: not available for this stock from our data sources right now.</p>;
 }
 
 // ------------------------------------------------------------------ financials
@@ -219,12 +219,39 @@ export function Ownership({ c }: { c: Company }) {
   const o = c.ownership;
   return (
     <div className="space-y-5">
-      <Card title="Ownership">
-        <KV rows={[["Institutions", fmt(o.institutional_pct, 1, "%")], ["Insiders", fmt(o.insider_pct, 2, "%")]]} />
-      </Card>
+      {o.insider_sentiment && (
+        <Card title="Insider sentiment" right={<span className="text-[11px] text-muted">Net buying vs. selling by executives, −100 to +100</span>}>
+          <div className="flex flex-wrap items-end gap-6">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted">Last 3 months</div>
+              <div className={`tabular text-3xl font-semibold ${o.insider_sentiment.avg_3m > 5 ? "text-up" : o.insider_sentiment.avg_3m < -5 ? "text-down" : ""}`}>
+                {o.insider_sentiment.avg_3m > 0 ? "+" : ""}
+                {o.insider_sentiment.avg_3m}
+              </div>
+              <div className="text-xs text-muted">{o.insider_sentiment.avg_3m > 5 ? "Insiders are buying" : o.insider_sentiment.avg_3m < -5 ? "Insiders are selling" : "Neutral"}</div>
+            </div>
+            <div className="flex h-20 flex-1 items-center gap-1.5">
+              {o.insider_sentiment.months.map((m) => (
+                <div key={m.month} className="flex flex-1 flex-col items-center justify-center" title={`${m.month}: ${m.mspr}`}>
+                  <div className="flex h-16 w-full flex-col justify-center">
+                    <div className="flex h-1/2 items-end">{m.mspr > 0 && <div className="w-full rounded-t bg-up/70" style={{ height: `${Math.min(100, m.mspr)}%` }} />}</div>
+                    <div className="flex h-1/2 items-start border-t border-line">{m.mspr < 0 && <div className="w-full rounded-b bg-down/70" style={{ height: `${Math.min(100, -m.mspr)}%` }} />}</div>
+                  </div>
+                  <span className="mt-0.5 text-[10px] text-muted">{m.month.slice(5)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+      {(o.institutional_pct !== null || o.insider_pct !== null) && (
+        <Card title="Ownership">
+          <KV rows={[["Institutions", fmt(o.institutional_pct, 1, "%")], ["Insiders", fmt(o.insider_pct, 2, "%")]]} />
+        </Card>
+      )}
       <Card title="Top institutional holders">
         {o.top_holders.length === 0 ? (
-          <LiveOnly what="Holder lists" />
+          <p className="text-sm text-muted">Fund holdings (13F filings) are only offered on paid data plans, so they aren&apos;t shown here yet.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
@@ -260,6 +287,7 @@ export function Ownership({ c }: { c: Company }) {
                   <th className="py-1.5">Insider</th>
                   <th className="py-1.5">Transaction</th>
                   <th className="py-1.5 text-right">Shares</th>
+                  <th className="py-1.5 text-right">Price</th>
                   <th className="py-1.5 text-right">Value</th>
                 </tr>
               </thead>
@@ -271,8 +299,11 @@ export function Ownership({ c }: { c: Company }) {
                       {x.insider}
                       <div className="text-xs text-muted">{x.position}</div>
                     </td>
-                    <td className="py-1.5 text-muted">{x.transaction || "—"}</td>
-                    <td className="tabular py-1.5 text-right">{x.shares ? x.shares.toLocaleString("en-US") : "—"}</td>
+                    <td className={`py-1.5 ${x.transaction === "Purchase" ? "text-up" : x.transaction === "Sale" ? "text-down" : "text-muted"}`}>{x.transaction || "—"}</td>
+                    <td className={`tabular py-1.5 text-right ${(x.shares ?? 0) > 0 ? "text-up" : (x.shares ?? 0) < 0 ? "text-down" : ""}`}>
+                      {x.shares ? `${x.shares > 0 ? "+" : ""}${x.shares.toLocaleString("en-US")}` : "—"}
+                    </td>
+                    <td className="tabular py-1.5 text-right">{x.price ? fmt(x.price) : "—"}</td>
                     <td className="tabular py-1.5 text-right">{compactUsd(x.value)}</td>
                   </tr>
                 ))}

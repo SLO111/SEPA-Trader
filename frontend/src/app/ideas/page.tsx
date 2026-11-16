@@ -125,11 +125,11 @@ function Ideas() {
               ))}
             </div>
             <div className="flex flex-wrap gap-1 border-b border-line px-2 py-1.5">
-              {(["ALL", "AIPICKS", "AI", "SWING", "TRADE", "INVEST", "SHORT"] as const).map((t) => {
+              {(["ALL", "AIPICKS", "SWING", "TRADE", "INVEST", "SHORT"] as const).map((t) => {
                 const n = data?.ideas.filter((i) => match(i, t)).length;
                 return (
                   <button key={t} onClick={() => setTf(t)} className={`rounded-full px-3 py-0.5 text-xs ${tf === t ? "bg-accent text-white" : "text-muted hover:bg-panel-2 hover:text-text"}`}>
-                    {t === "ALL" ? "All" : t === "AIPICKS" ? "✦ vnicornAI picks" : t === "AI" ? "AI ideas" : t} <span className="tabular opacity-70">{n ?? 0}</span>
+                    {t === "ALL" ? "All" : t === "AIPICKS" ? "✦ vnicornAI picks" : t} <span className="tabular opacity-70">{n ?? 0}</span>
                   </button>
                 );
               })}

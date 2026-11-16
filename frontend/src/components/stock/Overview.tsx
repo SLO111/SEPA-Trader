@@ -2,15 +2,15 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { scoreColor } from "@/components/ScoreBadge";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
 import type { Candle, StockData } from "@/lib/types";
 import Gauge from "./Gauge";
+import Technicals from "./Technicals";
 import type { Range } from "./MiniChart";
 
 const MiniChart = dynamic(() => import("./MiniChart"), { ssr: false });
-const TradingViewWidget = dynamic(() => import("@/components/TradingViewWidget"), { ssr: false });
 
 const TONE_DOT = { positive: "bg-up", negative: "bg-down", neutral: "bg-muted" } as const;
 
@@ -36,37 +36,6 @@ export function KV({ rows }: { rows: [string, string][] }) {
         </div>
       ))}
     </dl>
-  );
-}
-
-/** Buy/Sell rating from TradingView: three gauges side by side on wide screens, one on phones. */
-function Technicals({ symbol }: { symbol: string }) {
-  const [wide, setWide] = useState(true);
-  useEffect(() => {
-    const m = window.matchMedia("(min-width: 768px)");
-    const f = () => setWide(m.matches);
-    f();
-    m.addEventListener("change", f);
-    return () => m.removeEventListener("change", f);
-  }, []);
-  return (
-    <div className="mx-auto w-full max-w-3xl">
-      <TradingViewWidget
-        script="embed-widget-technical-analysis.js"
-        height={wide ? 450 : 480}
-        config={{
-          interval: "1D",
-          width: "100%",
-          height: "100%",
-          isTransparent: true,
-          symbol: symbol.replace("-", "."),
-          showIntervalTabs: true,
-          displayMode: wide ? "multiple" : "single",
-          locale: "en",
-          colorTheme: "dark",
-        }}
-      />
-    </div>
   );
 }
 
@@ -115,7 +84,7 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
           <p className="mt-3 text-[11px] text-muted">Generated automatically from market data and technical rules.</p>
         </Card>
 
-        <Card title="Technicals" right={<span className="text-[11px] text-muted">26 indicators: oscillators + moving averages · TradingView</span>}>
+        <Card title="Technicals" right={<span className="text-[11px] text-muted">26 indicators: 11 oscillators + 15 moving averages</span>}>
           <Technicals symbol={c.symbol} />
         </Card>
 
@@ -214,14 +183,67 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
 
         {c.analysts && c.analysts.score !== null && (
           <Card title="Analyst rating" right={<span className="text-[11px] text-muted">{c.analysts.total} analysts</span>}>
-            <Gauge value={(5 - c.analysts.score) / 4} label={c.analysts.rating ?? "—"} />
+            <Gauge value={(5 - c.analysts.score) / 4} label={c.analysts.rating ?? "—"} sub={`Score ${c.analysts.score} (1 = strong buy, 5 = strong sell)`} />
+            {c.analysts.total > 0 && (
+              <div className="mt-4">
+                <div className="flex h-2 overflow-hidden rounded-full bg-line">
+                  {(
+                    [
+                      ["strong_buy", "bg-green-500"],
+                      ["buy", "bg-blue-500"],
+                      ["hold", "bg-slate-400"],
+                      ["sell", "bg-orange-500"],
+                      ["strong_sell", "bg-red-500"],
+                    ] as const
+                  ).map(([k, cls]) => (
+                    <div key={k} className={cls} style={{ width: `${((c.analysts!.counts[k] ?? 0) / c.analysts!.total) * 100}%` }} />
+                  ))}
+                </div>
+                <div className="mt-2 grid grid-cols-5 gap-1 text-center text-[10px] text-muted">
+                  {(
+                    [
+                      ["strong_buy", "Strong buy", "text-green-400"],
+                      ["buy", "Buy", "text-blue-400"],
+                      ["hold", "Hold", "text-slate-300"],
+                      ["sell", "Sell", "text-orange-400"],
+                      ["strong_sell", "Strong sell", "text-red-400"],
+                    ] as const
+                  ).map(([k, l, cls]) => (
+                    <div key={k}>
+                      <div className={`tabular text-sm font-semibold ${cls}`}>{c.analysts!.counts[k] ?? 0}</div>
+                      {l}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {c.analysts.target_mean && (
-              <div className="mt-3 flex justify-between text-sm">
-                <span className="text-muted">1-year price target</span>
-                <span className="tabular">
-                  {fmt(c.analysts.target_mean)}{" "}
-                  {c.analysts.upside_pct !== null && <span className={tone(c.analysts.upside_pct)}>({pct(c.analysts.upside_pct, 1)})</span>}
-                </span>
+              <div className="mt-4 rounded-lg bg-panel-2/50 p-3">
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="text-muted">1-year price target</span>
+                  <span className="tabular font-semibold">
+                    ${fmt(c.analysts.target_mean)}{" "}
+                    {c.analysts.upside_pct !== null && <span className={`text-xs ${tone(c.analysts.upside_pct)}`}>({pct(c.analysts.upside_pct, 1)})</span>}
+                  </span>
+                </div>
+                {c.analysts.target_low && c.analysts.target_high && (
+                  <div className="mt-3">
+                    <div className="relative h-1.5 rounded-full bg-gradient-to-r from-red-500/40 via-slate-500/40 to-green-500/50">
+                      {[
+                        [d.quote.price ?? 0, "bg-white", "Now"],
+                        [c.analysts.target_mean, "bg-accent", "Avg"],
+                      ].map(([v, cls, t]) => {
+                        const lo = Math.min(c.analysts!.target_low!, d.quote.price ?? Infinity), hi = Math.max(c.analysts!.target_high!, d.quote.price ?? 0);
+                        const left = Math.min(100, Math.max(0, (((v as number) - lo) / (hi - lo)) * 100));
+                        return <span key={t as string} title={`${t}: ${fmt(v as number)}`} className={`absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded ${cls}`} style={{ left: `${left}%` }} />;
+                      })}
+                    </div>
+                    <div className="tabular mt-1.5 flex justify-between text-[10px] text-muted">
+                      <span>Low ${fmt(c.analysts.target_low)}</span>
+                      <span>High ${fmt(c.analysts.target_high)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </Card>

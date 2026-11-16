@@ -3,6 +3,8 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
+import ImportCsv from "@/components/portfolio/ImportCsv";
+import TradeGrader from "@/components/TradeGrader";
 import ClassificationCard from "@/components/portfolio/ClassificationCard";
 import HoldingsTable from "@/components/portfolio/HoldingsTable";
 import { PROFILE_STYLE, RiskMeter } from "@/components/portfolio/profile";
@@ -91,6 +93,8 @@ function PerformanceCard({ id, version }: { id: number; version: number }) {
 
 function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChange: (p: PortfolioDetail) => void; onDeleted: () => void }) {
   const [version, setVersion] = useState(0);
+  const [modal, setModal] = useState<"none" | "import" | "grade">("none");
+  const reload = async () => update(await api<PortfolioDetail>(`/api/portfolios/${p.id}`));
   const update = (np: PortfolioDetail) => {
     onChange(np);
     setVersion((v) => v + 1);
@@ -114,7 +118,13 @@ function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChang
             <h1 className="text-xl font-semibold">{p.name}</h1>
             {p.description && <p className="text-sm text-muted">{p.description}</p>}
           </div>
-          <div className="ml-auto flex gap-1 text-sm">
+          <div className="ml-auto flex flex-wrap gap-1 text-sm">
+            <button onClick={() => setModal("grade")} className="rounded-md border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-violet-200 hover:bg-violet-500/20">
+              ✦ Grade trades
+            </button>
+            <button onClick={() => setModal("import")} className="rounded-md border border-line px-3 py-1 text-muted hover:text-text">
+              ⬆ Import CSV / PDF
+            </button>
             <button onClick={rename} className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text">
               Rename
             </button>
@@ -131,6 +141,20 @@ function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChang
           <Stat label="Dividends received" value={usd(p.dividends_total)} cls={p.dividends_total > 0 ? "text-up" : ""} />
         </div>
       </section>
+      {modal === "import" && <ImportCsv portfolioId={p.id} onClose={() => setModal("none")} onSaved={reload} />}
+      {modal === "grade" && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-3" onMouseDown={() => setModal("none")}>
+          <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-line bg-bg shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-line p-4">
+              <h2 className="font-semibold">TradeGrader · {p.name}</h2>
+              <button onClick={() => setModal("none")} className="rounded px-2 py-1 text-muted hover:bg-panel-2" aria-label="Close">✕</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <TradeGrader source="portfolio" portfolioId={p.id} />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <PerformanceCard id={p.id} version={version} />

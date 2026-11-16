@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, del, patch, post } from "@/lib/api";
+import { api, del, patch, post, put } from "@/lib/api";
 import type { Quote, Watchlist } from "@/lib/types";
 
 type SearchHit = { symbol: string; name: string; exchange: string };
@@ -18,6 +18,45 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const active = lists.find((l) => l.id === activeId) ?? lists[0];
+
+  // Drag & drop to reorder (mouse and touch): grab the ⋮⋮ handle and move the row. The drag is followed on the
+  // window, because moving the row in the list would otherwise make the browser drop the pointer.
+  const [dragging, setDragging] = useState<string | null>(null);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const startDrag = (e: React.PointerEvent, sym: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(sym);
+  };
+  useEffect(() => {
+    if (!dragging) return;
+    const move = (e: PointerEvent) => {
+      const cur = activeRef.current;
+      if (!cur) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-symbol]") as HTMLElement | null;
+      const over = el?.dataset.symbol;
+      if (!over || over === dragging) return;
+      const from = cur.symbols.indexOf(dragging), to = cur.symbols.indexOf(over);
+      const syms = cur.symbols.filter((x) => x !== dragging);
+      syms.splice(syms.indexOf(over) + (to > from ? 1 : 0), 0, dragging);
+      replaceList({ ...cur, symbols: syms });
+    };
+    const up = () => {
+      const cur = activeRef.current;
+      setDragging(null);
+      if (cur) run(async () => replaceList(await put<Watchlist>(`/api/watchlists/${cur.id}/order`, { symbols: cur.symbols })));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up, { once: true });
+    window.addEventListener("pointercancel", up, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, [dragging]);
+
 
   const replaceList = (w: Watchlist) => setLists((ls) => ls.map((l) => (l.id === w.id ? w : l)));
   const run = async (fn: () => Promise<void>) => {
@@ -173,10 +212,22 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
           return (
             <div
               key={s}
-              onClick={() => onSelect(s)}
-              className={`group grid cursor-pointer grid-cols-[1fr_auto_auto] items-center gap-x-3 px-3 py-1.5 text-sm ${s === selected ? "bg-panel-2" : "hover:bg-panel-2/60"}`}
+              data-symbol={s}
+              onClick={() => !dragging && onSelect(s)}
+              className={`group grid cursor-pointer grid-cols-[1fr_auto_auto] items-center gap-x-3 py-1.5 pl-1 pr-3 text-sm transition-colors ${
+                dragging === s ? "bg-accent/20 ring-1 ring-accent/60" : s === selected ? "bg-panel-2" : "hover:bg-panel-2/60"
+              }`}
             >
               <span className="flex items-center gap-1 font-medium">
+                <span
+                  onPointerDown={(e) => startDrag(e, s)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="cursor-grab touch-none select-none px-1 text-muted/40 hover:text-muted active:cursor-grabbing group-hover:text-muted"
+                  title="Drag to reorder"
+                  aria-label={`Drag ${s} to reorder`}
+                >
+                  ⋮⋮
+                </span>
                 {s}
                 <button
                   onClick={(e) => {

@@ -68,3 +68,31 @@ def report(symbol: str, user: User = Depends(current_user)):
     pdf = build_pdf(d["company"], d["quote"], d["history"], d["sepa"], d["takeaways"], d["returns"], d["peers"])
     name = f"{d['company']['symbol']}-report-{d['quote']['date']}.pdf"
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.get("/{symbol}/technicals")
+def technicals(symbol: str, interval: str = "1d", user: User = Depends(current_user)):
+    """Technical rating (15 moving averages + 11 oscillators) on 1 hour, 1 day or 1 week bars."""
+    from engine.technicals import rating
+
+    sym = symbol.upper().strip()
+    if interval not in ("1h", "1d", "1wk"):
+        raise HTTPException(400, "interval must be 1h, 1d or 1wk")
+
+    def build():
+        if interval == "1h":
+            df = market_data.chart_data(sym, "1h")
+            if "session" in df.columns:
+                df = df[df["session"] == "regular"]
+        elif interval == "1wk":
+            df = market_data.history(sym, "1wk", 10)
+        else:
+            df = market_data.history(sym)
+        return {"symbol": sym, "interval": interval, **rating(df)}
+
+    try:
+        return market_data._fast(f"tech:{sym}:{interval}", 300, build)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(404, f"No data for {sym} on {interval}")

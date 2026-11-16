@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
+import AskVnicorn from "@/components/chart/AskVnicorn";
 import ChartLegend from "@/components/chart/ChartLegend";
 import IndicatorPicker from "@/components/chart/IndicatorPicker";
 import SymbolInfoPanel from "@/components/chart/SymbolInfoPanel";
@@ -48,6 +49,7 @@ function ChartWorkspace() {
   const [overlays, setOverlays] = useState<StrategyOutput[]>([]);
   const [error, setError] = useState("");
   const [picker, setPicker] = useState(false);
+  const [ask, setAsk] = useState(false);
   const [panel, setPanel] = useState<"none" | "watch" | "info">("none");
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
   const loaded = useRef(false); // don't overwrite saved indicators with the empty initial state
@@ -226,6 +228,12 @@ function ChartWorkspace() {
           <button onClick={() => setPicker(true)} className="flex items-center gap-1.5 rounded px-2 py-1 text-sm text-muted hover:bg-panel-2 hover:text-text">
             <span className="text-base leading-none">ƒx</span> Indicators
           </button>
+          <button
+            onClick={() => setAsk(true)}
+            className="rounded-md bg-gradient-to-r from-violet-500/80 to-cyan-500/80 px-2.5 py-1 text-sm font-medium text-white shadow shadow-violet-500/20 hover:from-violet-500 hover:to-cyan-500"
+          >
+            ✦ Ask vnicornAI
+          </button>
           <Link href={`/alerts?symbol=${encodeURIComponent(symbol)}`} className="rounded px-2 py-1 text-sm text-muted hover:bg-panel-2 hover:text-text">
             🔔 Alert
           </Link>
@@ -256,6 +264,7 @@ function ChartWorkspace() {
         <SymbolInfoPanel symbol={symbol} info={info} error={infoError} />
       </aside>
 
+      {ask && <AskVnicorn symbol={symbol} onClose={() => setAsk(false)} />}
       {picker && (
         <IndicatorPicker
           defs={defs}

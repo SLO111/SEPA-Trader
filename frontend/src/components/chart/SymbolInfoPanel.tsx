@@ -103,6 +103,42 @@ export default function SymbolInfoPanel({ symbol, info, error }: { symbol: strin
         <Row k="Next earnings" v={info.next_earnings ?? "—"} />
       </div>
 
+      {info.pulse && (
+        <div className="border-b border-line p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] uppercase tracking-wide text-muted">vnicorn Pulse · 10 days</span>
+            <span
+              className={`tabular rounded px-2 py-0.5 text-xs font-semibold ${info.pulse.tone === "constructive" ? "bg-up/15 text-up" : info.pulse.tone === "warning" ? "bg-down/15 text-down" : "bg-panel-2 text-muted"}`}
+              title="Confirmations / warnings"
+            >
+              {info.pulse.conf}/{info.pulse.warn}
+            </span>
+          </div>
+          {info.pulse.today.conf.length + info.pulse.today.warn.length === 0 ? (
+            <p className="text-xs text-muted">No signals today.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {info.pulse.today.conf.map((x) => <span key={x} className="rounded bg-up/10 px-1.5 py-0.5 text-[11px] text-up">✓ {x}</span>)}
+              {info.pulse.today.warn.map((x) => <span key={x} className="rounded bg-down/10 px-1.5 py-0.5 text-[11px] text-down">! {x}</span>)}
+            </div>
+          )}
+          {info.pulse.recent.length > 1 && (
+            <ul className="mt-2 space-y-0.5 text-[11px] text-muted">
+              {info.pulse.recent.slice(1, 4).map((d) => (
+                <li key={d.date} className="flex gap-2">
+                  <span className="tabular w-10 shrink-0">{d.date.slice(5)}</span>
+                  <span className="truncate">
+                    {d.conf.length > 0 && <span className="text-up">+{d.conf.length} </span>}
+                    {d.warn.length > 0 && <span className="text-down">−{d.warn.length} </span>}
+                    {[...d.conf, ...d.warn].slice(0, 2).join(", ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {sepa && (
         <div className="p-4">
           <div className="mb-2 text-[11px] uppercase tracking-wide text-muted">SEPA analysis</div>

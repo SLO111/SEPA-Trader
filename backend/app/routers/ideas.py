@@ -195,15 +195,83 @@ def take_idea(body: dict, user: User = Depends(current_user), db: Session = Depe
     return _paper_out(t, df)
 
 
+def scan_plan(symbol: str, side: str, db: Session) -> dict:
+    """Plan for a Move Detector trade: vnicornAI's best plan when the model exists, otherwise rules
+    (long: VCP stop or 2 ATR; short: 2 ATR above), trim 1.5R, target 3R."""
+    from engine import vnicorn_ai
+    from engine.indicators import atr
+    from engine.vcp import detect_vcp
+
+    from .. import market_data, vnicorn_service
+
+    df = market_data.history(symbol)
+    try:
+        bench = market_data.history("SPY")
+    except Exception:
+        bench = None
+    bundle = vnicorn_service.load(db)
+    if bundle is not None:
+        plan = vnicorn_ai.best_plan(bundle, df, bench, side)
+        if plan:
+            return {**plan, "source": "vnicornAI", "df": df}
+    price = float(df["close"].iloc[-1])
+    a = float(atr(df, 14).iloc[-1])
+    stop = price - 2 * a if side == "long" else price + 2 * a
+    if side == "long":
+        v = detect_vcp(df)
+        if v.get("stop") and price * 0.85 < v["stop"] < price:
+            stop = float(v["stop"])
+    risk = abs(price - stop)
+    sign = 1 if side == "long" else -1
+    return {"entry": round(price, 2), "stop": round(stop, 2), "trim": round(price + sign * 1.5 * risk, 2),
+            "target": round(price + sign * 3 * risk, 2), "rr": 3.0, "source": "rules", "df": df}
+
+
+@router.post("/paper-trades/scan")
+def take_scan(body: dict, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Buy / Short a Move Detector stock now; followed separately from the idea trades (timeframe "MD")."""
+    from ..models import PaperTrade
+
+    if not limits_for(user)["move_detector"]:
+        raise HTTPException(403, "Move Detector is available on the Pro and Premium plans.")
+    sym = str(body.get("symbol") or "").upper().strip()
+    side = body.get("side")
+    if not sym or side not in ("long", "short"):
+        raise HTTPException(400, "symbol and side (long/short) are required")
+    mine = db.scalars(select(PaperTrade).where(PaperTrade.user_id == user.id, PaperTrade.symbol == sym, PaperTrade.timeframe == "MD")).all()
+    if mine:
+        from .. import market_data
+
+        df_now = market_data.history(sym)
+        if any(_paper_out(t, df_now)["open"] for t in mine):
+            raise HTTPException(409, f"You already have an open Move Detector trade in {sym}")
+    try:
+        plan = scan_plan(sym, side, db)
+    except Exception:
+        raise HTTPException(404, f"No data found for {sym}")
+    df = plan.pop("df")
+    weight = round(min(20.0, 1 / (abs(plan["entry"] - plan["stop"]) / plan["entry"])), 1) if plan["entry"] != plan["stop"] else 0.0
+    t = PaperTrade(user_id=user.id, idea_id=None, symbol=sym, timeframe="MD", side=side, entry_date=df.index[-1].date(),
+                   entry=plan["entry"], stop=plan["stop"], trim=plan["trim"], target=plan["target"], weight=weight)
+    db.add(t)
+    db.commit()
+    return {**_paper_out(t, df), "plan_source": plan["source"]}
+
+
 @router.get("/paper-trades")
-def paper_trades(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def paper_trades(source: Literal["all", "ideas", "md"] = "all", user: User = Depends(current_user), db: Session = Depends(get_db)):
     from engine.paper import summary
 
     from .. import market_data
     from ..models import PaperTrade
 
     rows = []
-    for t in db.scalars(select(PaperTrade).where(PaperTrade.user_id == user.id).order_by(PaperTrade.created_at.desc())).all():
+    q = select(PaperTrade).where(PaperTrade.user_id == user.id)
+    if source == "md":
+        q = q.where(PaperTrade.timeframe == "MD")
+    elif source == "ideas":
+        q = q.where(PaperTrade.timeframe != "MD")
+    for t in db.scalars(q.order_by(PaperTrade.created_at.desc())).all():
         try:
             df = market_data.history(t.symbol)
         except Exception:
@@ -243,3 +311,92 @@ def ai_status(user: User = Depends(current_user), db: Session = Depends(get_db))
     from .. import vnicorn_service
 
     return vnicorn_service.status(db)
+
+
+# ---------------- TradeGrader & analytics ----------------
+
+def _trades_for(user: User, db: Session, source: str, portfolio_id: int | None = None) -> list[dict]:
+    """Trades to grade: paper trades (ideas / Move Detector) and/or portfolio round trips."""
+    from engine.trade_grader import round_trips
+
+    from .. import market_data
+    from ..models import PaperTrade, Portfolio, PortfolioTxn
+
+    out = []
+    if source in ("all", "backtest", "ideas", "md"):
+        q = select(PaperTrade).where(PaperTrade.user_id == user.id)
+        if source == "md":
+            q = q.where(PaperTrade.timeframe == "MD")
+        elif source == "ideas":
+            q = q.where(PaperTrade.timeframe != "MD")
+        for t in db.scalars(q).all():
+            try:
+                df = market_data.history(t.symbol)
+            except Exception:
+                continue
+            f = _paper_out(t, df)
+            out.append({"source": "Move Detector" if t.timeframe == "MD" else "Trade ideas", "symbol": t.symbol, "side": t.side,
+                        "entry_date": t.entry_date.isoformat(), "entry_price": t.entry, "stop": t.stop,
+                        "exit_date": f["closed_at"], "exit_price": f["exit_price"], "ref": f"paper:{t.id}"})
+    if source in ("all", "portfolio"):
+        q = select(Portfolio).where(Portfolio.user_id == user.id)
+        if portfolio_id:
+            q = q.where(Portfolio.id == portfolio_id)
+        for p in db.scalars(q).all():
+            txns = [{"date": x.date.isoformat(), "symbol": x.symbol, "side": x.side, "shares": x.shares, "price": x.price}
+                    for x in db.scalars(select(PortfolioTxn).where(PortfolioTxn.portfolio_id == p.id)).all()]
+            for i, rt in enumerate(round_trips(txns)):
+                out.append({**rt, "source": f"Portfolio: {p.name}", "ref": f"pf:{p.id}:{i}"})
+    return out
+
+
+def _graded(user: User, db: Session, source: str, portfolio_id: int | None) -> list[dict]:
+    from engine.trade_grader import grade_trade
+
+    from .. import market_data
+
+    rows = []
+    for t in _trades_for(user, db, source, portfolio_id):
+        try:
+            df = market_data.history(t["symbol"])
+        except Exception:
+            continue
+        rows.append(grade_trade(t, df))
+    rows.sort(key=lambda r: str(r.get("exit_date") or r.get("entry_date")), reverse=True)
+    return rows
+
+
+@router.get("/grader")
+def grader(source: Literal["all", "backtest", "ideas", "md", "portfolio"] = "all", portfolio_id: int | None = None,
+           user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """TradeGrader: Bought / Sold Perfect, Early or Late, plus an A-F grade for every trade."""
+    from engine.trade_grader import aggregate
+
+    rows = _graded(user, db, source, portfolio_id)
+    return {"trades": rows, "summary": aggregate(rows)}
+
+
+@router.get("/grader/chart")
+def grader_chart(symbol: str, start: str, end: str | None = None, user: User = Depends(current_user)):
+    """Daily candles around a trade, for the TradeGrader chart."""
+    import pandas as pd
+
+    from engine.strategies.base import t as ts
+
+    from .. import market_data
+
+    df = market_data.history(symbol.upper())
+    a = df.index.searchsorted(pd.Timestamp(start)) - 40
+    b = df.index.searchsorted(pd.Timestamp(end or df.index[-1])) + 30
+    d = df.iloc[max(0, a): b]
+    return [{"time": ts(i), "open": round(float(r.open), 2), "high": round(float(r.high), 2), "low": round(float(r.low), 2),
+             "close": round(float(r.close), 2), "volume": int(r.volume)} for i, r in d.iterrows()]
+
+
+@router.get("/analytics")
+def trade_analytics(source: Literal["all", "backtest", "ideas", "md", "portfolio"] = "all", portfolio_id: int | None = None,
+                    user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """TradingLogger-style statistics over your closed trades."""
+    from engine.trade_grader import analytics
+
+    return analytics(_graded(user, db, source, portfolio_id))

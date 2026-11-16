@@ -140,6 +140,12 @@ def info(symbol: str, user: User = Depends(current_user)):
                     stats[k] = sources.get(k if k != "dividend_yield" else "yield", sources.get(k))
         except Exception:
             pass
+    try:
+        from engine import pulse as pulse_mod
+
+        pulse_info = market_data._fast(f"pulse1:{sym}", 300, lambda: pulse_mod.summary(d, market_data.history("SPY")))
+    except Exception:
+        pulse_info = None
     avg_vol = float(d["volume"].iloc[-51:-1].mean())
     return {
         "symbol": sym,
@@ -154,8 +160,50 @@ def info(symbol: str, user: User = Depends(current_user)):
         "volume": {"today": int(last.volume), "avg_50d": int(avg_vol), "relative": round(float(last.volume) / avg_vol, 2) if avg_vol else None},
         "stats": stats,
         "next_earnings": e.get("next_date"),
+        "pulse": pulse_info,
         "extended": ext,
         # Overnight (8 PM - 4 AM ET, e.g. Blue Ocean ATS) needs a paid feed; Yahoo and Finnhub free don't provide it.
         "overnight": None,
         "sepa": {k: scan[k] for k in ("rs_rating", "template_passed", "vcp", "pivot", "bull_score", "bear_score", "signals")} if scan else None,
     }
+
+
+@router.get("/market/analysis/{symbol}")
+def analysis(symbol: str, user: User = Depends(current_user)):
+    """Ask vnicornAI: a plain-English read of the chart, plus vnicornAI's best long and short plans."""
+    from engine import chart_commentary, vnicorn_ai
+    from engine.stages import stage_now
+
+    from .. import vnicorn_service
+    from ..db import SessionLocal
+
+    sym = symbol.upper().strip()
+    market_data.watch(sym)
+    try:
+        df = market_data.history(sym)
+    except Exception:
+        raise HTTPException(404, f"No data found for {sym}")
+
+    def build():
+        try:
+            bench = market_data.history("SPY")
+        except Exception:
+            bench = None
+        with SessionLocal() as db:
+            bundle = vnicorn_service.load(db)
+        plans = {}
+        if bundle is not None:
+            feats = vnicorn_ai.features(df, bench)
+            for side in ("long", "short"):
+                plans[side] = vnicorn_ai.best_plan(bundle, df, bench, side, feats=feats)
+        st = stage_now(df)
+        preferred = "short" if st and st["stage"] == 4 else "long"
+        best = plans.get(preferred)
+        if plans.get("long") and plans.get("short") and plans["short"]["ev"] > plans["long"]["ev"] + 0.2:
+            best = plans["short"]
+        out = chart_commentary.analyze(df, bench, best, sym)
+        out["plans"] = plans
+        out["name"] = market_data.symbol_meta(sym).get("name", sym)
+        return out
+
+    return market_data._fast(f"analysis:{sym}", 600, build)

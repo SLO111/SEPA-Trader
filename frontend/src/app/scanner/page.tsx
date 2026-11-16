@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { ScoreBar } from "@/components/ScoreBadge";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, post } from "@/lib/api";
 import type { ScanRow } from "@/lib/types";
 
 type Tab = "bull" | "bear" | "rs" | "ai";
@@ -26,6 +26,25 @@ function Scanner() {
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState("");
   const [error, setError] = useState("");
+
+  // Move Detector trades already open (Buy / Short here goes to Backtest → Move Detector trades)
+  const [taken, setTaken] = useState<Set<string>>(new Set());
+  const loadTaken = () =>
+    api<{ trades: { symbol: string; open: boolean }[] }>("/api/paper-trades?source=md")
+      .then((r) => setTaken(new Set(r.trades.filter((t) => t.open).map((t) => t.symbol))))
+      .catch(() => {});
+  useEffect(() => {
+    loadTaken();
+  }, []);
+  const take = async (symbol: string, side: "long" | "short") => {
+    if (!confirm(`${side === "short" ? "Short" : "Buy"} ${symbol} now at the current price?\n\nvnicornAI (or the rules) sets the stop, trim and target. It is followed in Backtest → Move Detector trades.`)) return;
+    try {
+      await post("/api/paper-trades/scan", { symbol, side });
+      loadTaken();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -51,7 +70,7 @@ function Scanner() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-7xl p-4 sm:p-6">
+      <div className="mx-auto max-w-[1600px] p-3 sm:p-6">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h1 className="text-xl font-semibold">Move Detector</h1>
           <span className="text-xs text-muted">Scores refresh every 5 minutes</span>
@@ -105,18 +124,20 @@ function Scanner() {
                 <th className="px-4 py-3 text-right">RS</th>
                 <th className="px-4 py-3 text-right">TT</th>
                 <th className="px-4 py-3 text-right">Pivot</th>
-                <th className="px-4 py-3">Signals</th>
+                <th className="hidden px-4 py-3 2xl:table-cell">Signals</th>
+                <th className="px-3 py-3" title="Confirmations / warnings over the last 10 days">Pulse 10d</th>
+                <th className="sticky right-0 z-[1] bg-panel px-3 py-3" />
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-muted">Scanning the market…</td>
+                  <td colSpan={12} className="px-4 py-10 text-center text-muted">Scanning the market…</td>
                 </tr>
               )}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-muted">No stocks match these filters.</td>
+                  <td colSpan={12} className="px-4 py-10 text-center text-muted">No stocks match these filters.</td>
                 </tr>
               )}
               {!loading &&
@@ -150,7 +171,7 @@ function Scanner() {
                         "—"
                       )}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="hidden px-4 py-2.5 2xl:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {r.signals.map((s) => (
                           <span
@@ -161,6 +182,30 @@ function Scanner() {
                           </span>
                         ))}
                       </div>
+                    </td>
+                    <td className="tabular whitespace-nowrap px-3 py-2.5 text-xs">
+                      {r.pulse ? (
+                        <span
+                          title={`${r.pulse.conf} confirmations, ${r.pulse.warn} warnings (last 10 days)`}
+                          className={`rounded px-1.5 py-0.5 font-semibold ${r.pulse.tone === "constructive" ? "bg-up/15 text-up" : r.pulse.tone === "warning" ? "bg-down/15 text-down" : "bg-panel-2 text-muted"}`}
+                        >
+                          {r.pulse.conf}/{r.pulse.warn}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="sticky right-0 z-[1] bg-bg px-3 py-2.5 text-right">
+                      {taken.has(r.symbol) ? (
+                        <Link href="/backtest?tab=md" className="whitespace-nowrap rounded border border-line px-2 py-1 text-[11px] text-muted hover:text-text">✓ Taken</Link>
+                      ) : (
+                        <button
+                          onClick={() => take(r.symbol, tab === "bear" ? "short" : "long")}
+                          className={`whitespace-nowrap rounded px-3 py-1 text-xs font-semibold text-white ${tab === "bear" ? "bg-down hover:bg-red-500" : "bg-up hover:bg-green-500"}`}
+                        >
+                          {tab === "bear" ? "Short" : "Buy"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

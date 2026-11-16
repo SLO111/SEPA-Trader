@@ -52,6 +52,28 @@ def _rs_for(symbol: str) -> int | None:
     return rs_ratings(raws).get(symbol)
 
 
+def pulse_map() -> dict[str, dict]:
+    """Confirmations / warnings over the last 10 days for every stock (refreshed every 30 minutes)."""
+    from engine import pulse
+    from engine.data.universe import stock_symbols
+
+    def build():
+        try:
+            bench = market_data.history("SPY")
+        except Exception:
+            bench = None
+        out = {}
+        for s in stock_symbols():
+            try:
+                p = pulse.summary(market_data.history(s), bench)
+                out[s] = {"conf": p["conf"], "warn": p["warn"], "tone": p["tone"]}
+            except Exception:
+                continue
+        return out
+
+    return market_data._fast(f"{settings.data_provider}:pulse-map", 1800, build)
+
+
 @router.get("/scan")
 def scan(
     sort: Literal["bull", "bear", "rs", "ai"] = "bull",
@@ -67,7 +89,8 @@ def scan(
 
     with SessionLocal() as db:
         vnicorn_service.load(db)  # makes the stored major-move probabilities available after a restart
-    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"])} for r in cached_scan()]
+    pm = pulse_map()
+    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"]), "pulse": pm.get(r["symbol"])} for r in cached_scan()]
     key = {"bull": "bull_score", "bear": "bear_score", "rs": "rs_rating", "ai": "ai_prob"}[sort]
     out = [
         r

@@ -30,10 +30,10 @@ function Stat({ label, value, cls = "", hint }: { label: string; value: string; 
 }
 
 /** The Trade Ideas the user took (Buy / Short), followed with the idea's stop / trim / target rules. */
-export default function PaperTrades() {
+export default function PaperTrades({ source = "ideas" }: { source?: "ideas" | "md" }) {
   const [data, setData] = useState<Resp | null>(null);
   const [error, setError] = useState("");
-  const load = useCallback(() => api<Resp>("/api/paper-trades").then(setData).catch((e) => setError(e.message)), []);
+  const load = useCallback(() => api<Resp>(`/api/paper-trades?source=${source}`).then(setData).catch((e) => setError(e.message)), [source]);
   useEffect(() => {
     load();
   }, [load]);
@@ -57,8 +57,17 @@ export default function PaperTrades() {
       <div className="rounded-xl border border-line bg-panel p-6 text-center">
         <p className="font-medium">No trades yet</p>
         <p className="mt-1 text-sm text-muted">
-          In <Link href="/ideas" className="text-accent hover:underline">Trade ideas</Link>, press <b>Buy</b> or <b>Short</b> on an idea. It is added here at the
-          current price and followed automatically: half is sold at the trim, the stop moves to break-even, the rest runs to the target.
+          {source === "md" ? (
+            <>
+              In the <Link href="/scanner" className="text-accent hover:underline">Move Detector</Link>, press <b>Buy</b> or <b>Short</b> next to a stock. vnicornAI (or the rules)
+              sets the stop, trim and target, and the trade is followed here automatically.
+            </>
+          ) : (
+            <>
+              In <Link href="/ideas" className="text-accent hover:underline">Trade ideas</Link>, press <b>Buy</b> or <b>Short</b> on an idea. It is added here at the current
+              price and followed automatically: half is sold at the trim, the stop moves to break-even, the rest runs to the target.
+            </>
+          )}
         </p>
       </div>
     );

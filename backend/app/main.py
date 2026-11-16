@@ -82,13 +82,13 @@ def _warm_loop() -> None:
 
     from .data_store import get_store
     from .routers import markets as mk
-    from .routers.sepa import cached_scan
+    from .routers.sepa import cached_scan, pulse_map
 
     time.sleep(20)
     while True:
         store = get_store()
         if store is not None and store.prices:
-            for fn in (cached_scan, mk._rows, mk._fear_greed, mk._indices, mk._cycle):
+            for fn in (cached_scan, mk._rows, mk._fear_greed, mk._indices, mk._cycle, pulse_map):
                 try:
                     fn()
                 except Exception:
