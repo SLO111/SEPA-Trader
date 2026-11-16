@@ -16,7 +16,7 @@ type Graded = {
   mfe_pct?: number; mae_pct?: number; left_on_table_pct?: number; days?: number; open?: boolean; notes: string[];
 };
 type Dist = { label: Cls; count: number; pct: number }[];
-type Resp = { trades: Graded[]; summary: { trades: number; closed: number; bought: Dist; sold: Dist; avg_score: number | null; avg_grade: string | null; top_mistake: string | null; grades: Record<string, number> } };
+type Resp = { trades: Graded[]; summary: { trades: number; closed: number; bought: Dist; sold: Dist; avg_score: number | null; avg_grade: string | null; top_mistake: string | null; grades: Record<string, number>; total?: number; total_open?: number; total_closed?: number } };
 
 const CLS: Record<Cls, string> = { Perfect: "bg-up/20 text-up", Early: "bg-amber-500/20 text-amber-300", Late: "bg-down/20 text-down", Fair: "bg-slate-500/25 text-slate-200" };
 const BAR: Record<Cls, string> = { Perfect: "bg-up", Early: "bg-amber-400", Late: "bg-down", Fair: "bg-slate-400" };
@@ -84,7 +84,10 @@ function GradeTable({ rows, open, setOpen }: { rows: Graded[]; open: string | nu
                       <td className="px-3 py-2 font-semibold">
                         <span className={t.side === "short" ? "text-down" : "text-up"}>{t.side === "short" ? "▼" : "▲"}</span> {t.symbol}
                       </td>
-                      <td className="px-3 py-2 text-xs text-muted">{t.source}</td>
+                      <td className="px-3 py-2 text-xs text-muted">
+                        {t.source}
+                        {!t.grade && !t.entry_class && t.notes?.[0] && <div className="max-w-[220px] text-[10px] text-amber-300">{t.notes[0]}</div>}
+                      </td>
                       <td className="tabular whitespace-nowrap px-3 py-2 text-xs">{t.entry_date}<div className="text-muted">${fmt(t.entry_price)}</div></td>
                       <td className="tabular whitespace-nowrap px-3 py-2 text-xs">{t.exit_date ?? "open"}<div className="text-muted">{t.exit_price ? `$${fmt(t.exit_price)}` : ""}</div></td>
                       <td className={`tabular px-3 py-2 text-right ${tone(t.pnl_pct)}`}>{pct(t.pnl_pct)}</td>
@@ -172,7 +175,8 @@ export default function TradeGrader({ source: initial = "all", portfolioId }: { 
               <span className={`grid h-16 w-16 place-items-center rounded-xl text-3xl font-bold ${s.avg_grade ? GRADE[s.avg_grade] : "bg-panel-2 text-muted"}`}>{s.avg_grade ?? "—"}</span>
               <div className="text-sm">
                 <div className="text-muted">Average grade</div>
-                <div className="tabular">{s.closed} closed · {s.trades - s.closed} open</div>
+                <div className="tabular">{s.total_closed ?? s.closed} closed · {s.total_open ?? s.trades - s.closed} open</div>
+                {s.closed === 0 && <div className="mt-1 text-xs text-muted">Grades appear when trades close; buys are graded after 5 trading days.</div>}
                 {s.top_mistake && <div className="mt-1 text-xs text-amber-300">Most common: {s.top_mistake.toLowerCase()}</div>}
               </div>
             </div>

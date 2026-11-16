@@ -106,6 +106,8 @@ class DataStore:
                 with self._lock:
                     if kind == "prices":
                         self.prices[sym] = obj_to_df(obj)
+                    elif kind == "isin":
+                        self.slow.setdefault("isin", {})[sym] = obj
                     elif kind in self.slow:
                         self.slow[kind][sym] = obj
                     elif kind == "directory":
@@ -134,11 +136,11 @@ class DataStore:
 
     def get_slow(self, kind: str, symbol: str) -> dict | None:
         with self._lock:
-            return self.slow[kind].get(symbol)
+            return self.slow.get(kind, {}).get(symbol)
 
     def put_slow(self, kind: str, symbol: str, value: dict) -> None:
         with self._lock:
-            self.slow[kind][symbol] = value
+            self.slow.setdefault(kind, {})[symbol] = value
             self.updated[f"{kind}:{symbol}"] = _now()
         self._save(f"{kind}:{symbol}", value)
 

@@ -44,7 +44,7 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
     sign = 1 if long else -1
     ei = _pos(df, t["entry_date"])
     if ei is None or ei < 30:
-        return {**t, "grade": None, "notes": ["Not enough price history around this trade."]}
+        return {**t, "grade": None, "entry_class": None, "exit_class": None, "open": not t.get("exit_date"), "notes": ["Not enough price history around this trade."]}
     entry = float(t["entry_price"])
     a = float(atr(df, 14).iloc[ei]) or entry * 0.02
     hi, lo, cl = df["high"].to_numpy(float), df["low"].to_numpy(float), df["close"].to_numpy(float)
@@ -52,7 +52,8 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
 
     # sanity: the price must be close to where the stock traded that day
     if not (lo[ei] * 0.95 <= entry <= hi[ei] * 1.05):
-        return {**t, "grade": None, "notes": [f"The entry price {entry} is far from where {t['symbol']} traded on {str(t['entry_date'])[:10]}."]}
+        return {**t, "grade": None, "entry_class": None, "exit_class": None, "open": not t.get("exit_date"),
+                "notes": [f"The entry price {entry} is far from where {t['symbol']} traded on {str(t['entry_date'])[:10]}: check the price (currency?) or the date."]}
 
     # ---- entry
     before = df.iloc[: ei + 1]
@@ -166,6 +167,7 @@ def aggregate(graded: list[dict]) -> dict:
     scores = [g["score"] for g in closed if g.get("score") is not None]
     return {
         "trades": len(ok), "closed": len(closed),
+        "total": len(graded), "total_open": sum(1 for g in graded if g.get("open")), "total_closed": sum(1 for g in graded if not g.get("open")),
         "bought": dist(ok, "entry_class"), "sold": dist(closed, "exit_class"),
         "avg_score": round(float(np.mean(scores))) if scores else None,
         "avg_grade": _letter(float(np.mean(scores))) if scores else None,

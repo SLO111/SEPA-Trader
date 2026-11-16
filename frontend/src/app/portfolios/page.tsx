@@ -239,10 +239,42 @@ function Portfolios() {
     }
   };
 
+  // New portfolio straight from a broker file: create it, then open the import.
+  const [importFor, setImportFor] = useState<number | null>(null);
+  const createFromBroker = async () => {
+    setError("");
+    const name = prompt("Name for the portfolio (e.g. your broker):", "My broker");
+    if (!name?.trim()) return;
+    try {
+      const p = await post<PortfolioDetail>("/api/portfolios", { name });
+      await loadList();
+      setSelected(p.id);
+      setDetail(p);
+      setMode("view");
+      setImportFor(p.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    }
+  };
+
   const atLimit = (list?.length ?? 0) >= max;
 
   return (
     <div className="flex h-full">
+      {importFor !== null && (
+        <ImportCsv
+          portfolioId={importFor}
+          onClose={() => setImportFor(null)}
+          onSaved={async () => {
+            await loadList();
+            try {
+              setDetail(await api<PortfolioDetail>(`/api/portfolios/${importFor}`));
+            } catch {
+              /* ignore */
+            }
+          }}
+        />
+      )}
       <aside className="hidden w-72 shrink-0 flex-col border-r border-line bg-panel md:flex">
         <div className="flex items-center justify-between border-b border-line p-3">
           <h2 className="font-semibold">Portfolios</h2>
@@ -250,12 +282,15 @@ function Portfolios() {
             {list?.length ?? 0}/{max >= 1e6 ? "∞" : max}
           </span>
         </div>
-        <div className="flex gap-2 border-b border-line p-3">
-          <button onClick={createBlank} disabled={atLimit} className="flex-1 rounded-md bg-panel-2 py-1.5 text-sm hover:bg-line disabled:opacity-40">
+        <div className="grid grid-cols-2 gap-2 border-b border-line p-3">
+          <button onClick={createBlank} disabled={atLimit} className="rounded-md bg-panel-2 py-1.5 text-sm hover:bg-line disabled:opacity-40">
             + Blank
           </button>
-          <button onClick={() => setMode("templates")} disabled={atLimit} className="flex-1 rounded-md bg-panel-2 py-1.5 text-sm hover:bg-line disabled:opacity-40">
+          <button onClick={() => setMode("templates")} disabled={atLimit} className="rounded-md bg-panel-2 py-1.5 text-sm hover:bg-line disabled:opacity-40">
             + From a model
+          </button>
+          <button onClick={createFromBroker} disabled={atLimit} className="col-span-2 rounded-md border border-accent/40 bg-accent/10 py-1.5 text-sm text-blue-300 hover:bg-accent/20 disabled:opacity-40">
+            ⬆ From broker (CSV, Excel, PDF)
           </button>
         </div>
         {atLimit && max < 1e6 && <p className="border-b border-line px-3 py-2 text-xs text-amber-300">Your plan allows {max} portfolio{max > 1 ? "s" : ""}. Upgrade for more.</p>}

@@ -210,6 +210,13 @@ def add_transaction(pid: int, body: TxnIn, user: User = Depends(current_user), d
         validate(_txns(p) + [Txn(t.date, t.symbol, t.side, t.shares, t.price, t.fees)])
     except LedgerError as e:
         raise HTTPException(400, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logging.getLogger("sepa.import").exception("Import apply failed")
+        raise HTTPException(400, f"Could not save the import ({type(e).__name__}).")
     p.transactions.append(t)
     db.commit()
     return _summary(p, detail=True)
@@ -445,7 +452,15 @@ def import_preview(pid: int, body: ImportPreviewIn, user: User = Depends(current
         data = base64.b64decode(body.content_base64.split(",")[-1])
     except ValueError:
         raise HTTPException(400, "The file could not be decoded")
-    return import_service.preview(db, pid, body.filename, data, body.mapping, body.header_row, body.table)
+    try:
+        return import_service.preview(db, pid, body.filename, data, body.mapping, body.header_row, body.table)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logging.getLogger("sepa.import").exception("Import preview failed")
+        raise HTTPException(400, f"Could not read this file ({type(e).__name__}). Try another export format or map the columns manually.")
 
 
 @router.post("/portfolios/{pid}/import/apply")
@@ -458,3 +473,10 @@ def import_apply(pid: int, body: ImportApplyIn, user: User = Depends(current_use
         return import_service.apply(db, pid, body.kind, body.as_of, body.rows, body.close_missing)
     except LedgerError as e:
         raise HTTPException(400, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logging.getLogger("sepa.import").exception("Import apply failed")
+        raise HTTPException(400, f"Could not save the import ({type(e).__name__}).")

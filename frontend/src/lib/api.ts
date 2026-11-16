@@ -87,7 +87,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const detail = typeof data.detail === "string" ? data.detail : "Something went wrong";
+    const detail = typeof data.detail === "string" ? data.detail : Array.isArray(data.detail) ? `Invalid data: ${data.detail[0]?.msg ?? "check the fields"}` : `Server error ${res.status}. Please try again.`;
     throw new ApiError(res.status, detail);
   }
   return data as T;

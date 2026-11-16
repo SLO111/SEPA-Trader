@@ -158,3 +158,27 @@ def test_share_class_must_match():
     from app.import_service import _by_name
 
     assert _by_name("Alphabet Inc. Class C") != "GOOGL"
+
+
+def test_import_with_live_store_and_isin_cache(client, register, monkeypatch, fake_finnhub):
+    """Production path: the data store is active (ISIN lookups are cached in it) — this used to fail with a 500."""
+    from app import data_store as ds
+    from app import import_service
+    from app.db import SessionLocal
+    from engine.data.providers import SyntheticProvider
+
+    store = ds.DataStore(SyntheticProvider, SessionLocal)
+    monkeypatch.setattr(import_service, "get_store", lambda: store)
+    h, _ = register("imp-live@test.ro")
+    pf = client.post("/api/portfolios", headers=h, json={"name": "Live"}).json()
+    as_of = "2025-09-02"
+    pdf = _statement_pdf([(["NVIDIA Corp."], "US67066G1040", 4, _close("NVDA", as_of), _close("NVDA", as_of))], as_of="02-Sep-2025")
+    r = client.post(f"/api/portfolios/{pf['id']}/import/preview", headers=h, json={"filename": "r.pdf", "content_base64": _b64(pdf)})
+    assert r.status_code == 200, r.text
+    assert r.json()["rows"][0]["symbol"] == "NVDA" and r.json()["rows"][0]["found_by"] == "ISIN"
+    assert store.get_slow("isin", "US67066G1040") == {"symbol": "NVDA"}
+    fresh = ds.DataStore(SyntheticProvider, SessionLocal)
+    fresh.load_all()
+    assert fresh.get_slow("isin", "US67066G1040") == {"symbol": "NVDA"}
+    bad = client.post(f"/api/portfolios/{pf['id']}/import/preview", headers=h, json={"filename": "x.xlsx", "content_base64": _b64(b"PK\x03\x04garbage")})
+    assert bad.status_code == 200 and bad.json()["kind"] is None  # unreadable file: a message, not a crash

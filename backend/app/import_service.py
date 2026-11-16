@@ -49,8 +49,10 @@ def _known(sym: str) -> bool:
     if sym in SYMBOLS:
         return True
     store = get_store()
-    if store is not None and sym in store.directory:
+    if store is not None and (sym in store.directory or sym in store.prices):
         return True
+    if store is not None and store.directory:
+        return False  # the full US directory is loaded: an unknown ticker isn't listed (no slow download)
     try:
         market_data.history(sym)
         return True
@@ -67,7 +69,10 @@ def _by_isin(isin: str) -> str | None:
     if isin in _isin_cache:
         return _isin_cache[isin]
     store = get_store()
-    hit = store.get_slow("isin", isin) if store is not None else None
+    try:
+        hit = store.get_slow("isin", isin) if store is not None else None
+    except Exception:
+        hit = None
     if hit is not None:
         _isin_cache[isin] = hit.get("symbol")
         return _isin_cache[isin]
@@ -85,7 +90,10 @@ def _by_isin(isin: str) -> str | None:
             log.warning("ISIN lookup failed for %s", isin, exc_info=True)
     _isin_cache[isin] = sym
     if store is not None and sym:
-        store.put_slow("isin", isin, {"symbol": sym})
+        try:
+            store.put_slow("isin", isin, {"symbol": sym})
+        except Exception:
+            log.warning("Could not cache the ISIN lookup for %s", isin, exc_info=True)
     return sym
 
 
