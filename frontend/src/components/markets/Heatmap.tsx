@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TradingViewWidget from "@/components/TradingViewWidget";
 
 const SOURCES = [
@@ -13,6 +13,25 @@ const SOURCES = [
 /** S&P 500 heatmap: block size = market cap, color = today's change, grouped by sector (TradingView, loaded in the browser). */
 export default function Heatmap() {
   const [source, setSource] = useState("SPX500");
+  // fill the screen: from the top of the heatmap to the bottom of the window (at least 520px)
+  const box = useRef<HTMLDivElement>(null);
+  const [h, setH] = useState(640);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>;
+    const fit = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const top = box.current?.getBoundingClientRect().top ?? 200;
+        setH(Math.max(520, Math.round(window.innerHeight - top - 16)));
+      }, 150);
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => {
+      window.removeEventListener("resize", fit);
+      clearTimeout(t);
+    };
+  }, []);
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-1">
@@ -25,11 +44,12 @@ export default function Heatmap() {
             {s.label}
           </button>
         ))}
-        <span className="ml-auto text-xs text-muted">Size: market cap · Color: today&apos;s change · Click a sector to zoom</span>
+        <span className="ml-auto hidden text-xs text-muted sm:inline">Size: market cap · Color: today&apos;s change · Click a sector to zoom</span>
       </div>
+      <div ref={box}>
       <TradingViewWidget
         script="embed-widget-stock-heatmap.js"
-        height="max(520px, calc(100dvh - 230px))"
+        height={h}
         config={{
           dataSource: source,
           blockSize: "market_cap_basic",
@@ -48,6 +68,7 @@ export default function Heatmap() {
           height: "100%",
         }}
       />
+      </div>
     </div>
   );
 }

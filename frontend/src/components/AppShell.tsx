@@ -46,6 +46,37 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [pathname]);
 
+  // After a new deploy an open tab may ask for files of the old version: reload once to get the new one.
+  useEffect(() => {
+    const stale = (msg: string) => /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|importing a module script failed/i.test(msg);
+    const reloadOnce = (msg: string) => {
+      if (!stale(msg)) return;
+      try {
+        if (sessionStorage.getItem("vn_reloaded")) return;
+        sessionStorage.setItem("vn_reloaded", "1");
+      } catch {
+        /* ignore */
+      }
+      window.location.reload();
+    };
+    const onError = (e: ErrorEvent) => reloadOnce(String(e.message || e.error));
+    const onRejection = (e: PromiseRejectionEvent) => reloadOnce(String(e.reason?.message ?? e.reason));
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    const t = setTimeout(() => {
+      try {
+        sessionStorage.removeItem("vn_reloaded");
+      } catch {
+        /* ignore */
+      }
+    }, 10_000);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+      clearTimeout(t);
+    };
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     const load = () => api<{ count: number }>("/api/alerts/unread-count").then((r) => setUnread(r.count)).catch(() => {});

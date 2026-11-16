@@ -8,7 +8,8 @@ import { memo, useEffect, useRef } from "react";
  */
 function TradingViewWidget({ script, config, height }: { script: string; config: Record<string, unknown>; height: number | string }) {
   const box = useRef<HTMLDivElement>(null);
-  const key = JSON.stringify(config);
+  // TradingView only fills reliably with a height in pixels ("100%" can leave the default 150px iframe).
+  const key = JSON.stringify(typeof height === "number" ? { ...config, width: "100%", height, autosize: false } : config);
 
   useEffect(() => {
     const el = box.current;

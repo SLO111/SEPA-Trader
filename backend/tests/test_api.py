@@ -96,3 +96,22 @@ def test_gzip_and_static_cache_headers(client, register, tmp_path):
     a.mount("/", _CachedStatic(directory=tmp_path, html=True))
     r = TestClient(a).get("/_next/static/app.js")
     assert "immutable" in r.headers["cache-control"]
+
+
+def test_index_txt_redirects_browsers_and_pages_revalidate(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.main import _CachedStatic
+
+    (tmp_path / "markets").mkdir()
+    (tmp_path / "markets" / "index.txt").write_text("rsc payload")
+    (tmp_path / "markets" / "index.html").write_text("<html></html>")
+    a = FastAPI()
+    a.mount("/", _CachedStatic(directory=tmp_path, html=True))
+    c = TestClient(a, follow_redirects=False)
+    r = c.get("/markets/index.txt?tab=heatmap&_rsc=x", headers={"Accept": "text/html"})
+    assert r.status_code == 302 and r.headers["location"] == "/markets/?tab=heatmap"
+    r = c.get("/markets/index.txt?_rsc=x", headers={"RSC": "1", "Accept": "*/*"})
+    assert r.status_code == 200 and r.text == "rsc payload" and r.headers["cache-control"] == "no-cache"
+    assert c.get("/markets/").headers["cache-control"] == "no-cache"

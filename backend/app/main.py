@@ -172,11 +172,25 @@ class _CachedStatic(StaticFiles):
     """Next.js build files have content hashes in their names, so browsers can keep them for a year."""
 
     async def get_response(self, path, scope):
+        headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
+        # A browser that lands on a page's navigation data (".../index.txt", e.g. an old tab after a deploy)
+        # is sent to the page itself instead of seeing raw data.
+        if path.endswith("index.txt") and "rsc" not in headers and "text/html" in headers.get("accept", ""):
+            from urllib.parse import parse_qsl, urlencode
+
+            from starlette.responses import RedirectResponse
+
+            query = urlencode([(k, v) for k, v in parse_qsl(scope.get("query_string", b"").decode()) if k != "_rsc"])
+            target = "/" + path[: -len("index.txt")]
+            return RedirectResponse(target + (f"?{query}" if query else ""), status_code=302)
         resp = await super().get_response(path, scope)
         if path.startswith("_next/static/"):
             resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         elif path.endswith((".webp", ".png", ".svg", ".ico", ".jpg")):
             resp.headers["Cache-Control"] = "public, max-age=86400"
+        else:
+            # pages and their navigation data: always check with the server (cheap 304), so a deploy shows up at once
+            resp.headers["Cache-Control"] = "no-cache"
         return resp
 
 
