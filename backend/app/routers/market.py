@@ -130,6 +130,16 @@ def info(symbol: str, user: User = Depends(current_user)):
         ext = rows[0] if rows else None
     except Exception:
         ext = None
+    stats = {k: f.get(k) for k in ("market_cap_b", "pe", "dividend_yield", "eps_growth", "beta")}
+    if any(v is None for v in stats.values()):
+        try:
+            co = market_data.company(sym)
+            sources = {**co.get("stats", {}), **co.get("valuation", {}), **co.get("profitability", {}), **co.get("dividends", {})}
+            for k in stats:
+                if stats[k] is None:
+                    stats[k] = sources.get(k if k != "dividend_yield" else "yield", sources.get(k))
+        except Exception:
+            pass
     avg_vol = float(d["volume"].iloc[-51:-1].mean())
     return {
         "symbol": sym,
@@ -142,7 +152,7 @@ def info(symbol: str, user: User = Depends(current_user)):
         "day": {"open": round(float(last.open), 2), "high": round(float(last.high), 2), "low": round(float(last.low), 2)},
         "week52": {"high": round(float(y["high"].max()), 2), "low": round(float(y["low"].min()), 2)},
         "volume": {"today": int(last.volume), "avg_50d": int(avg_vol), "relative": round(float(last.volume) / avg_vol, 2) if avg_vol else None},
-        "stats": {k: f.get(k) for k in ("market_cap_b", "pe", "dividend_yield", "eps_growth", "beta")},
+        "stats": stats,
         "next_earnings": e.get("next_date"),
         "extended": ext,
         # Overnight (8 PM - 4 AM ET, e.g. Blue Ocean ATS) needs a paid feed; Yahoo and Finnhub free don't provide it.
