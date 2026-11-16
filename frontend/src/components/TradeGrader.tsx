@@ -142,7 +142,7 @@ export default function TradeGrader({ source: initial = "all", portfolioId }: { 
     <div className="space-y-4">
       {!portfolioId && (
         <div className="flex flex-wrap gap-1">
-          {[["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["portfolio", "Portfolios"]].map(([id, label]) => (
+          {[["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["chart", "Charts"], ["portfolio", "Portfolios"]].map(([id, label]) => (
             <button key={id} onClick={() => setSource(id)} className={`rounded-full px-3 py-1 text-sm ${source === id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
               {label}
             </button>

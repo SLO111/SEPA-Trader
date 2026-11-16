@@ -15,19 +15,23 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
+import { chartColors } from "@/lib/theme";
 import type { Candle, StrategyOutput } from "@/lib/types";
 
 // fitKey: the view is re-fitted only when it changes (new symbol/interval), not on live refreshes.
 // onHover: the time of the candle under the crosshair (null when the mouse leaves the chart).
 type Props = { candles: Candle[]; overlays: StrategyOutput[]; fitKey?: string; onHover?: (time: string | number | null) => void };
 
-const THEME = {
-  layout: { background: { type: ColorType.Solid, color: "#0b0e14" }, textColor: "#8b95a7", fontSize: 11 },
-  grid: { vertLines: { color: "#161c28" }, horzLines: { color: "#161c28" } },
-  rightPriceScale: { borderColor: "#232c3d" },
-  timeScale: { borderColor: "#232c3d", rightOffset: 6 },
-  crosshair: { mode: CrosshairMode.Normal },
-};
+function theme() {
+  const c = chartColors();
+  return {
+    layout: { background: { type: ColorType.Solid, color: c.bg }, textColor: c.text, fontSize: 11 },
+    grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+    rightPriceScale: { borderColor: c.border },
+    timeScale: { borderColor: c.border, rightOffset: 6 },
+    crosshair: { mode: CrosshairMode.Normal },
+  };
+}
 
 export default function PriceChart({ candles, overlays, fitKey = "", onHover }: Props) {
   const hoverRef = useRef(onHover);
@@ -44,7 +48,9 @@ export default function PriceChart({ candles, overlays, fitKey = "", onHover }: 
   // Create the chart once
   useEffect(() => {
     if (!container.current) return;
-    const chart = createChart(container.current, { ...THEME, autoSize: true });
+    const chart = createChart(container.current, { ...theme(), autoSize: true });
+    const retheme = () => chart.applyOptions(theme());
+    window.addEventListener("theme-changed", retheme);
     const candle = chart.addSeries(CandlestickSeries, {
       upColor: "#22c55e",
       downColor: "#ef4444",
@@ -64,6 +70,7 @@ export default function PriceChart({ candles, overlays, fitKey = "", onHover }: 
     chart.subscribeCrosshairMove(onMove);
     return () => {
       chart.unsubscribeCrosshairMove(onMove);
+      window.removeEventListener("theme-changed", retheme);
       chart.remove();
       chartRef.current = null;
       overlayRefs.current = [];

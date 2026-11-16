@@ -1,6 +1,7 @@
 "use client";
 
 import { AreaSeries, ColorType, createChart, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
+import { chartColors } from "@/lib/theme";
 import { useEffect, useRef } from "react";
 import type { Candle } from "@/lib/types";
 
@@ -16,8 +17,8 @@ export default function MiniChart({ candles, range }: { candles: Candle[]; range
     if (!el.current) return;
     const c = createChart(el.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8b95a7", fontSize: 11 },
-      grid: { vertLines: { visible: false }, horzLines: { color: "#1b2231" } },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: chartColors().text, fontSize: 11 },
+      grid: { vertLines: { visible: false }, horzLines: { color: chartColors().grid } },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false },
       handleScroll: false,

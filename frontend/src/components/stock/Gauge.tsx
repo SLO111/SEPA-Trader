@@ -38,7 +38,7 @@ export default function Gauge({ value, label, sub, labels = ["Strong sell", "Neu
           {v !== null && (
             <>
               <circle cx={mx} cy={my} r="9" fill={color} opacity="0.55" filter={`url(#f${id})`} />
-              <circle cx={mx} cy={my} r="7.5" fill="#0b0e14" stroke="#fff" strokeWidth="3" />
+              <circle cx={mx} cy={my} r="7.5" fill="var(--color-bg)" stroke="var(--color-text)" strokeWidth="3" />
             </>
           )}
         </svg>

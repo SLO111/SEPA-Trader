@@ -43,7 +43,7 @@ export default function Logo({ href = "/", compact = false }: { href?: string; c
       <LogoMark size={28} />
       {!compact && (
         <span className="flex flex-col leading-none">
-          <span className="bg-gradient-to-r from-violet-300 via-indigo-200 to-cyan-300 bg-clip-text text-[15px] font-bold tracking-tight text-transparent">Vnicorn</span>
+          <span className="vn-logo-text bg-gradient-to-r from-violet-300 via-indigo-200 to-cyan-300 bg-clip-text text-[15px] font-bold tracking-tight text-transparent">Vnicorn</span>
           <span className="text-[8.5px] font-medium tracking-[0.28em] text-muted">INVESTMENTS</span>
         </span>
       )}

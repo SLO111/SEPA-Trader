@@ -84,6 +84,19 @@ def test_full_subscription_lifecycle(client, register, stripe_on):
     assert client.post("/api/billing/checkout", headers=h, json={"plan": "premium"}).status_code == 409
     assert client.post("/api/billing/portal", headers=h).json()["url"].startswith("https://billing.stripe.com")
 
+    # cancel from Settings: no charge next period, access until the period end; then resume
+    import stripe as _stripe
+
+    calls = []
+    _stripe_modify = _stripe.Subscription.modify
+    _stripe.Subscription.modify = lambda sid, **kw: calls.append((sid, kw)) or {"id": sid, "cancel_at_period_end": kw["cancel_at_period_end"]}
+    try:
+        c = client.post("/api/billing/cancel", headers=h, json={}).json()
+        assert c["cancel_at_period_end"] is True and calls[-1][1] == {"cancel_at_period_end": True} and _plan_of("bill-on@test.ro") == "pro"
+        assert client.post("/api/billing/cancel", headers=h, json={"resume": True}).json()["cancel_at_period_end"] is False
+    finally:
+        _stripe.Subscription.modify = _stripe_modify
+
     # upgrade to Premium yearly in the portal
     _signed(client, _sub_event("evt_2", "customer.subscription.updated", "active", price="price_prem_y", interval="year", amount=59000, customer=stripe_on["customer_id"]))
     assert _plan_of("bill-on@test.ro") == "premium"

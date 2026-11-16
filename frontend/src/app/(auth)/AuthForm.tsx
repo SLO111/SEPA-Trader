@@ -1,5 +1,7 @@
 "use client";
 
+import { api } from "@/lib/api";
+import { applyTheme, type ThemePref } from "@/lib/theme";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -23,7 +25,17 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
     try {
       if (isLogin) await login(email, password);
       else await register(email, password, name);
-      router.replace("/chart");
+      // the account's preferences: theme on this device, and the page to open first
+      let start = "/chart";
+      try {
+        const prefs = await api<{ theme: ThemePref; start_page: string; default_interval: string }>("/api/auth/prefs");
+        localStorage.setItem("vn_prefs", JSON.stringify(prefs));
+        applyTheme(prefs.theme);
+        start = prefs.start_page || "/chart";
+      } catch {
+        /* defaults */
+      }
+      router.replace(start);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
     } finally {

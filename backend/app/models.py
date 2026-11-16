@@ -312,3 +312,12 @@ class AIPick(Base):
     target: Mapped[float] = mapped_column(Float)
     rr: Mapped[float] = mapped_column(Float)
     pick: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class UserPrefs(Base):
+    """Per-user app preferences (theme, default chart interval, start page…) as JSON."""
+
+    __tablename__ = "user_prefs"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    data: Mapped[str] = mapped_column(Text, default="{}")

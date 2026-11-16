@@ -195,6 +195,83 @@ def take_idea(body: dict, user: User = Depends(current_user), db: Session = Depe
     return _paper_out(t, df)
 
 
+def _paper_filter(q, source: str):
+    from ..models import PaperTrade
+
+    if source == "md":
+        return q.where(PaperTrade.timeframe == "MD")
+    if source == "chart":
+        return q.where(PaperTrade.timeframe == "CH")
+    if source == "ideas":
+        return q.where(PaperTrade.timeframe.notin_(["MD", "CH"]))
+    return q
+
+
+class ChartTradeIn(BaseModel):
+    symbol: str
+    side: Literal["long", "short"]
+    entry: float | None = None  # default: the latest price
+    stop: float | None = None
+    trim: float | None = None
+    target: float | None = None
+    weight: float | None = None  # % of the account (default: 1% risk at the stop, max 20%)
+
+
+@router.post("/paper-trades/chart")
+def take_chart(body: ChartTradeIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """A manual Buy / Short from the chart, with your own levels; followed separately ("Chart trades")."""
+    from engine.indicators import atr
+
+    from .. import market_data
+    from ..models import PaperTrade
+
+    sym = body.symbol.upper().strip()
+    try:
+        df = market_data.history(sym)
+    except Exception:
+        raise HTTPException(404, f"No data found for {sym}")
+    price = float(df["close"].iloc[-1])
+    entry = body.entry or price
+    long = body.side == "long"
+    a = float(atr(df, 14).iloc[-1]) or entry * 0.02
+    stop = body.stop or (entry - 2 * a if long else entry + 2 * a)
+    if (long and stop >= entry) or (not long and stop <= entry):
+        raise HTTPException(400, "The stop must be below the entry for a buy and above it for a short.")
+    risk = abs(entry - stop)
+    target = body.target or (entry + 3 * risk if long else entry - 3 * risk)
+    if (long and target <= entry) or (not long and target >= entry):
+        raise HTTPException(400, "The target must be above the entry for a buy and below it for a short.")
+    trim = body.trim
+    if trim is not None and not (min(entry, target) < trim < max(entry, target)):
+        raise HTTPException(400, "The trim level must be between the entry and the target.")
+    weight = body.weight or round(min(20.0, 1 / (risk / entry)), 1)
+    t = PaperTrade(user_id=user.id, idea_id=None, symbol=sym, timeframe="CH", side=body.side, entry_date=df.index[-1].date(),
+                   entry=round(entry, 4), stop=round(stop, 4), trim=round(trim, 4) if trim else None, target=round(target, 4), weight=weight)
+    db.add(t)
+    db.commit()
+    return _paper_out(t, df)
+
+
+@router.post("/paper-trades/chart/sell")
+def sell_chart(body: dict, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Sell from the chart: close your open chart position(s) in the symbol at the latest price."""
+    from .. import market_data
+    from ..models import PaperTrade
+
+    sym = str(body.get("symbol") or "").upper().strip()
+    df = market_data.history(sym)
+    closed = []
+    for t in db.scalars(select(PaperTrade).where(PaperTrade.user_id == user.id, PaperTrade.symbol == sym, PaperTrade.timeframe == "CH",
+                                                 PaperTrade.exit_date.is_(None))).all():
+        if _paper_out(t, df)["open"]:
+            t.exit_price, t.exit_date = round(float(df["close"].iloc[-1]), 4), df.index[-1].date()
+            closed.append(t)
+    if not closed:
+        raise HTTPException(404, f"You have no open chart position in {sym}. Use Short to sell short.")
+    db.commit()
+    return [_paper_out(t, df) for t in closed]
+
+
 def scan_plan(symbol: str, side: str, db: Session) -> dict:
     """Plan for a Move Detector trade: vnicornAI's best plan when the model exists, otherwise rules
     (long: VCP stop or 2 ATR; short: 2 ATR above), trim 1.5R, target 3R."""
@@ -259,18 +336,14 @@ def take_scan(body: dict, user: User = Depends(current_user), db: Session = Depe
 
 
 @router.get("/paper-trades")
-def paper_trades(source: Literal["all", "ideas", "md"] = "all", user: User = Depends(current_user), db: Session = Depends(get_db)):
+def paper_trades(source: Literal["all", "ideas", "md", "chart"] = "all", user: User = Depends(current_user), db: Session = Depends(get_db)):
     from engine.paper import summary
 
     from .. import market_data
     from ..models import PaperTrade
 
     rows = []
-    q = select(PaperTrade).where(PaperTrade.user_id == user.id)
-    if source == "md":
-        q = q.where(PaperTrade.timeframe == "MD")
-    elif source == "ideas":
-        q = q.where(PaperTrade.timeframe != "MD")
+    q = _paper_filter(select(PaperTrade).where(PaperTrade.user_id == user.id), source)
     for t in db.scalars(q.order_by(PaperTrade.created_at.desc())).all():
         try:
             df = market_data.history(t.symbol)
@@ -323,19 +396,15 @@ def _trades_for(user: User, db: Session, source: str, portfolio_id: int | None =
     from ..models import PaperTrade, Portfolio, PortfolioTxn
 
     out = []
-    if source in ("all", "backtest", "ideas", "md"):
-        q = select(PaperTrade).where(PaperTrade.user_id == user.id)
-        if source == "md":
-            q = q.where(PaperTrade.timeframe == "MD")
-        elif source == "ideas":
-            q = q.where(PaperTrade.timeframe != "MD")
+    if source in ("all", "backtest", "ideas", "md", "chart"):
+        q = _paper_filter(select(PaperTrade).where(PaperTrade.user_id == user.id), source if source != "backtest" else "all")
         for t in db.scalars(q).all():
             try:
                 df = market_data.history(t.symbol)
             except Exception:
                 continue
             f = _paper_out(t, df)
-            out.append({"source": "Move Detector" if t.timeframe == "MD" else "Trade ideas", "symbol": t.symbol, "side": t.side,
+            out.append({"source": {"MD": "Move Detector", "CH": "Charts"}.get(t.timeframe, "Trade ideas"), "symbol": t.symbol, "side": t.side,
                         "entry_date": t.entry_date.isoformat(), "entry_price": t.entry, "stop": t.stop,
                         "exit_date": f["closed_at"], "exit_price": f["exit_price"], "ref": f"paper:{t.id}"})
     if source in ("all", "portfolio"):
@@ -367,7 +436,7 @@ def _graded(user: User, db: Session, source: str, portfolio_id: int | None) -> l
 
 
 @router.get("/grader")
-def grader(source: Literal["all", "backtest", "ideas", "md", "portfolio"] = "all", portfolio_id: int | None = None,
+def grader(source: Literal["all", "backtest", "ideas", "md", "chart", "portfolio"] = "all", portfolio_id: int | None = None,
            user: User = Depends(current_user), db: Session = Depends(get_db)):
     """TradeGrader: Bought / Sold Perfect, Early or Late, plus an A-F grade for every trade."""
     from engine.trade_grader import aggregate
@@ -394,7 +463,7 @@ def grader_chart(symbol: str, start: str, end: str | None = None, user: User = D
 
 
 @router.get("/analytics")
-def trade_analytics(source: Literal["all", "backtest", "ideas", "md", "portfolio"] = "all", portfolio_id: int | None = None,
+def trade_analytics(source: Literal["all", "backtest", "ideas", "md", "chart", "portfolio"] = "all", portfolio_id: int | None = None,
                     user: User = Depends(current_user), db: Session = Depends(get_db)):
     """TradingLogger-style statistics over your closed trades."""
     from engine.trade_grader import analytics

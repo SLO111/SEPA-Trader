@@ -115,3 +115,20 @@ def test_index_txt_redirects_browsers_and_pages_revalidate(tmp_path):
     r = c.get("/markets/index.txt?_rsc=x", headers={"RSC": "1", "Accept": "*/*"})
     assert r.status_code == 200 and r.text == "rsc payload" and r.headers["cache-control"] == "no-cache"
     assert c.get("/markets/").headers["cache-control"] == "no-cache"
+
+
+def test_account_settings(client, register):
+    h, _ = register("settings@test.ro")
+    assert client.patch("/api/auth/me", headers=h, json={"name": "Sebi"}).json()["name"] == "Sebi"
+    assert client.post("/api/auth/password", headers=h, json={"current_password": "wrong", "new_password": "newpass123"}).status_code == 400
+    assert client.post("/api/auth/password", headers=h, json={"current_password": "parola123", "new_password": "newpass123"}).json()["ok"]
+    assert client.post("/api/auth/login", json={"email": "settings@test.ro", "password": "newpass123"}).status_code == 200
+    r = client.post("/api/auth/email", headers=h, json={"password": "newpass123", "new_email": "settings2@test.ro"})
+    assert r.status_code == 200 and r.json()["email"] == "settings2@test.ro"
+    assert client.get("/api/auth/prefs", headers=h).json()["theme"] == "dark"
+    p = client.put("/api/auth/prefs", headers=h, json={"theme": "light", "default_interval": "1wk", "bogus": 1}).json()
+    assert p["theme"] == "light" and p["default_interval"] == "1wk" and "bogus" not in p
+    assert client.put("/api/auth/prefs", headers=h, json={"theme": "pink"}).status_code == 400
+    assert client.request("DELETE", "/api/auth/me", headers=h, json={"password": "nope"}).status_code == 400
+    assert client.request("DELETE", "/api/auth/me", headers=h, json={"password": "newpass123"}).status_code == 204
+    assert client.post("/api/auth/login", json={"email": "settings2@test.ro", "password": "newpass123"}).status_code == 401

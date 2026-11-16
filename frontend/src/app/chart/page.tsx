@@ -7,6 +7,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import AppShell from "@/components/AppShell";
 import AskVnicorn from "@/components/chart/AskVnicorn";
 import ChartLegend from "@/components/chart/ChartLegend";
+import TradeTicket from "@/components/chart/TradeTicket";
 import IndicatorPicker from "@/components/chart/IndicatorPicker";
 import SymbolInfoPanel from "@/components/chart/SymbolInfoPanel";
 import SepaStrip from "@/components/SepaStrip";
@@ -42,7 +43,13 @@ function ChartWorkspace() {
   const { user } = useAuth();
   const params = useSearchParams();
   const [symbol, setSymbol] = useState((params.get("s") ?? "AAPL").toUpperCase());
-  const [interval, setIntervalId] = useState("1d");
+  const [interval, setIntervalId] = useState(() => {
+    try {
+      return (JSON.parse(localStorage.getItem("vn_prefs") || "{}").default_interval as string) || "1d";
+    } catch {
+      return "1d";
+    }
+  });
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [defs, setDefs] = useState<StrategyDef[]>([]);
   const [active, setActive] = useState<ActiveStrategy[]>([]);
@@ -50,6 +57,17 @@ function ChartWorkspace() {
   const [error, setError] = useState("");
   const [picker, setPicker] = useState(false);
   const [ask, setAsk] = useState(false);
+  const [ticket, setTicket] = useState<"long" | "short" | null>(null);
+  const [toast, setToast] = useState("");
+  const sell = async () => {
+    try {
+      await post("/api/paper-trades/chart/sell", { symbol });
+      setToast(`Sold: your ${symbol} chart position is closed (Backtest → Chart trades).`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : String(e));
+    }
+    setTimeout(() => setToast(""), 5000);
+  };
   const [panel, setPanel] = useState<"none" | "watch" | "info">("none");
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
   const loaded = useRef(false); // don't overwrite saved indicators with the empty initial state
@@ -228,6 +246,11 @@ function ChartWorkspace() {
           <button onClick={() => setPicker(true)} className="flex items-center gap-1.5 rounded px-2 py-1 text-sm text-muted hover:bg-panel-2 hover:text-text">
             <span className="text-base leading-none">ƒx</span> Indicators
           </button>
+          <div className="flex overflow-hidden rounded-md border border-line text-xs font-semibold">
+            <button onClick={() => setTicket("long")} className="bg-up/15 px-2.5 py-1 text-up hover:bg-up/25">Buy</button>
+            <button onClick={sell} className="border-x border-line px-2.5 py-1 text-muted hover:bg-panel-2 hover:text-text" title="Close your open chart position">Sell</button>
+            <button onClick={() => setTicket("short")} className="bg-down/15 px-2.5 py-1 text-down hover:bg-down/25">Short</button>
+          </div>
           <button
             onClick={() => setAsk(true)}
             className="rounded-md bg-gradient-to-r from-violet-500/80 to-cyan-500/80 px-2.5 py-1 text-sm font-medium text-white shadow shadow-violet-500/20 hover:from-violet-500 hover:to-cyan-500"
@@ -264,6 +287,8 @@ function ChartWorkspace() {
         <SymbolInfoPanel symbol={symbol} info={info} error={infoError} />
       </aside>
 
+      {ticket && <TradeTicket symbol={symbol} price={data?.quote?.price ?? 0} side={ticket} onClose={() => setTicket(null)} />}
+      {toast && <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-line bg-panel px-4 py-2 text-sm shadow-xl">{toast}</div>}
       {ask && <AskVnicorn symbol={symbol} locked={!user?.limits.ask_ai} onClose={() => setAsk(false)} />}
       {picker && (
         <IndicatorPicker

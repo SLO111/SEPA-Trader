@@ -38,3 +38,27 @@ html { scroll-behavior: smooth; }
 .tradingview-widget-container__widget,
 .tradingview-widget-container__widget > div { height: 100% !important; }
 .tradingview-widget-container iframe { width: 100% !important; height: 100% !important; display: block; }
+
+/* Light theme: the same tokens, lighter values (Settings → Appearance). */
+:root[data-theme="light"] {
+  --color-bg: #f4f6fa;
+  --color-panel: #ffffff;
+  --color-panel-2: #eef1f6;
+  --color-line: #dce2eb;
+  --color-text: #0f172a;
+  --color-muted: #5b6678;
+  --color-up: #16a34a;
+  --color-down: #dc2626;
+  color-scheme: light;
+}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb { background: #c7cfdb; }
+/* light-on-dark accent text gets darker shades in light mode, for contrast */
+:root[data-theme="light"] .text-slate-200, :root[data-theme="light"] .text-slate-300 { color: #334155; }
+:root[data-theme="light"] .text-blue-200, :root[data-theme="light"] .text-blue-300, :root[data-theme="light"] .text-blue-400 { color: #1d4ed8; }
+:root[data-theme="light"] .text-violet-200, :root[data-theme="light"] .text-violet-300 { color: #6d28d9; }
+:root[data-theme="light"] .text-cyan-100, :root[data-theme="light"] .text-cyan-300 { color: #0e7490; }
+:root[data-theme="light"] .text-amber-200, :root[data-theme="light"] .text-amber-300 { color: #b45309; }
+:root[data-theme="light"] .text-green-300, :root[data-theme="light"] .text-green-400 { color: #15803d; }
+:root[data-theme="light"] .text-red-300, :root[data-theme="light"] .text-red-400 { color: #b91c1c; }
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] .vn-logo-text { background-image: linear-gradient(90deg, #6d28d9, #4f46e5, #0891b2); }

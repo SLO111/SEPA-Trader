@@ -79,7 +79,7 @@ function TradesTable({ rows, close, remove, closed = false }: { rows: Trade[]; c
 }
 
 /** The Trade Ideas the user took (Buy / Short), followed with the idea's stop / trim / target rules. */
-export default function PaperTrades({ source = "ideas" }: { source?: "ideas" | "md" }) {
+export default function PaperTrades({ source = "ideas" }: { source?: "ideas" | "md" | "chart" }) {
   const [data, setData] = useState<Resp | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(() => api<Resp>(`/api/paper-trades?source=${source}`).then(setData).catch((e) => setError(e.message)), [source]);
@@ -106,7 +106,12 @@ export default function PaperTrades({ source = "ideas" }: { source?: "ideas" | "
       <div className="rounded-xl border border-line bg-panel p-6 text-center">
         <p className="font-medium">No trades yet</p>
         <p className="mt-1 text-sm text-muted">
-          {source === "md" ? (
+          {source === "chart" ? (
+            <>
+              On a <Link href="/chart" className="text-accent hover:underline">chart</Link>, press <b>Buy</b> or <b>Short</b>, set your entry, stop, trim and target,
+              and the trade is followed here. <b>Sell</b> closes it at the latest price.
+            </>
+          ) : source === "md" ? (
             <>
               In the <Link href="/scanner" className="text-accent hover:underline">Move Detector</Link>, press <b>Buy</b> or <b>Short</b> next to a stock. vnicornAI (or the rules)
               sets the stop, trim and target, and the trade is followed here automatically.

@@ -148,7 +148,8 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
         <div className="ml-auto flex min-w-0 items-center gap-3 text-sm">
           <SymbolSearch />
           <Link href="/billing" title="Plans & billing" className={`hidden rounded px-2 py-0.5 text-xs font-medium hover:opacity-80 sm:inline ${PLAN_STYLE[user.plan]}`}>{user.limits.label}</Link>
-          <span className="hidden max-w-[10rem] truncate text-muted xl:inline">{user.name || user.email}</span>
+          <Link href="/settings" title="Settings" className="hidden max-w-[10rem] truncate text-muted hover:text-text xl:inline">{user.name || user.email}</Link>
+          <Link href="/settings" title="Settings" aria-label="Settings" className="hidden rounded px-1.5 py-1 text-muted hover:bg-panel-2 hover:text-text lg:block">⚙</Link>
           <button
             onClick={() => {
               logout();
@@ -175,7 +176,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
               ))}
             </nav>
             <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-sm">
-              <span className="truncate text-muted">{user.name || user.email}</span>
+              <Link href="/settings" className="truncate text-muted">⚙ {user.name || user.email}</Link>
               <span className="flex items-center gap-2">
                 <Link href="/billing" className={`rounded px-2 py-0.5 text-xs font-medium ${PLAN_STYLE[user.plan]}`}>{user.limits.label}</Link>
                 <button

@@ -78,7 +78,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 401 && token && !path.startsWith("/api/auth/")) {
     // Session expired or the server's secret changed: sign out and go to the login page.
     setToken(null);
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) window.location.href = "/login";
+    // Public pages (the landing page, login, register) never bounce to the login screen: only the app's own pages do.
+    const here = typeof window !== "undefined" ? window.location.pathname : "/";
+    const isPublic = here === "/" || here.startsWith("/login") || here.startsWith("/register");
+    if (!isPublic && !path.startsWith("/api/auth/me")) window.location.href = "/login";
     throw new ApiError(401, "Your session has expired. Please log in again.");
   }
   if (res.status === 204) return undefined as T;

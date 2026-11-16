@@ -78,3 +78,102 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
 def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
     ensure_admin(user, db)
     return user_out(user)
+
+
+# ---------------- account settings ----------------
+
+class ProfileIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class PasswordIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+class EmailIn(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+    new_email: EmailStr
+
+
+class DeleteIn(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+PREF_DEFAULTS = {"theme": "dark", "default_interval": "1d", "start_page": "/chart", "compact_tables": False}
+PREF_CHOICES = {"theme": {"dark", "light", "system"}, "default_interval": {"5m", "15m", "1h", "1d", "1wk", "1mo"},
+                "start_page": {"/chart", "/markets", "/ideas", "/portfolios", "/feed"}}
+
+
+@router.patch("/me")
+def update_profile(body: ProfileIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    user.name = body.name.strip()
+    db.commit()
+    return user_out(user)
+
+
+@router.post("/password")
+def change_password(body: PasswordIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(400, "The current password is not correct")
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/email")
+def change_email(body: EmailIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(400, "The password is not correct")
+    email = body.new_email.lower()
+    if email != user.email and db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(409, "An account with this email already exists")
+    user.email = email
+    db.commit()
+    return user_out(user)
+
+
+@router.get("/prefs")
+def get_prefs(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    import json
+
+    from ..models import UserPrefs
+
+    row = db.get(UserPrefs, user.id)
+    return {**PREF_DEFAULTS, **(json.loads(row.data) if row else {})}
+
+
+@router.put("/prefs")
+def set_prefs(body: dict, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    import json
+
+    from ..models import UserPrefs
+
+    clean = {}
+    for k, v in body.items():
+        if k not in PREF_DEFAULTS:
+            continue
+        if k in PREF_CHOICES and v not in PREF_CHOICES[k]:
+            raise HTTPException(400, f"Invalid value for {k}")
+        if k == "compact_tables":
+            v = bool(v)
+        clean[k] = v
+    row = db.get(UserPrefs, user.id)
+    current = json.loads(row.data) if row else {}
+    current.update(clean)
+    if row is None:
+        db.add(UserPrefs(user_id=user.id, data=json.dumps(current)))
+    else:
+        row.data = json.dumps(current)
+    db.commit()
+    return {**PREF_DEFAULTS, **current}
+
+
+@router.delete("/me", status_code=204)
+def delete_account(body: DeleteIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(400, "The password is not correct")
+    if user.role == "admin" and user.email == settings.admin_email.lower().strip():
+        raise HTTPException(400, "The main administrator account can't be deleted")
+    db.delete(user)
+    db.commit()

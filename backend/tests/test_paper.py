@@ -63,3 +63,19 @@ def test_paper_trade_api(client, register):
         tid = lst["trades"][0]["id"]
         assert client.post(f"/api/paper-trades/{tid}/close", headers=h).json()["status"] == "CLOSED"
         assert client.delete(f"/api/paper-trades/{tid}", headers=h).status_code == 204
+
+
+def test_chart_trades_are_separate(client, register):
+    h, _ = register("chart-trades@test.ro")
+    t = client.post("/api/paper-trades/chart", headers=h, json={"symbol": "AAPL", "side": "long"}).json()
+    assert t["stop"] < t["entry"] < t["target"] and t["timeframe"] == "CH"
+    bad = client.post("/api/paper-trades/chart", headers=h, json={"symbol": "AAPL", "side": "long", "entry": 100, "stop": 110})
+    assert bad.status_code == 400
+    s = client.post("/api/paper-trades/chart", headers=h, json={"symbol": "MSFT", "side": "short"}).json()
+    assert s["target"] < s["entry"] < s["stop"]
+    assert client.get("/api/paper-trades?source=chart", headers=h).json()["summary"]["trades"] == 2
+    assert client.get("/api/paper-trades?source=ideas", headers=h).json()["summary"]["trades"] == 0
+    sold = client.post("/api/paper-trades/chart/sell", headers=h, json={"symbol": "AAPL"}).json()
+    assert sold[0]["status"] == "CLOSED"
+    assert client.post("/api/paper-trades/chart/sell", headers=h, json={"symbol": "AAPL"}).status_code == 404
+    assert any(g["source"] == "Charts" for g in client.get("/api/grader?source=chart", headers=h).json()["trades"])

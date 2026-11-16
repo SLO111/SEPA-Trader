@@ -1,6 +1,7 @@
 "use client";
 
 import { ColorType, LineSeries, createChart, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
+import { chartColors } from "@/lib/theme";
 import { useEffect, useRef } from "react";
 import type { Performance } from "@/lib/types";
 
@@ -14,8 +15,8 @@ export default function PerformanceChart({ data }: { data: Performance }) {
     if (!el.current) return;
     const c = createChart(el.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8b95a7", fontSize: 11 },
-      grid: { vertLines: { visible: false }, horzLines: { color: "#1b2231" } },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: chartColors().text, fontSize: 11 },
+      grid: { vertLines: { visible: false }, horzLines: { color: chartColors().grid } },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false },
       localization: { priceFormatter: (v: number) => `${v.toFixed(1)}%` },

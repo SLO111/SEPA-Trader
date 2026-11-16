@@ -134,6 +134,25 @@ def portal(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return {"url": session["url"]}
 
 
+class CancelIn(BaseModel):
+    resume: bool = False  # true = keep the subscription (undo a cancellation before the period ends)
+
+
+@router.post("/cancel")
+def cancel(body: CancelIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Stop paying from the next period: the subscription stays active until the end of the period already paid."""
+    _client()
+    sub = db.get(Subscription, user.id)
+    if sub is None or not sub.subscription_id or sub.status not in ("active", "trialing", "past_due"):
+        raise HTTPException(404, "You don't have an active subscription.")
+    obj = _plain(stripe.Subscription.modify(sub.subscription_id, cancel_at_period_end=not body.resume))
+    sub.cancel_at_period_end = bool(obj.get("cancel_at_period_end", not body.resume))
+    if obj.get("current_period_end"):
+        sub.current_period_end = _ts(obj["current_period_end"])
+    db.commit()
+    return sub_out(sub)
+
+
 # ------------------------------------------------------------------ webhooks
 
 def _user_for(db: Session, customer_id: str | None, metadata: dict | None) -> tuple[User | None, Subscription | None]:
