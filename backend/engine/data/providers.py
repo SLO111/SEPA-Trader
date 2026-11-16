@@ -43,6 +43,18 @@ class DataProvider(ABC):
         """Per-share cash dividends indexed by ex-dividend date."""
         return pd.Series(dtype=float)
 
+    def all_time_highs(self, symbols: list[str]) -> dict[str, dict]:
+        """All-time high (split/dividend adjusted, like the prices) per symbol: {"ath": price, "date": "YYYY-MM"}.
+        Default: the highest high in the available history."""
+        out = {}
+        for s in symbols:
+            try:
+                d = self.history(s, "1d", 3)
+            except Exception:
+                continue
+            out[s] = {"ath": round(float(d["high"].max()), 4), "date": d["high"].idxmax().strftime("%Y-%m")}
+        return out
+
     def company(self, symbol: str) -> dict:
         """Full company overview for the ticker page (see engine/data/company.py)."""
         from .company import synthetic_company
@@ -218,6 +230,26 @@ class YFinanceProvider(DataProvider):
         df = df.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
         df.index = pd.DatetimeIndex(df.index.tz_localize(None).normalize(), name="date")
         return _resample(df, interval)
+
+    def all_time_highs(self, symbols: list[str]) -> dict[str, dict]:
+        """Full monthly history in batches: the highest monthly high is the all-time high."""
+        import yfinance as yf
+
+        out = {}
+        for i in range(0, len(symbols), 100):
+            chunk = symbols[i:i + 100]
+            try:
+                data = yf.download(chunk, period="max", interval="1mo", auto_adjust=True, group_by="ticker", threads=True, progress=False)
+            except Exception:
+                continue
+            for s in chunk:
+                try:
+                    h = _ticker_frame(data, s).rename(columns=str.lower)["high"].dropna()
+                except KeyError:
+                    continue
+                if len(h):
+                    out[s] = {"ath": round(float(h.max()), 4), "date": pd.Timestamp(h.idxmax()).strftime("%Y-%m")}
+        return out
 
     def bulk_history(self, symbols: list[str], years: int = 3) -> dict[str, pd.DataFrame]:
         """One batched download for many symbols (far fewer requests than one per symbol)."""

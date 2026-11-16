@@ -111,6 +111,14 @@ def fundamentals(symbol: str) -> dict:
 def cached(kind: str, symbol: str) -> dict | None:
     """Stored fundamentals/earnings without calling the provider: for screens over the whole universe."""
     store = get_store()
+    if kind == "ath":
+        if store is not None and (v := store.get_slow("ath", symbol.upper())):
+            return v
+        try:
+            d = history(symbol)
+        except Exception:
+            return None
+        return {"ath": float(d["high"].max()), "date": d["high"].idxmax().strftime("%Y-%m"), "partial": True}
     if store is None:
         return fundamentals(symbol) if kind == "fundamentals" else earnings(symbol)
     return store.get_slow(kind, symbol.upper())

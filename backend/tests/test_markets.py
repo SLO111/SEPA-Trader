@@ -131,4 +131,5 @@ def test_markets_api(client, register):
     e = client.get("/api/markets/earnings", headers=h).json()
     assert e["upcoming"] and e["recent"]
     assert client.get("/api/markets/fed", headers=h).json()["next_meeting"]
-    assert client.get("/api/markets/screener?preset=dividend", headers=h).status_code == 403  # free plan
+    assert client.get("/api/markets/screener?preset=dividend", headers=h).status_code == 403  # free plan: screens are Pro
+    assert client.get("/api/markets/screener", headers=h).status_code == 200  # the plain list is free

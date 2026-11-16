@@ -179,6 +179,10 @@ def leaders(scan: list[dict], limit: int = 10) -> list[dict]:
 
 # ------------------------------------------------------------------ screener
 
+# Columns of the screener that are part of Pro / Premium (the rest is general information, free)
+PAID_SCREEN_FIELDS = {"rsi14", "rs_rating", "template_passed", "bull_score", "bear_score", "vcp", "ath", "from_ath_pct", "at_ath",
+                      "above_ma50", "return_1m", "return_3m", "from_high_pct"}
+
 PRESETS: dict[str, dict] = {
     "undervalued": {"label": "Undervalued", "description": "Profitable, with a P/E of 15 or less, or up to 25 and at least 25% below its sector's median P/E."},
     "garp": {"label": "Growth at a reasonable price", "description": "Earnings growth of 15%+ with a P/E of 30 or less."},
@@ -190,7 +194,7 @@ PRESETS: dict[str, dict] = {
 }
 
 
-def screen_rows(movers_: list[dict], scan: list[dict], fundamentals: dict[str, dict]) -> list[dict]:
+def screen_rows(movers_: list[dict], scan: list[dict], fundamentals: dict[str, dict], aths: dict[str, dict] | None = None) -> list[dict]:
     sc = {r["symbol"]: r for r in scan}
     by_sector: dict[str, list[float]] = {}
     for m in movers_:
@@ -212,8 +216,16 @@ def screen_rows(movers_: list[dict], scan: list[dict], fundamentals: dict[str, d
             "dividend_yield": f.get("dividend_yield"), "beta": f.get("beta"),
             "rs_rating": s.get("rs_rating"), "template_passed": s.get("template_passed"),
             "bull_score": s.get("bull_score"), "bear_score": s.get("bear_score"), "vcp": s.get("vcp"),
+            **_ath(m, (aths or {}).get(m["symbol"])),
         })
     return out
+
+
+def _ath(m: dict, stored: dict | None) -> dict:
+    """Distance to the all-time high; within 1% (or a new high) counts as at the ATH."""
+    ath = max(x for x in ((stored or {}).get("ath"), m.get("week52_high")) if x)
+    pct = round((m["price"] / ath - 1) * 100, 2) if ath else None
+    return {"ath": round(ath, 2) if ath else None, "from_ath_pct": pct, "at_ath": pct is not None and pct >= -1}
 
 
 def screen(rows: list[dict], preset: str | None = None, sector: str | None = None, min_cap_b: float | None = None,

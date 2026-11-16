@@ -368,63 +368,101 @@ function ExtendedMovers({ session }: { session: "pre-market" | "after-hours" }) 
   );
 }
 
+type SortKey = "symbol" | "price" | "change_pct" | "market_cap_b" | "pe" | "pe_vs_sector_pct" | "eps_growth" | "dividend_yield" | "rsi14" | "rs_rating" | "template_passed" | "from_ath_pct" | "bull_score";
+
+/** Stock screener. Free: every stock with the general information (price, market cap, P/E, growth, dividend), sortable.
+ *  Pro / Premium: the screens (presets), filters, and the RSI, RS, Trend Template, Bull score and distance to the all-time high. */
 export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowed: boolean; initialPreset?: string }) {
+  const paid = allowed;
   const [presets, setPresets] = useState<Presets | null>(null);
-  const [preset, setPreset] = useState(initialPreset);
+  const [preset, setPreset] = useState(paid ? initialPreset : "");
   const ext = EXT_PRESETS.find((p) => p.id === preset);
   const [filters, setFilters] = useState({ sector: "", min_cap_b: "", max_pe: "", min_yield: "", min_rs: "", template_only: false, above_ma50: false });
   const [rows, setRows] = useState<ScreenRow[] | null>(null);
   const [error, setError] = useState("");
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
 
   useEffect(() => {
     api<Presets>("/api/markets/screener/presets").then(setPresets).catch(() => {});
   }, []);
+  useEffect(() => {
+    setPreset(paid ? initialPreset : ""); // the plan is known once the account has loaded
+  }, [paid, initialPreset]);
 
   useEffect(() => {
-    if (!allowed || EXT_PRESETS.some((p) => p.id === preset)) return;
+    if (EXT_PRESETS.some((p) => p.id === preset)) return;
     const qs = new URLSearchParams();
-    if (preset) qs.set("preset", preset);
-    Object.entries(filters).forEach(([k, v]) => {
-      if (v === true) qs.set(k, "true");
-      else if (v) qs.set(k, String(v));
-    });
+    if (paid) {
+      if (preset) qs.set("preset", preset);
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v === true) qs.set(k, "true");
+        else if (v) qs.set(k, String(v));
+      });
+    }
     setRows(null);
     setError("");
     const t = setTimeout(() => {
       api<{ results: ScreenRow[] }>(`/api/markets/screener?${qs}`).then((r) => setRows(r.results)).catch((e) => setError(e.message));
     }, 250);
     return () => clearTimeout(t);
-  }, [preset, filters, allowed]);
+  }, [preset, filters, paid]);
 
-  if (!allowed) {
-    return (
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
-        <h2 className="font-semibold">Stock screener</h2>
-        <p className="mt-1 text-sm text-muted">Find undervalued stocks, growth at a reasonable price, high dividends, SEPA leaders and more. Available on the Pro and Premium plans.</p>
-        <Link href="/billing" className="mt-3 inline-block text-sm text-accent hover:underline">See plans</Link>
-      </div>
-    );
-  }
+  const sorted = useMemo(() => {
+    if (!rows || !sort) return rows;
+    const { key, dir } = sort;
+    return [...rows].sort((a, b) => {
+      const x = a[key as keyof ScreenRow], y = b[key as keyof ScreenRow];
+      if (x === null || x === undefined) return 1; // empty values always last
+      if (y === null || y === undefined) return -1;
+      if (typeof x === "string" && typeof y === "string") return x.localeCompare(y) * dir;
+      return ((x as number) - (y as number)) * dir;
+    });
+  }, [rows, sort]);
+
   const set = (k: keyof typeof filters, v: string | boolean) => setFilters((f) => ({ ...f, [k]: v }));
   const input = "w-20 rounded border border-line bg-bg px-2 py-1 text-sm outline-none focus:border-accent";
   const current = presets?.presets.find((p) => p.id === preset);
+  // first click: A→Z for the symbol, largest first for numbers; second click reverses; third goes back to the default order
+  const clickSort = (key: SortKey) =>
+    setSort((s) => {
+      const first: 1 | -1 = key === "symbol" ? 1 : -1;
+      if (!s || s.key !== key) return { key, dir: first };
+      return s.dir === first ? { key, dir: (-first) as 1 | -1 } : null;
+    });
+  const Th = ({ k, label, right = true, title }: { k: SortKey; label: string; right?: boolean; title?: string }) => (
+    <th className={`px-3 py-2.5 ${right ? "text-right" : ""} ${k === "symbol" ? "sticky left-0 z-[1] bg-panel" : ""}`} title={title}>
+      <button onClick={() => clickSort(k)} className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-text ${sort?.key === k ? "text-text" : ""}`}>
+        {label}
+        <span className="w-2 text-[9px]">{sort?.key === k ? (sort.dir === 1 ? "▲" : "▼") : ""}</span>
+      </button>
+    </th>
+  );
+  const cols = paid ? 13 : 8;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
         <button onClick={() => setPreset("")} className={`rounded-md px-3 py-1.5 text-sm ${!preset ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
           All stocks
         </button>
-        {[...(presets?.presets ?? []), ...EXT_PRESETS].map((p) => (
-          <button key={p.id} onClick={() => setPreset(p.id)} className={`rounded-md px-3 py-1.5 text-sm ${preset === p.id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
-            {p.label}
-          </button>
-        ))}
+        {[...(presets?.presets ?? []), ...EXT_PRESETS].map((p) =>
+          paid ? (
+            <button key={p.id} onClick={() => setPreset(p.id)} className={`rounded-md px-3 py-1.5 text-sm ${preset === p.id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
+              {p.label}
+            </button>
+          ) : (
+            <Link key={p.id} href="/billing" title={`${p.description} Pro and Premium.`} className="rounded-md bg-panel px-3 py-1.5 text-sm text-muted/70 hover:text-amber-300">
+              🔒 {p.label}
+            </Link>
+          ),
+        )}
       </div>
-      {(current ?? ext) && <p className="text-sm text-muted">{(current ?? ext)!.description}</p>}
+      {paid && (current ?? ext) && <p className="text-sm text-muted">{(current ?? ext)!.description}</p>}
       {ext ? (
         <ExtendedMovers session={ext.id as "pre-market" | "after-hours"} />
       ) : (
       <>
+      {paid ? (
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-panel p-3 text-sm text-muted">
         <select value={filters.sector} onChange={(e) => set("sector", e.target.value)} className="rounded border border-line bg-bg px-2 py-1 text-text">
           <option value="">All sectors</option>
@@ -439,33 +477,44 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={filters.template_only} onChange={(e) => set("template_only", e.target.checked)} className="accent-blue-500" />Trend Template 8/8</label>
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={filters.above_ma50} onChange={(e) => set("above_ma50", e.target.checked)} className="accent-blue-500" />Above 50-day MA</label>
       </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted">
+          <span>🔒 Screens, filters, and the RSI, RS Rating, Trend Template, Bull score and distance to the all-time high are part of Pro.</span>
+          <Link href="/billing" className="ml-auto rounded-md bg-amber-500 px-3 py-1 text-xs font-semibold text-black hover:bg-amber-400">Unlock with Pro</Link>
+        </div>
+      )}
       {error && <Failed msg={error} />}
       <div className="overflow-x-auto rounded-xl border border-line">
-        <table className="w-full min-w-[1000px] text-sm">
+        <table className={`w-full text-sm ${paid ? "min-w-[1100px]" : "min-w-[760px]"}`}>
           <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">
             <tr>
-              <th className="sticky left-0 z-[1] bg-panel px-3 py-2.5">Symbol</th>
-              <th className="px-3 py-2.5 text-right">Price</th>
-              <th className="px-3 py-2.5 text-right">Today</th>
-              <th className="px-3 py-2.5 text-right">Mkt cap</th>
-              <th className="px-3 py-2.5 text-right">P/E</th>
-              <th className="px-3 py-2.5 text-right" title="P/E vs. sector median">vs sector</th>
-              <th className="px-3 py-2.5 text-right">EPS gr.</th>
-              <th className="px-3 py-2.5 text-right">Yield</th>
-              <th className="px-3 py-2.5 text-right">RSI</th>
-              <th className="px-3 py-2.5 text-right">RS</th>
-              <th className="px-3 py-2.5 text-right">TT</th>
-              <th className="px-3 py-2.5">Bull</th>
+              <Th k="symbol" label="Symbol" right={false} />
+              <Th k="price" label="Price" />
+              <Th k="change_pct" label="Today" />
+              <Th k="market_cap_b" label="Mkt cap" />
+              <Th k="pe" label="P/E" />
+              <Th k="pe_vs_sector_pct" label="vs sector" title="P/E vs. sector median" />
+              <Th k="eps_growth" label="EPS gr." />
+              <Th k="dividend_yield" label="Yield" />
+              {paid && (
+                <>
+                  <Th k="from_ath_pct" label="To ATH" title="Distance to the all-time high" />
+                  <Th k="rsi14" label="RSI" />
+                  <Th k="rs_rating" label="RS" />
+                  <Th k="template_passed" label="TT" />
+                  <Th k="bull_score" label="Bull" right={false} />
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
             {rows === null && !error && (
-              <tr><td colSpan={12} className="px-3 py-8 text-center text-muted">Screening…</td></tr>
+              <tr><td colSpan={cols} className="px-3 py-8 text-center text-muted">Screening…</td></tr>
             )}
             {rows?.length === 0 && (
-              <tr><td colSpan={12} className="px-3 py-8 text-center text-muted">No stocks match these criteria.</td></tr>
+              <tr><td colSpan={cols} className="px-3 py-8 text-center text-muted">No stocks match these criteria.</td></tr>
             )}
-            {rows?.map((r) => (
+            {sorted?.map((r) => (
               <tr key={r.symbol} className="border-t border-line hover:bg-panel/60">
                 <td className="sticky left-0 z-[1] bg-bg px-3 py-2">
                   <span className="flex items-center gap-1"><AddToWatchlist symbol={r.symbol} /><StockLink s={r.symbol} /></span>
@@ -478,10 +527,21 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
                 <td className={`tabular px-3 py-2 text-right ${r.pe_vs_sector_pct === null ? "text-muted" : r.pe_vs_sector_pct < 0 ? "text-up" : "text-down"}`}>{pct(r.pe_vs_sector_pct, 0)}</td>
                 <td className={`tabular px-3 py-2 text-right ${tone(r.eps_growth)}`}>{fmt(r.eps_growth, 0, "%")}</td>
                 <td className="tabular px-3 py-2 text-right">{fmt(r.dividend_yield, 2, "%")}</td>
-                <td className={`tabular px-3 py-2 text-right ${r.rsi14 <= 30 ? "text-up" : r.rsi14 >= 70 ? "text-down" : ""}`}>{r.rsi14.toFixed(0)}</td>
-                <td className="tabular px-3 py-2 text-right">{r.rs_rating ?? "—"}</td>
-                <td className={`tabular px-3 py-2 text-right ${r.template_passed === 8 ? "text-up" : "text-muted"}`}>{r.template_passed ?? "—"}/8</td>
-                <td className="px-3 py-2"><ScoreBar score={r.bull_score} kind="bull" /></td>
+                {paid && (
+                  <>
+                    <td className="tabular px-3 py-2 text-right" title={r.ath ? `All-time high ${fmt(r.ath)}` : undefined}>
+                      {r.at_ath ? (
+                        <span className="rounded bg-up/15 px-1.5 py-0.5 text-[11px] font-semibold text-up">ATH</span>
+                      ) : r.from_ath_pct === null || r.from_ath_pct === undefined ? "—" : (
+                        <span className={r.from_ath_pct > -10 ? "" : "text-muted"}>{pct(r.from_ath_pct, 1)}</span>
+                      )}
+                    </td>
+                    <td className={`tabular px-3 py-2 text-right ${(r.rsi14 ?? 50) <= 30 ? "text-up" : (r.rsi14 ?? 50) >= 70 ? "text-down" : ""}`}>{r.rsi14?.toFixed(0) ?? "—"}</td>
+                    <td className="tabular px-3 py-2 text-right">{r.rs_rating ?? "—"}</td>
+                    <td className={`tabular px-3 py-2 text-right ${r.template_passed === 8 ? "text-up" : "text-muted"}`}>{r.template_passed ?? "—"}/8</td>
+                    <td className="px-3 py-2"><ScoreBar score={r.bull_score} kind="bull" /></td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>

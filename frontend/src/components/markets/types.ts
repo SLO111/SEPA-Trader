@@ -50,9 +50,11 @@ export type Fed = {
   history: { upper: { time: string; value: number }[]; effective: { time: string; value: number }[]; note_2y: { time: string; value: number }[] };
 };
 
+// Pro-only fields are missing on the Free plan
 export type ScreenRow = {
-  symbol: string; name: string; sector: string; price: number; change_pct: number; from_high_pct: number; rsi14: number; above_ma50: boolean;
-  return_1m: number; return_3m: number | null; market_cap_b: number | null; pe: number | null; eps_growth: number | null; peg: number | null;
-  dividend_yield: number | null; beta: number | null; rs_rating: number | null; template_passed: number | null; bull_score: number | null;
-  bear_score: number | null; vcp: boolean | null; sector_pe: number | null; pe_vs_sector_pct: number | null;
+  symbol: string; name: string; sector: string; price: number; change_pct: number; from_high_pct?: number; rsi14?: number; above_ma50?: boolean;
+  return_1m?: number; return_3m?: number | null; market_cap_b: number | null; pe: number | null; eps_growth: number | null; peg: number | null;
+  dividend_yield: number | null; beta: number | null; rs_rating?: number | null; template_passed?: number | null; bull_score?: number | null;
+  bear_score?: number | null; vcp?: boolean | null; sector_pe: number | null; pe_vs_sector_pct: number | null;
+  ath?: number | null; from_ath_pct?: number | null; at_ath?: boolean;
 };

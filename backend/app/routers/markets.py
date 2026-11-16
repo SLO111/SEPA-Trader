@@ -183,11 +183,17 @@ def screener(
     above_ma50: bool = False,
     user: User = Depends(current_user),
 ):
-    if not limits_for(user)["move_detector"]:
-        raise HTTPException(403, "The screener is available on the Pro and Premium plans.")
+    paid = limits_for(user)["move_detector"]
     if preset and preset not in mt.PRESETS:
         raise HTTPException(400, f"Unknown preset: {preset}")
+    if not paid and (preset or sector or min_cap_b or max_pe or min_yield or min_rs or min_growth is not None or template_only or above_ma50):
+        raise HTTPException(403, "Screens and filters are available on the Pro and Premium plans.")
     fundamentals = {s: market_data.cached("fundamentals", s) or {} for s in stock_symbols()}
-    rows = mt.screen_rows(_rows(), cached_scan(), fundamentals)
+    aths = {s: market_data.cached("ath", s) for s in stock_symbols()}
+    rows = mt.screen_rows(_rows(), cached_scan(), fundamentals, aths)
     out = mt.screen(rows, preset, sector, min_cap_b, max_pe, min_yield, min_rs, min_growth, template_only, above_ma50)
-    return {"count": len(out), "results": out}
+    if not paid:
+        # Free: the general information only (price, market cap, valuation, dividend), largest companies first
+        out = [{k: v for k, v in r.items() if k not in mt.PAID_SCREEN_FIELDS} for r in out]
+        out.sort(key=lambda r: -(r.get("market_cap_b") or 0))
+    return {"count": len(out), "results": out, "locked": not paid}

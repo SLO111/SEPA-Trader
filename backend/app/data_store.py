@@ -65,7 +65,7 @@ class DataStore:
         self._session_factory = session_factory
         self._lock = threading.RLock()
         self.prices: dict[str, pd.DataFrame] = {}
-        self.slow: dict[str, dict[str, dict]] = {"fundamentals": {}, "earnings": {}}
+        self.slow: dict[str, dict[str, dict]] = {"fundamentals": {}, "earnings": {}, "ath": {}}
         self.updated: dict[str, datetime] = {}
         self.status = {"state": "idle", "message": "", "prices_refreshed_at": None, "slow_done": 0, "slow_total": 0}
         self._listeners: list[Callable[[], None]] = []
@@ -340,6 +340,16 @@ class DataStore:
             self.status["slow_done"] += 1
         return n
 
+    def refresh_ath(self, symbols: list[str]) -> int:
+        """All-time highs, refreshed weekly (prices above the stored value update it on the fly in the screener)."""
+        todo = [s for s in symbols if self.stale(f"ath:{s}", timedelta(days=7))]
+        if not todo:
+            return 0
+        found = self._provider_factory().all_time_highs(todo)
+        for s, v in found.items():
+            self.put_slow("ath", s, v)
+        return len(found)
+
     # ---------------------------------------------------------------- background loop
     def start(self, symbols_fn: Callable[[], list[str]], stocks_fn: Callable[[], list[str]], interval: float = 3 * 3600) -> None:
         if self._thread is not None:
@@ -366,6 +376,10 @@ class DataStore:
                     self.refresh_prices(symbols_fn())
                     self.status["message"] = "Updating fundamentals and earnings"
                     self.refresh_slow(stocks_fn(), stop)
+                    try:
+                        self.refresh_ath(stocks_fn())
+                    except Exception:
+                        log.warning("All-time-high refresh failed", exc_info=True)
                     self.status.update(state="ready", message="")
                 except Exception:
                     log.exception("Market data refresh failed")

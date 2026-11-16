@@ -139,3 +139,32 @@ def test_ticket_levels(client, register):
     _plan("levels@test.ro", "pro")
     pro = client.get("/api/market/levels/AAPL?side=long", headers=h).json()
     assert "vcp" in pro and "ai_plan" in pro
+
+
+def test_screener_free_general_info_pro_full(client, register):
+    h, _ = register("screen-free@test.ro")
+    r = client.get("/api/markets/screener", headers=h)
+    assert r.status_code == 200 and r.json()["locked"]
+    rows = r.json()["results"]
+    assert rows and all(k in rows[0] for k in ("symbol", "price", "market_cap_b", "pe", "dividend_yield"))
+    assert not any(k in rows[0] for k in ("rsi14", "rs_rating", "template_passed", "bull_score", "from_ath_pct"))
+    caps = [x["market_cap_b"] or 0 for x in rows]
+    assert caps == sorted(caps, reverse=True)  # largest companies first
+    for q in ("preset=dividend", "sector=Technology", "max_pe=20", "template_only=true"):
+        assert client.get(f"/api/markets/screener?{q}", headers=h).status_code == 403, q
+    _plan("screen-free@test.ro", "pro")
+    full = client.get("/api/markets/screener", headers=h).json()
+    assert not full["locked"]
+    row = full["results"][0]
+    assert row["from_ath_pct"] <= 0.01 and row["ath"] >= row["price"] and isinstance(row["at_ath"], bool)
+    assert all(k in row for k in ("rsi14", "rs_rating", "template_passed", "bull_score"))
+    assert client.get("/api/markets/screener?preset=dividend", headers=h).status_code == 200
+
+
+def test_ath_distance():
+    from engine.market_tools import _ath
+
+    assert _ath({"price": 100, "week52_high": 100.5}, {"ath": 100.5})["at_ath"] is True
+    far = _ath({"price": 80, "week52_high": 90}, {"ath": 120})
+    assert far["ath"] == 120 and far["from_ath_pct"] == -33.33 and not far["at_ath"]
+    assert _ath({"price": 130, "week52_high": 131}, {"ath": 120})["ath"] == 131  # a new high beats the stored value
