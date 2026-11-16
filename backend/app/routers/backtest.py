@@ -85,3 +85,92 @@ def strategy(body: StrategyIn, user: User = Depends(current_user)):
     except Exception:
         bench = None
     return {"symbol": body.symbol.upper(), "strategy": REGISTRY[body.strategy].name, **bt.strategy_backtest(df, body.strategy, body.params, bench, body.fees_pct)}
+
+
+
+# ------------------------------------------------------------------ custom rule-based strategies (Premium)
+
+def _require_custom(user: User) -> None:
+    if not limits_for(user)["custom_backtest"]:
+        raise HTTPException(403, "Custom strategy backtests are part of Premium.")
+
+
+@router.get("/rules/conditions")
+def rule_conditions(user: User = Depends(current_user)):
+    from engine.rules import CONDITIONS, DEFAULT_EXIT
+
+    return {"conditions": [{"type": k, **v} for k, v in CONDITIONS.items()], "exit": DEFAULT_EXIT}
+
+
+class RulesIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=16)
+    rules: dict
+    fees_pct: float = Field(default=0.05, ge=0, le=2)
+
+
+@router.post("/rules")
+def run_rules_backtest(body: RulesIn, user: User = Depends(current_user)):
+    from engine.rules import run_rules
+
+    _require_custom(user)
+    sym = body.symbol.upper().strip()
+    try:
+        df = market_data.history(sym)
+    except Exception:
+        raise HTTPException(404, f"No data found for {sym}")
+    try:
+        bench = market_data.history("SPY")
+    except Exception:
+        bench = None
+    try:
+        return {"symbol": sym, **run_rules(df, body.rules, bench, body.fees_pct)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class SaveRulesIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    rules: dict
+
+
+@router.get("/rules/saved")
+def saved_rules(user: User = Depends(current_user)):
+    import json
+
+    from ..db import SessionLocal
+    from ..models import SavedStrategy
+
+    _require_custom(user)
+    with SessionLocal() as db:
+        rows = db.query(SavedStrategy).filter_by(user_id=user.id).order_by(SavedStrategy.created_at.desc()).all()
+        return [{"id": r.id, "name": r.name, "rules": json.loads(r.rules), "created_at": r.created_at.isoformat()} for r in rows]
+
+
+@router.post("/rules/saved")
+def save_rules(body: SaveRulesIn, user: User = Depends(current_user)):
+    import json
+
+    from ..db import SessionLocal
+    from ..models import SavedStrategy
+
+    _require_custom(user)
+    with SessionLocal() as db:
+        if db.query(SavedStrategy).filter_by(user_id=user.id).count() >= 50:
+            raise HTTPException(400, "You can save up to 50 strategies.")
+        r = SavedStrategy(user_id=user.id, name=body.name.strip(), rules=json.dumps(body.rules))
+        db.add(r)
+        db.commit()
+        return {"id": r.id, "name": r.name, "rules": body.rules}
+
+
+@router.delete("/rules/saved/{sid}", status_code=204)
+def delete_rules(sid: int, user: User = Depends(current_user)):
+    from ..db import SessionLocal
+    from ..models import SavedStrategy
+
+    with SessionLocal() as db:
+        r = db.get(SavedStrategy, sid)
+        if r is None or r.user_id != user.id:
+            raise HTTPException(404, "Not found")
+        db.delete(r)
+        db.commit()

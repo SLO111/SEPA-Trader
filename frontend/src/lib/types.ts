@@ -224,7 +224,7 @@ export type PortfolioSummary = {
 export type Holding = {
   symbol: string; name: string; sector: string; shares: number; avg_cost: number; price: number; value: number; cost: number;
   pnl: number; pnl_pct: number | null; day_change: number; day_change_pct: number; weight: number;
-  beta: number | null; dividend_yield: number | null; pe: number | null; earnings_in?: number | null;
+  beta: number | null; dividend_yield: number | null; pe: number | null; earnings_in?: number | null; stop?: number | null;
 };
 
 export type PortfolioTxn = { id: number; date: string; symbol: string; side: "buy" | "sell"; shares: number; price: number; fees: number };
@@ -235,6 +235,7 @@ export type PortfolioDetail = Omit<PortfolioSummary, "classification"> & {
   dividends: { date: string; symbol: string; per_share: number; shares: number; amount: number }[];
   dividends_total: number;
   transactions: PortfolioTxn[];
+  heat?: { total_risk: number; total_risk_pct: number | null; missing: string[]; positions: { symbol: string; stop: number; risk: number; risk_pct: number | null; to_stop_pct: number | null }[] };
 };
 
 export type Performance = {

@@ -4,7 +4,7 @@ import EarningsBadge from "@/components/EarningsBadge";
 
 import Link from "next/link";
 import { useState } from "react";
-import { post } from "@/lib/api";
+import { post, put } from "@/lib/api";
 import { num, pct, tone, usd } from "@/lib/format";
 import type { Holding, PortfolioDetail } from "@/lib/types";
 
@@ -62,6 +62,61 @@ export function SellNowDialog({ portfolioId, portfolioName, symbol, shares, avgC
   );
 }
 
+function StopCell({ portfolioId, symbol, stop, price, onSaved }: { portfolioId: number; symbol: string; stop: number | null; price: number; onSaved: (p: PortfolioDetail) => void }) {
+  const [edit, setEdit] = useState(false);
+  const [v, setV] = useState(stop ? String(stop) : (price * 0.93).toFixed(2));
+  const save = async (val: number | null) => {
+    onSaved(await put<PortfolioDetail>(`/api/portfolios/${portfolioId}/stops`, { symbol, stop: val }));
+    setEdit(false);
+  };
+  if (edit) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <input autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && Number(v) > 0 && save(Number(v))}
+          className="tabular w-20 rounded border border-line bg-bg px-1.5 py-0.5 text-right text-xs" inputMode="decimal" />
+        <button onClick={() => Number(v) > 0 && save(Number(v))} className="text-xs text-up">✓</button>
+        {stop !== null && <button onClick={() => save(null)} className="text-xs text-muted hover:text-down" title="Remove the stop">✕</button>}
+      </span>
+    );
+  }
+  return stop !== null ? (
+    <button onClick={() => setEdit(true)} className="tabular text-down hover:underline" title={`${(((stop / price) - 1) * 100).toFixed(1)}% away`}>{usd(stop)}</button>
+  ) : (
+    <button onClick={() => setEdit(true)} className="rounded border border-dashed border-amber-500/50 px-1.5 py-0.5 text-[11px] text-amber-300">+ Set stop</button>
+  );
+}
+
+/** Portfolio heat: what you'd lose if every stop were hit. */
+export function HeatCard({ heat, value }: { heat: NonNullable<PortfolioDetail["heat"]>; value: number }) {
+  const pctRisk = heat.total_risk_pct ?? 0;
+  const tone = pctRisk > 10 ? "text-down" : pctRisk > 6 ? "text-amber-300" : "text-up";
+  return (
+    <section className="rounded-xl border border-line bg-panel p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-semibold">Portfolio heat (open risk)</h2>
+        <span className="text-[11px] text-muted">If every stop were hit today</span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-end gap-4">
+        <span className={`tabular text-2xl font-bold ${tone}`}>{usd(heat.total_risk)}</span>
+        <span className={`tabular pb-0.5 text-lg ${tone}`}>{heat.total_risk_pct !== null ? `${heat.total_risk_pct.toFixed(1)}% of ${usd(value)}` : ""}</span>
+      </div>
+      <p className="mt-1 text-xs text-muted">Many swing traders keep total open risk under 6-10% of the account and 0.5-2% per position.</p>
+      {heat.positions.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {heat.positions.map((x) => (
+            <span key={x.symbol} className="tabular rounded bg-panel-2 px-2 py-0.5 text-xs">
+              {x.symbol} <span className="text-down">{usd(x.risk)}</span> <span className="text-muted">({x.risk_pct?.toFixed(1)}%)</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {heat.missing.length > 0 && (
+        <p className="mt-2 text-xs text-amber-300">⚠ No stop set for {heat.missing.join(", ")}: the risk on these positions is open-ended. Set one in the Stop column.</p>
+      )}
+    </section>
+  );
+}
+
 export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Holding[]; portfolioId?: number; onSold?: (p: PortfolioDetail) => void }) {
   const [selling, setSelling] = useState<Holding | null>(null);
   return (
@@ -86,6 +141,7 @@ export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Hol
                 <th className="px-4 py-2 text-right">Weight</th>
                 <th className="px-4 py-2 text-right">Today</th>
                 <th className="px-4 py-2 text-right">Total P/L</th>
+                {portfolioId && <th className="px-4 py-2 text-right" title="Your stop: used for the open-risk (heat) card">Stop</th>}
                 {portfolioId && <th className="px-2 py-2" />}
               </tr>
             </thead>
@@ -109,6 +165,11 @@ export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Hol
                     {usd(r.pnl)}
                     <div className="text-xs">{pct(r.pnl_pct)}</div>
                   </td>
+                  {portfolioId && onSold && (
+                    <td className="px-4 py-2 text-right">
+                      <StopCell portfolioId={portfolioId} symbol={r.symbol} stop={r.stop ?? null} price={r.price} onSaved={onSold} />
+                    </td>
+                  )}
                   {portfolioId && (
                     <td className="px-2 py-2 text-right">
                       <button onClick={() => setSelling(r)} className="rounded-md border border-down/40 px-2.5 py-1 text-xs font-medium text-down hover:bg-down/10">

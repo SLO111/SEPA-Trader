@@ -22,7 +22,7 @@ import type { Candle, StrategyOutput } from "@/lib/types";
 
 // fitKey: the view is re-fitted only when it changes (new symbol/interval), not on live refreshes.
 // onHover: the time of the candle under the crosshair (null when the mouse leaves the chart).
-type Props = { candles: Candle[]; overlays: StrategyOutput[]; fitKey?: string; onHover?: (time: string | number | null) => void };
+type Props = { candles: Candle[]; overlays: StrategyOutput[]; fitKey?: string; onHover?: (time: string | number | null) => void; onReady?: (chart: IChartApi | null) => void };
 
 function theme() {
   const c = chartColors();
@@ -35,7 +35,9 @@ function theme() {
   };
 }
 
-export default function PriceChart({ candles, overlays, fitKey = "", onHover }: Props) {
+export default function PriceChart({ candles, overlays, fitKey = "", onHover, onReady }: Props) {
+  const readyRef = useRef(onReady);
+  readyRef.current = onReady;
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
   const fitted = useRef<string | null>(null);
@@ -71,6 +73,7 @@ export default function PriceChart({ candles, overlays, fitKey = "", onHover }: 
     candle.priceScale().applyOptions({ scaleMargins: { top: 0.06, bottom: 0.2 } });
 
     chartRef.current = chart;
+    readyRef.current?.(chart);
     candleRef.current = candle;
     volumeRef.current = volume;
     markersRef.current = createSeriesMarkers(candle, []);
@@ -81,6 +84,7 @@ export default function PriceChart({ candles, overlays, fitKey = "", onHover }: 
       window.removeEventListener("theme-changed", retheme);
       chart.remove();
       chartRef.current = null;
+      readyRef.current?.(null);
       overlayRefs.current = [];
       priceLinesRef.current = [];
     };

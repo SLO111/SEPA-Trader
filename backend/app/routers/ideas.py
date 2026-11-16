@@ -502,4 +502,18 @@ def trade_analytics(source: Literal["all", "backtest", "ideas", "md", "chart", "
 
     if not limits_for(user)["backtesting"] and source not in ("chart", "portfolio"):
         source = "chart"
-    return analytics(_graded(user, db, source, portfolio_id))
+    from ..models import TradeNote
+
+    graded = _graded(user, db, source, portfolio_id)
+    out = analytics(graded)
+    notes = {n.ref: n for n in db.scalars(select(TradeNote).where(TradeNote.user_id == user.id)).all()}
+    for key in ("setup", "emotion"):
+        groups: dict[str, list[float]] = {}
+        for t in graded:
+            n = notes.get(t.get("ref", ""))
+            v = getattr(n, key, "") if n else ""
+            if v and t.get("exit_date") and t.get("pnl_pct") is not None:
+                groups.setdefault(v, []).append(t["pnl_pct"])
+        out[f"by_{key}"] = sorted(({"name": k, "trades": len(v), "win_rate": round(100 * sum(x > 0 for x in v) / len(v)),
+                                    "avg_pct": round(sum(v) / len(v), 2)} for k, v in groups.items()), key=lambda x: -x["avg_pct"])
+    return out

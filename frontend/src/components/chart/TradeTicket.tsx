@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { api, post } from "@/lib/api";
+import { api, post, put } from "@/lib/api";
+import { shrinkImage } from "@/components/TradeJournal";
 import { usd } from "@/lib/format";
 
 type Levels = {
@@ -20,7 +21,7 @@ const ACCOUNT_KEY = "vn_ticket_account";
  * Destination: a simulated trade (followed in Backtest → Chart trades) or a real buy in one of your portfolios, at the market price.
  * Free: Buy, quantity, Stop loss, Take profit. Pro / Premium: entry, trim, R/R, position sizing, ATR / VCP / resistance shortcuts, vnicornAI's plan.
  */
-export default function TradeTicket({ symbol, price, side, pro, onClose }: { symbol: string; price: number; side: "long" | "short"; pro: boolean; onClose: () => void }) {
+export default function TradeTicket({ symbol, price, side, pro, onClose, snapshot }: { symbol: string; price: number; side: "long" | "short"; pro: boolean; onClose: () => void; snapshot?: () => string | null }) {
   const long = side === "long";
   const [dest, setDest] = useState<"sim" | number>("sim");
   const [portfolios, setPortfolios] = useState<Pf[]>([]);
@@ -70,6 +71,13 @@ export default function TradeTicket({ symbol, price, side, pro, onClose }: { sym
   const setStopAt = (x: number | null | undefined) => x && setStop(r2(x));
   const setR = (mult: number) => calc.risk > 0 && setTarget(r2(e + sign * mult * calc.risk));
 
+  // the chart as it looked at entry goes into the trade's journal (TradeGrader → 📝)
+  const attachShot = (id?: number) => {
+    const img = id ? snapshot?.() : null;
+    if (!img) return;
+    shrinkImage(img).then((small) => put(`/api/notes/paper:${id}`, { image: small })).catch(() => {});
+  };
+
   const submit = async () => {
     setError("");
     setBusy(true);
@@ -77,11 +85,13 @@ export default function TradeTicket({ symbol, price, side, pro, onClose }: { sym
       if (toPortfolio) {
         await post(`/api/portfolios/${dest}/buy-now`, { symbol, shares: qty });
         if (track && calc.ok) {
-          await post("/api/paper-trades/chart", { symbol, side, entry: e, stop: s, target: t, ...(tr ? { trim: tr } : {}) });
+          const created = await post<{ id: number }>("/api/paper-trades/chart", { symbol, side, entry: e, stop: s, target: t, ...(tr ? { trim: tr } : {}) });
+          attachShot(created?.id);
         }
         setDone(`Bought ${qty} ${symbol} at the market in “${portfolios.find((p) => p.id === dest)?.name}”.` + (track && calc.ok ? " Stop and target are followed in Backtest → Chart trades." : ""));
       } else {
-        await post("/api/paper-trades/chart", { symbol, side, entry: e, stop: s, target: t, ...(pro && tr ? { trim: tr } : {}) });
+        const created = await post<{ id: number }>("/api/paper-trades/chart", { symbol, side, entry: e, stop: s, target: t, ...(pro && tr ? { trim: tr } : {}) });
+        attachShot(created?.id);
         setDone("Added. It closes by itself at the target or the stop" + (pro && tr ? " (half is sold at the trim)." : "."));
       }
     } catch (err) {

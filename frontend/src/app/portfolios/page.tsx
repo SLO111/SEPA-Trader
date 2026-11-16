@@ -1,5 +1,7 @@
 "use client";
 
+import ExportButton from "@/components/ExportButton";
+
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -7,7 +9,7 @@ import AppShell from "@/components/AppShell";
 import ImportCsv from "@/components/portfolio/ImportCsv";
 import TradeGrader from "@/components/TradeGrader";
 import ClassificationCard from "@/components/portfolio/ClassificationCard";
-import HoldingsTable from "@/components/portfolio/HoldingsTable";
+import HoldingsTable, { HeatCard } from "@/components/portfolio/HoldingsTable";
 import { PROFILE_STYLE, RiskMeter } from "@/components/portfolio/profile";
 import TemplateGallery from "@/components/portfolio/TemplateGallery";
 import Transactions from "@/components/portfolio/Transactions";
@@ -126,6 +128,8 @@ function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChang
             <button onClick={() => setModal("import")} className="rounded-md border border-line px-3 py-1 text-muted hover:text-text">
               ⬆ Import CSV / PDF
             </button>
+            <ExportButton path={`/api/export/transactions?portfolio_id=${p.id}`} filename={`${p.name}-transactions.csv`} label="Transactions" />
+            <ExportButton path={`/api/export/holdings?portfolio_id=${p.id}`} filename={`${p.name}-holdings.csv`} label="Holdings" />
             <button onClick={rename} className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text">
               Rename
             </button>
@@ -161,6 +165,7 @@ function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChang
         <PerformanceCard id={p.id} version={version} />
         <ClassificationCard c={p.classification} />
       </div>
+      {p.heat && p.positions.length > 0 && <HeatCard heat={p.heat} value={p.value} />}
       <HoldingsTable rows={p.positions} portfolioId={p.id} onSold={update} />
       <Transactions portfolioId={p.id} txns={p.transactions} onChange={update} />
       {p.dividends.length > 0 && (

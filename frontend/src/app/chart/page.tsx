@@ -62,6 +62,15 @@ function ChartWorkspace() {
   const [ask, setAsk] = useState(false);
   const [ticket, setTicket] = useState<"long" | "short" | null>(null);
   const [selling, setSelling] = useState(false);
+  const chartApi = useRef<import("lightweight-charts").IChartApi | null>(null);
+  // a picture of the chart, attached to a trade's journal when you buy or short from the chart
+  const snapshot = useCallback((): string | null => {
+    try {
+      return chartApi.current?.takeScreenshot().toDataURL("image/jpeg", 0.8) ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
   const [panel, setPanel] = useState<"none" | "watch" | "info">("none");
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
   const loaded = useRef(false); // don't overwrite saved indicators with the empty initial state
@@ -268,7 +277,7 @@ function ChartWorkspace() {
         {error && <div className="bg-down/10 px-4 py-2 text-sm text-down">{error}</div>}
         <div className="relative min-h-0 flex-1">
           <ChartLegend active={active} defs={defs} onChange={setActive} header={ohlcHeader} values={values} />
-          {data && <PriceChart candles={data.candles} overlays={overlays} fitKey={`${symbol}:${interval}`} onHover={setHover} />}
+          {data && <PriceChart candles={data.candles} overlays={overlays} fitKey={`${symbol}:${interval}`} onHover={setHover} onReady={(c) => { chartApi.current = c; }} />}
         </div>
         <div className="flex flex-wrap gap-x-3 border-t border-line px-3 py-1 text-[11px] text-muted">
           {data?.live_at && <span className="text-up">● Live · updated {data.live_at}</span>}
@@ -282,7 +291,7 @@ function ChartWorkspace() {
         <SymbolInfoPanel symbol={symbol} info={info} error={infoError} />
       </aside>
 
-      {ticket && <TradeTicket key={`${symbol}-${ticket}`} symbol={symbol} price={data?.quote?.price ?? 0} side={ticket} pro={!!user?.limits.sepa_details} onClose={() => setTicket(null)} />}
+      {ticket && <TradeTicket key={`${symbol}-${ticket}`} symbol={symbol} price={data?.quote?.price ?? 0} side={ticket} pro={!!user?.limits.sepa_details} snapshot={snapshot} onClose={() => setTicket(null)} />}
       {selling && <SellDialog symbol={symbol} onClose={() => setSelling(false)} onShort={() => { setSelling(false); setTicket("short"); }} />}
       {ask && <AskVnicorn symbol={symbol} locked={!user?.limits.ask_ai} onClose={() => setAsk(false)} />}
       {picker && (

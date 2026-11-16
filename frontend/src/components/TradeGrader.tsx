@@ -1,9 +1,12 @@
 "use client";
 
+import ExportButton from "@/components/ExportButton";
+
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import TradeJournal from "./TradeJournal";
 import { fmt, pct, tone } from "@/lib/format";
 import type { Candle, StrategyOutput } from "@/lib/types";
 
@@ -63,7 +66,7 @@ function TradeChart({ t }: { t: Graded }) {
   );
 }
 
-function GradeTable({ rows, open, setOpen }: { rows: Graded[]; open: string | null; setOpen: (v: string | null) => void }) {
+function GradeTable({ rows, open, setOpen, noted, onNote }: { rows: Graded[]; open: string | null; setOpen: (v: string | null) => void; noted?: Set<string>; onNote?: () => void }) {
   return (
           <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full min-w-[820px] text-sm">
@@ -83,6 +86,7 @@ function GradeTable({ rows, open, setOpen }: { rows: Graded[]; open: string | nu
                       </td>
                       <td className="px-3 py-2 font-semibold">
                         <span className={t.side === "short" ? "text-down" : "text-up"}>{t.side === "short" ? "▼" : "▲"}</span> {t.symbol}
+                        {noted?.has(t.ref) && <span className="ml-1 text-xs" title="Has a journal note">📝</span>}
                       </td>
                       <td className="px-3 py-2 text-xs text-muted">
                         {t.source}
@@ -110,6 +114,7 @@ function GradeTable({ rows, open, setOpen }: { rows: Graded[]; open: string | nu
                               <li key={n} className="flex gap-2"><span className="text-accent">›</span>{n}</li>
                             ))}
                           </ul>
+                          <TradeJournal tradeRef={t.ref} onSaved={onNote} />
                         </td>
                       </tr>
                     )}
@@ -133,6 +138,11 @@ export default function TradeGrader({ source: initial = "all", portfolioId, char
   const [data, setData] = useState<Resp | null>(null);
   const [open_, setOpen] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [noted, setNoted] = useState<Set<string>>(new Set());
+  const loadNotes = () => api<{ ref: string }[]>("/api/notes").then((l) => setNoted(new Set(l.map((x) => x.ref)))).catch(() => {});
+  useEffect(() => {
+    loadNotes();
+  }, []);
 
   useEffect(() => {
     setData(null);
@@ -195,12 +205,14 @@ export default function TradeGrader({ source: initial = "all", portfolioId, char
             return (
               <>
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold">Closed trades <span className="text-muted">({closed.length})</span></h3>
-                  {closed.length ? <GradeTable rows={closed} open={open_} setOpen={setOpen} /> : <p className="text-sm text-muted">No closed trades yet.</p>}
+                  <h3 className="flex items-center gap-2 text-sm font-semibold">Closed trades <span className="text-muted">({closed.length})</span>
+                    <span className="ml-auto"><ExportButton path={`/api/export/grader?source=${source}${pid ? `&portfolio_id=${pid}` : ""}`} filename="tradegrader.csv" /></span>
+                  </h3>
+                  {closed.length ? <GradeTable rows={closed} open={open_} setOpen={setOpen} noted={noted} onNote={loadNotes} /> : <p className="text-sm text-muted">No closed trades yet.</p>}
                 </section>
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold">Open trades <span className="text-muted">({open.length})</span> <span className="text-xs font-normal text-muted">· the buy is graded after 5 trading days, the sale when the trade closes</span></h3>
-                  {open.length ? <GradeTable rows={open} open={open_} setOpen={setOpen} /> : <p className="text-sm text-muted">No open trades.</p>}
+                  {open.length ? <GradeTable rows={open} open={open_} setOpen={setOpen} noted={noted} onNote={loadNotes} /> : <p className="text-sm text-muted">No open trades.</p>}
                 </section>
               </>
             );

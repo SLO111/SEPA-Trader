@@ -1,5 +1,7 @@
 "use client";
 
+import ExportButton from "@/components/ExportButton";
+
 import AddToWatchlist from "@/components/AddToWatchlist";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -485,6 +487,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
         </div>
       )}
       {error && <Failed msg={error} />}
+      {paid && <div className="flex justify-end"><ExportButton path={`/api/export/screener${preset ? `?preset=${preset}` : ""}`} filename={`screener-${preset || "all"}.csv`} /></div>}
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className={`w-full text-sm ${paid ? "min-w-[1100px]" : "min-w-[760px]"}`}>
           <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">

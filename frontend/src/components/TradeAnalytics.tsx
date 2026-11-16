@@ -12,7 +12,34 @@ type A = {
   profit_factor?: number | null; capture_pct?: number | null; largest_win_pct?: number; largest_loss_pct?: number; max_win_streak?: number; max_loss_streak?: number;
   profitable_months_pct?: number | null; months?: { month: string; trades: number; pnl_pct: number; win_rate: number }[];
   equity?: { date: string; value: number }[]; histogram?: { key: string; value: number }[];
+  by_setup?: Group[]; by_emotion?: Group[];
 };
+type Group = { name: string; trades: number; win_rate: number; avg_pct: number };
+
+function GroupTable({ title, rows, hint }: { title: string; rows?: Group[]; hint: string }) {
+  return (
+    <section className="rounded-xl border border-line bg-panel p-4">
+      <h3 className="mb-1 text-sm font-semibold">{title}</h3>
+      {!rows?.length ? (
+        <p className="text-xs text-muted">{hint}</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
+            <tr><th className="py-1">Tag</th><th className="py-1 text-right">Trades</th><th className="py-1 text-right">Win rate</th><th className="py-1 text-right">Avg result</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((g) => (
+              <tr key={g.name} className="border-t border-line">
+                <td className="py-1">{g.name}</td><td className="tabular py-1 text-right">{g.trades}</td>
+                <td className="tabular py-1 text-right">{g.win_rate}%</td><td className={`tabular py-1 text-right font-medium ${tone(g.avg_pct)}`}>{pct(g.avg_pct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
 
 function Stat({ label, value, cls = "", hint }: { label: string; value: string; cls?: string; hint: string }) {
   return (
@@ -89,6 +116,10 @@ export default function TradeAnalytics({ chartOnly = false }: { chartOnly?: bool
                 ))}
               </div>
             </section>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <GroupTable title="By setup" rows={a.by_setup} hint="Tag your trades with a setup in TradeGrader's 📝 journal to see which setups make you money." />
+            <GroupTable title="By emotion" rows={a.by_emotion} hint="Tag how you felt on each trade: FOMO and revenge trades usually show up here as the worst." />
           </div>
           <section className="overflow-x-auto rounded-xl border border-line bg-panel p-4">
             <h3 className="mb-2 text-sm font-semibold">By month</h3>

@@ -188,15 +188,30 @@ def strategy_backtest(df: pd.DataFrame, strategy_id: str, params: dict | None = 
     if pos is not None:  # mark the open trade to the last close
         trades.append((pos[0], pos[1], close.index[-1], float(close.iloc[-1])))
 
-    equity = pd.Series(1.0, index=df.index)
+    return report_trades(df, trades, fees_pct, open_last=pos is not None)
+
+
+def report_trades(df: pd.DataFrame, trades: list[tuple], fees_pct: float = 0.05, open_last: bool = False, reasons: list[str] | None = None) -> dict:
+    """Stats, equity curve and trade list for long trades given as (entry time, entry price, exit time, exit price)."""
+    close = df["close"]
+    if not trades:
+        return {"trades": [], "stats": {"trades": 0}, "equity": [], "buy_hold": [], "reason": "No trades: the entry conditions never lined up."}
+    pos = object() if open_last else None
     in_mkt = pd.Series(False, index=df.index)
     rows = []
-    for en_t, en_p, ex_t, ex_p in trades:
+    for k, (en_t, en_p, ex_t, ex_p) in enumerate(trades):
         r = ex_p / en_p - 1 - 2 * fees_pct / 100
         rows.append({"entry_date": en_t.strftime("%Y-%m-%d"), "entry": round(en_p, 2), "exit_date": ex_t.strftime("%Y-%m-%d"), "exit": round(ex_p, 2),
-                     "return_pct": round(r * 100, 2), "days": int((ex_t - en_t).days), "open": bool(ex_t == close.index[-1] and pos is not None)})
+                     "return_pct": round(r * 100, 2), "days": int((ex_t - en_t).days),
+                     "open": bool(ex_t == close.index[-1] and pos is not None and k == len(trades) - 1),
+                     **({"exit_reason": reasons[k]} if reasons else {})})
         in_mkt[(df.index > en_t) & (df.index <= ex_t)] = True
+    # in the market from the entry close through the exit day; the exit day's move uses the exit price
     daily = close.pct_change().fillna(0).where(in_mkt, 0.0)
+    for en_t, _, ex_t, ex_p in trades:
+        if ex_t in daily.index and ex_t != en_t:
+            prev = close.shift().loc[ex_t]
+            daily.loc[ex_t] = ex_p / prev - 1 if prev else 0.0
     for en_t, _, ex_t, _ in trades:  # fees on each entry and exit day
         daily.loc[en_t] -= fees_pct / 100
         daily.loc[ex_t] -= fees_pct / 100

@@ -375,3 +375,43 @@ class TermsAcceptance(Base):
 
 
 User.trial = relationship(PlanTrial, uselist=False, lazy="selectin", viewonly=True)
+
+
+class PositionStop(Base):
+    """Your stop for a portfolio position: used for the portfolio heat (open risk) card."""
+
+    __tablename__ = "position_stops"
+    __table_args__ = (UniqueConstraint("portfolio_id", "symbol"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id", ondelete="CASCADE"), index=True)
+    symbol: Mapped[str] = mapped_column(String(16))
+    stop: Mapped[float] = mapped_column(Float)
+
+
+class TradeNote(Base):
+    """Journal entry for a trade (paper or portfolio round trip): setup, emotion, lesson and a chart screenshot."""
+
+    __tablename__ = "trade_notes"
+    __table_args__ = (UniqueConstraint("user_id", "ref"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    ref: Mapped[str] = mapped_column(String(40))  # paper:<id> | pf:<portfolio id>:<n>
+    setup: Mapped[str] = mapped_column(String(40), default="")
+    emotion: Mapped[str] = mapped_column(String(40), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    image: Mapped[str | None] = mapped_column(Text, nullable=True)  # data:image/jpeg;base64,...
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SavedStrategy(Base):
+    """A custom rule-based strategy saved by a user (Backtest > Strategy builder)."""
+
+    __tablename__ = "saved_strategies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    rules: Mapped[str] = mapped_column(Text)  # JSON
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

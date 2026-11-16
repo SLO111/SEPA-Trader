@@ -84,6 +84,28 @@ def _positions(txns: list[Txn]) -> tuple[list[dict], float]:
     return rows, realized
 
 
+def _heat(p: Portfolio, rows: list[dict], value: float) -> dict:
+    """Portfolio heat: what you'd lose if every stop were hit (positions without a stop are flagged)."""
+    from sqlalchemy.orm import object_session
+
+    from ..models import PositionStop
+
+    db = object_session(p)
+    stops = {s.symbol: s.stop for s in db.scalars(select(PositionStop).where(PositionStop.portfolio_id == p.id)).all()} if db else {}
+    per, missing, total = [], [], 0.0
+    for r in rows:
+        st = stops.get(r["symbol"])
+        if st is None:
+            missing.append(r["symbol"])
+            continue
+        risk = max(0.0, (r["price"] - st) * r["shares"])
+        total += risk
+        per.append({"symbol": r["symbol"], "stop": st, "risk": round(risk, 2), "risk_pct": round(risk / value * 100, 2) if value else None,
+                    "to_stop_pct": round((st / r["price"] - 1) * 100, 2) if r["price"] else None})
+    return {"stops": stops, "total_risk": round(total, 2), "total_risk_pct": round(total / value * 100, 2) if value else None,
+            "positions": sorted(per, key=lambda x: -x["risk"]), "missing": missing}
+
+
 def _summary(p: Portfolio, detail: bool = False) -> dict:
     txns = _txns(p)
     rows, realized = _positions(txns)
@@ -109,6 +131,7 @@ def _summary(p: Portfolio, detail: bool = False) -> dict:
         "symbols": [r["symbol"] for r in rows],
     }
     if detail:
+        out["heat"] = _heat(p, rows, value)
         divs = dividends_received(txns, {s: market_data.dividends(s) for s in {t.symbol for t in txns}})
         out.update(
             {
@@ -116,6 +139,7 @@ def _summary(p: Portfolio, detail: bool = False) -> dict:
                 "positions": [{k: v for k, v in r.items() if k not in ("fundamentals", "metrics")} | {
                     "beta": r["metrics"]["beta"], "dividend_yield": r["fundamentals"].get("dividend_yield"), "pe": r["fundamentals"].get("pe"),
                     "earnings_in": market_data.earnings_in_days(r["symbol"]),
+                    "stop": out["heat"]["stops"].get(r["symbol"]),
                 } for r in rows],
                 "dividends": divs,
                 "dividends_total": round(sum(d["amount"] for d in divs), 2),
@@ -553,5 +577,30 @@ def buy_now(pid: int, body: BuyNowIn, user: User = Depends(current_user), db: Se
     sym = body.symbol.upper().strip()
     price, day = _market_price(sym)
     p.transactions.append(PortfolioTxn(date=day, symbol=sym, side="buy", shares=body.shares, price=round(price, 4), fees=0.0))
+    db.commit()
+    return _summary(p, detail=True)
+
+
+
+class StopIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=16)
+    stop: float | None = Field(default=None, gt=0)  # None removes it
+
+
+@router.put("/portfolios/{pid}/stops")
+def set_stop(pid: int, body: StopIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Set (or clear) your stop for a position: drives the portfolio heat card."""
+    from ..models import PositionStop
+
+    p = _owned(db, user, pid)
+    sym = body.symbol.upper().strip()
+    row = db.scalar(select(PositionStop).where(PositionStop.portfolio_id == pid, PositionStop.symbol == sym))
+    if body.stop is None:
+        if row:
+            db.delete(row)
+    elif row:
+        row.stop = body.stop
+    else:
+        db.add(PositionStop(portfolio_id=pid, symbol=sym, stop=body.stop))
     db.commit()
     return _summary(p, detail=True)
