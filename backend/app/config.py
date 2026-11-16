@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     data_refresh: bool = True
     # Background alert checks: interval in seconds (0 disables the background loop).
     alert_check_seconds: int = 300
+    # Trade ideas + market feed background job interval in seconds (0 disables).
+    ideas_interval_seconds: int = 600
     # Email notifications (optional): any SMTP provider, e.g. Gmail, Brevo, SendGrid.
     smtp_host: str = ""
     smtp_port: int = 587

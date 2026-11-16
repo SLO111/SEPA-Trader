@@ -166,6 +166,15 @@ cd backend && pytest
 - **Subscriptions with Stripe**: Free / Pro / Premium, monthly or yearly. Stripe Checkout for payment, the
   Stripe Customer Portal to switch plans, update the card or cancel, and signed webhooks that keep each user's
   plan in sync (failed payments keep access while Stripe retries; ended subscriptions return to Free).
+- **Trade ideas** (Pro/Premium): every trading day after the close (16:15 New York time) a short list of SWING,
+  TRADE, INVEST and SHORT ideas, each with entry, stop, trim, target, reward/risk and a suggested weight (1% account
+  risk at the stop). Built from daily/weekly/monthly trend agreement and historical support, resistance and supply
+  zones. Every idea is tracked afterwards (WAIT, BUY, TRIM, TARGET, STOPPED, CANCEL) to build a track record.
+- **Market feed**: TrendSpider-style notifications for earnings beats/misses and upcoming reports, big movers,
+  breakouts and breakdowns, new 52-week highs, new trade ideas and market-moving news (Finnhub).
+- **Chart** in TradingView style: side panel with quote, pre-market/after-hours, ranges, key stats and SEPA scores;
+  indicators dialog and on-chart legend; the same indicator can be added several times; 5m/15m/1h charts with
+  extended hours.
 - Admin panel: MRR / ARR, revenue and failed payments in the last 30 days, active, past-due and canceling
   subscriptions, churn, recent payments, users with subscription status; change plan/role, deactivate accounts. The account matching `ADMIN_EMAIL` is promoted
   to administrator on sign-up or on its next login.

@@ -205,3 +205,45 @@ class MarketCache(Base):
     key: Mapped[str] = mapped_column(String(80), primary_key=True)  # e.g. "prices:AAPL", "fundamentals:AAPL"
     payload: Mapped[bytes] = mapped_column(LargeBinary)  # gzip-compressed JSON
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class TradeIdea(Base):
+    """A daily trade idea (generated after the close) and how it played out since."""
+
+    __tablename__ = "trade_ideas"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_date: Mapped[date] = mapped_column(Date, index=True)  # trading day the idea was generated for
+    symbol: Mapped[str] = mapped_column(String(16), index=True)
+    timeframe: Mapped[str] = mapped_column(String(8))  # SWING | TRADE | INVEST | SHORT
+    side: Mapped[str] = mapped_column(String(5))
+    entry: Mapped[float] = mapped_column(Float)
+    stop: Mapped[float] = mapped_column(Float)
+    trim: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target: Mapped[float] = mapped_column(Float)
+    rr: Mapped[float] = mapped_column(Float)
+    weight: Mapped[float] = mapped_column(Float)
+    score: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(10), default="WAIT")  # WAIT BUY TRIM TARGET STOPPED CANCEL
+    current: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    r_multiple: Mapped[float | None] = mapped_column(Float, nullable=True)
+    closed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class FeedItem(Base):
+    """A notification in the market feed (earnings beats, big movers, breakouts, critical news, new ideas)."""
+
+    __tablename__ = "feed_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(160), unique=True)  # deduplication key
+    kind: Mapped[str] = mapped_column(String(16), index=True)  # earnings | mover | breakout | high | news | idea
+    symbol: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    severity: Mapped[str] = mapped_column(String(8), default="info")  # bull | bear | info
+    title: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

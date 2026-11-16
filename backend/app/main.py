@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .alerts_service import check_rules
 from .db import Base, SessionLocal, engine
-from .routers import admin, alerts, auth, backtest, billing, journal, market, markets, portfolios, sepa, stock, watchlists
+from .routers import admin, alerts, auth, backtest, billing, ideas, journal, market, markets, portfolios, sepa, stock, watchlists
 
 Base.metadata.create_all(engine)
 
@@ -63,14 +63,35 @@ def _start_market_data() -> None:
     store.start(lambda: list(SYMBOLS), stock_symbols)
 
 
+def _run_ideas_tick() -> None:
+    from .ideas_service import tick
+
+    with SessionLocal() as db:
+        tick(db)
+
+
+async def _ideas_loop(interval: int) -> None:
+    """Daily ideas after the close, idea status tracking and the market feed."""
+    await asyncio.sleep(30)  # let the market data warm up first
+    while True:
+        try:
+            await asyncio.to_thread(_run_ideas_tick)
+        except Exception:
+            log.exception("Ideas/feed job failed")
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _warn_missing_config()
     _start_market_data()
+    ideas_task = asyncio.create_task(_ideas_loop(settings.ideas_interval_seconds)) if settings.ideas_interval_seconds > 0 else None
     task = asyncio.create_task(_alert_loop(settings.alert_check_seconds)) if settings.alert_check_seconds > 0 else None
     yield
     if task:
         task.cancel()
+    if ideas_task:
+        ideas_task.cancel()
 
 
 app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
@@ -81,7 +102,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for r in (auth.router, watchlists.router, market.router, sepa.router, alerts.router, portfolios.router, stock.router, markets.router, journal.router, backtest.router, billing.router, admin.router):
+for r in (auth.router, watchlists.router, market.router, sepa.router, alerts.router, portfolios.router, stock.router, markets.router, journal.router, backtest.router, billing.router, ideas.router, admin.router):
     app.include_router(r)
 
 

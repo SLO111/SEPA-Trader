@@ -66,6 +66,10 @@ class Finnhub:
     def recommendations(self, symbol: str) -> list[dict]:
         return self.get("/stock/recommendation", symbol=symbol) or []
 
+    def general_news(self) -> list[dict]:
+        """Latest general market headlines."""
+        return self.get("/news", category="general") or []
+
     def news(self, symbol: str, days: int = 10) -> list[dict]:
         today = date.today()
         return self.get("/company-news", symbol=symbol, **{"from": (today - timedelta(days=days)).isoformat(), "to": today.isoformat()}) or []
