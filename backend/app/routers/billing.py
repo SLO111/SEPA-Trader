@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..models import Payment, Subscription, User, WebhookEvent
-from ..plans import PLANS, PRICES
+from ..plans import CURRENCY, PLANS, PRICES, effective_plan, trial_until
 from ..security import current_user
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
@@ -77,6 +77,9 @@ def plans(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return {
         "enabled": configured(),
         "current_plan": user.plan,
+        "effective_plan": effective_plan(user),
+        "trial_until": t.isoformat() if (t := trial_until(user)) else None,
+        "currency": CURRENCY,
         "subscription": sub_out(db.get(Subscription, user.id)),
         "plans": [
             {"id": k, "label": PLANS[k]["label"], "prices": PRICES.get(k, {"monthly": 0, "yearly": 0}),
@@ -192,6 +195,10 @@ def apply_subscription(db: Session, obj: dict) -> None:
     sub.updated_at = datetime.now(timezone.utc)
     if user.role != "admin":
         user.plan = plan if status in ACTIVE else "free"
+    if status in ACTIVE:
+        from ..growth_service import on_paid
+
+        on_paid(db, user)
 
 
 def record_invoice(db: Session, obj: dict, status: str) -> None:

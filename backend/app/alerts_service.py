@@ -111,7 +111,9 @@ def dispatch(db: Session, user: User, rule: AlertRule, alert: Alert) -> None:
         return
     if "email" in channels and prefs.email_enabled:
         notify.send_email(user.email, f"[Vnicorn] {alert.symbol}: {alert.title}", format_text(alert))
-    if "telegram" in channels and prefs.telegram_enabled and prefs.telegram_chat_id:
+    from .plans import limits_for
+
+    if "telegram" in channels and prefs.telegram_enabled and prefs.telegram_chat_id and limits_for(user)["instant_alerts"]:
         notify.send_telegram(prefs.telegram_chat_id, format_text(alert, html=True))
 
 

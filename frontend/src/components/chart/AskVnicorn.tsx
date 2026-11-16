@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SimBadge } from "@/components/legal/LegalPage";
 import { useEffect, useState } from "react";
 import { api, post } from "@/lib/api";
 
@@ -73,10 +74,16 @@ export default function AskVnicorn({ symbol, onClose, locked = false }: { symbol
             <span className="rounded bg-gradient-to-r from-violet-500 to-cyan-500 px-1.5 py-0.5 text-[11px] font-bold text-white">vnicornAI</span>
             <span className="font-semibold">{symbol}</span>
             {a && <span className="text-xs text-muted">as of {a.as_of}</span>}
+            {a && typeof (a as { quota_left?: number | null }).quota_left === "number" && (
+              <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px] text-muted" title="Questions left this month on your plan">
+                {(a as { quota_left?: number | null }).quota_left} left this month
+              </span>
+            )}
           </div>
           <button onClick={onClose} className="rounded px-2 py-1 text-muted hover:bg-panel-2" aria-label="Close">✕</button>
         </div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <SimBadge />
           {locked && (
             <div className="space-y-4">
               <div className="space-y-2 opacity-60 blur-[2px]" aria-hidden>

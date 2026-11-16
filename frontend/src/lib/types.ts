@@ -16,6 +16,17 @@ export type PlanLimits = {
   pulse?: boolean;
   sepa_details?: boolean;
   ask_ai?: boolean;
+  ask_ai_monthly: number;
+  ideas_limit: number;
+  ideas_shorts: boolean;
+  ai_picks: boolean;
+  instant_alerts: boolean;
+  industry_groups: boolean;
+  weekly_letter: boolean;
+  custom_backtest: boolean;
+  csv_export: boolean;
+  eps_history: boolean;
+  exposure_details: boolean;
 };
 
 export type User = {
@@ -25,6 +36,9 @@ export type User = {
   role: "user" | "admin";
   plan: "free" | "pro" | "premium";
   limits: PlanLimits;
+  effective_plan?: "free" | "pro" | "premium";
+  trial_until?: string | null;
+  terms_accepted?: boolean;
   created_at: string;
   is_active?: boolean;
   subscription_status?: string | null;

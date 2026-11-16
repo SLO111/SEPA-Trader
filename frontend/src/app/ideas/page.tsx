@@ -1,5 +1,7 @@
 "use client";
 
+import { SimBadge } from "@/components/legal/LegalPage";
+
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -93,8 +95,13 @@ function Ideas() {
       <div className="mx-auto max-w-[1680px] p-3 sm:p-6">
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div>
-            <h1 className="text-xl font-semibold">Trade ideas</h1>
+            <h1 className="flex items-center gap-2 text-xl font-semibold">Trade ideas <SimBadge /></h1>
             <p className="text-sm text-muted">Generated every trading day after the close from daily, weekly and monthly trends and historical support/resistance.</p>
+            {user && !user.limits.ai_picks && (
+              <p className="mt-1 text-xs text-amber-300">
+                Your plan shows the top {user.limits.ideas_limit} long ideas a day. <Link href="/billing" className="underline">Premium</Link> shows all 50, shorts and vnicornAI picks.
+              </p>
+            )}
           </div>
           <div className="ml-auto flex items-center gap-2">
             {data?.updated && <span className="text-xs text-muted">Updated for {data.updated} close</span>}
@@ -127,6 +134,10 @@ function Ideas() {
             <div className="flex flex-wrap gap-1 border-b border-line px-2 py-1.5">
               {(["ALL", "AIPICKS", "SWING", "TRADE", "INVEST", "SHORT"] as const).map((t) => {
                 const n = data?.ideas.filter((i) => match(i, t)).length;
+                if (t === "AIPICKS" && user && !user.limits.ai_picks)
+                  return <Link key={t} href="/billing" className="rounded-full px-3 py-0.5 text-xs text-muted/70 hover:text-amber-300">🔒 ✦ vnicornAI picks</Link>;
+                if (t === "SHORT" && user && !user.limits.ideas_shorts)
+                  return <Link key={t} href="/billing" className="rounded-full px-3 py-0.5 text-xs text-muted/70 hover:text-amber-300">🔒 SHORT</Link>;
                 return (
                   <button key={t} onClick={() => setTf(t)} className={`rounded-full px-3 py-0.5 text-xs ${tf === t ? "bg-accent text-white" : "text-muted hover:bg-panel-2 hover:text-text"}`}>
                     {t === "ALL" ? "All" : t === "AIPICKS" ? "✦ vnicornAI picks" : t} <span className="tabular opacity-70">{n ?? 0}</span>
@@ -187,6 +198,8 @@ function Ideas() {
                                 {Math.round(i.ai.prob * 100)}% · {i.ai.ev > 0 ? "+" : ""}
                                 {i.ai.ev}R
                               </span>
+                            ) : user && !user.limits.ai_picks ? (
+                              <Link href="/billing" className="text-[11px] text-amber-300/80 hover:text-amber-300" title="vnicornAI ratings are part of Premium">🔒 Premium</Link>
                             ) : (
                               <span className="text-xs text-muted">—</span>
                             )}

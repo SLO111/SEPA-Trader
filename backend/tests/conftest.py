@@ -7,6 +7,7 @@ os.environ["DATA_PROVIDER"] = "synthetic"
 os.environ["ADMIN_EMAIL"] = "admin@test.ro"
 os.environ["ALERT_CHECK_SECONDS"] = "0"
 os.environ["IDEAS_INTERVAL_SECONDS"] = "0"
+os.environ["TRIAL_DAYS"] = "0"  # tests start on Free unless they create a trial
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

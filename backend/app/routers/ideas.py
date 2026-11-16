@@ -42,6 +42,20 @@ def idea_out(r: TradeIdea, with_structure: bool = False) -> dict:
     }
 
 
+def _plan_cut(rows: list, lim: dict) -> list:
+    """Per daily batch: the best `ideas_limit` ideas (by score); shorts only on plans that include them."""
+    out, per_day = [], {}
+    for r in rows:
+        if not lim["ideas_shorts"] and (r.side == "short" or r.timeframe == "SHORT"):
+            continue
+        n = per_day.get(r.batch_date, 0)
+        if n >= lim["ideas_limit"]:
+            continue
+        per_day[r.batch_date] = n + 1
+        out.append(r)
+    return out
+
+
 @router.get("/ideas")
 def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(current_user), db: Session = Depends(get_db)):
     if not limits_for(user)["move_detector"]:
@@ -51,7 +65,9 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
         q = q.where(TradeIdea.status.in_(OPEN))
     elif view == "closed":
         q = q.where(TradeIdea.status.notin_(OPEN))
-    rows = db.scalars(q.order_by(TradeIdea.batch_date.desc(), TradeIdea.score.desc()).limit(200)).all()
+    rows = db.scalars(q.order_by(TradeIdea.batch_date.desc(), TradeIdea.score.desc()).limit(400)).all()
+    lim = limits_for(user)
+    rows = _plan_cut(rows, lim)[:200]
     allrows = db.scalars(select(TradeIdea)).all()
     from ..models import PaperTrade
 
@@ -59,13 +75,14 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     from ..models import AIPick
 
     ai_of = {a.idea_id: {"prob": a.prob, "ev": a.ev, "stop": a.stop, "trim": a.trim, "target": a.target, "rr": a.rr, "pick": a.pick}
-             for a in db.scalars(select(AIPick).where(AIPick.idea_id.in_([r.id for r in rows]))).all()} if rows else {}
+             for a in db.scalars(select(AIPick).where(AIPick.idea_id.in_([r.id for r in rows]))).all()} if rows and lim["ai_picks"] else {}
     open_rows = [r for r in allrows if r.status in OPEN]
     done = [r for r in allrows if r.status in ("TARGET", "STOPPED") or (r.status not in OPEN and r.r_multiple is not None)]
     entered_open = [r for r in open_rows if r.pnl_pct is not None]
     wins = [r for r in done if (r.r_multiple or 0) > 0]
     return {
         "updated": latest_batch(db).isoformat() if latest_batch(db) else None,
+        "plan": {"ideas_limit": lim["ideas_limit"], "shorts": lim["ideas_shorts"], "ai_picks": lim["ai_picks"]},
         "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken, "ai": ai_of.get(r.id)} for r in rows],
         "summary": {
             "open": len(open_rows),

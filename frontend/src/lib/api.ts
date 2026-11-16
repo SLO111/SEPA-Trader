@@ -80,7 +80,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     setToken(null);
     // Public pages (the landing page, login, register) never bounce to the login screen: only the app's own pages do.
     const here = typeof window !== "undefined" ? window.location.pathname : "/";
-    const isPublic = here === "/" || here.startsWith("/login") || here.startsWith("/register");
+    const PUBLIC = ["/login", "/register", "/terms", "/privacy", "/disclaimer", "/track-record", "/academy", "/w/", "/leaderboard"];
+    const isPublic = here === "/" || PUBLIC.some((p) => here.startsWith(p));
     if (!isPublic && !path.startsWith("/api/auth/me")) window.location.href = "/login";
     throw new ApiError(401, "Your session has expired. Please log in again.");
   }

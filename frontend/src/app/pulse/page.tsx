@@ -1,5 +1,7 @@
 "use client";
 
+import { SimBadge } from "@/components/legal/LegalPage";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AddToWatchlist from "@/components/AddToWatchlist";
@@ -67,7 +69,7 @@ function Pulse() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-7xl p-3 sm:p-6">
-        <h1 className="text-xl font-semibold">vnicorn Pulse</h1>
+        <h1 className="flex items-center gap-2 text-xl font-semibold">vnicorn Pulse <SimBadge /></h1>
         <p className="mb-5 text-sm text-muted">
           Is a stock acting constructively or flashing warning signs? Daily confirmations (up on volume, closes near the high, higher highs, RS line new highs,
           breakouts…) vs. warnings (down on volume, closes near the low, lower lows, moving-average breaks, outside reversals…), over the last 10 trading days.

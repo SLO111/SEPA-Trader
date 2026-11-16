@@ -264,7 +264,13 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 text-xs text-slate-500 sm:flex-row">
           <Logo />
           <p className="max-w-xl text-center sm:text-right">
-            © {new Date().getFullYear()} Vnicorn Investments. For educational purposes only. Not financial advice. Trading involves risk, including the loss of capital.
+            © {new Date().getFullYear()} Vnicorn Investments. An educational simulation platform: no real orders, not investment advice. Trading involves risk, including the loss of capital.
+            <span className="mt-2 flex justify-center gap-4 sm:justify-end">
+              <Link href="/terms" className="hover:text-slate-300">Terms</Link>
+              <Link href="/privacy" className="hover:text-slate-300">Privacy</Link>
+              <Link href="/disclaimer" className="hover:text-slate-300">Risk disclaimer</Link>
+              <Link href="/track-record" className="hover:text-slate-300">Track record</Link>
+            </span>
           </p>
         </div>
       </footer>

@@ -1,5 +1,8 @@
 "use client";
 
+import { SimBadge } from "@/components/legal/LegalPage";
+import { useAuth } from "@/lib/auth";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -18,6 +21,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
 ];
 
 function Scanner() {
+  const { user } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("bull");
   const [minScore, setMinScore] = useState(0);
@@ -73,13 +77,15 @@ function Scanner() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-[1600px] p-3 sm:p-6">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="text-xl font-semibold">Move Detector</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold">Move Detector <SimBadge /></h1>
           <span className="text-xs text-muted">Scores refresh every 5 minutes</span>
         </div>
         <p className="mb-5 text-sm text-muted">{TABS.find((t) => t.id === tab)?.hint}</p>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          {TABS.map((t) => (
+          {TABS.map((t) => t.id === "ai" && user && !user.limits.ai_picks ? (
+            <Link key={t.id} href="/billing" className="rounded-md bg-panel px-3 py-1.5 text-sm text-muted/70 hover:text-amber-300" title="vnicornAI move probabilities are part of Premium">🔒 {t.label}</Link>
+          ) : (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}

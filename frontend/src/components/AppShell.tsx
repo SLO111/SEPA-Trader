@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LegalFooter } from "@/components/legal/LegalPage";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -203,6 +204,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
         </div>
       )}
       <main className="min-h-0 flex-1">{children}</main>
+      <LegalFooter />
     </div>
   );
 }

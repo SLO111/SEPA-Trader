@@ -41,7 +41,7 @@ def test_ideas_get_ai_ratings_and_status(client, register):
 
     h, _ = register("ai-user@test.ro")
     with SessionLocal() as db:
-        db.query(User).filter_by(email="ai-user@test.ro").one().plan = "pro"
+        db.query(User).filter_by(email="ai-user@test.ro").one().plan = "premium"  # vnicornAI picks are Premium
         db.commit()
         run_ideas(db, force=True)
     st = client.get("/api/ai/status", headers=h).json()

@@ -5,6 +5,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "Vnicorn Investments"
+    # Free Premium days for new accounts (0 disables the trial)
+    trial_days: int = 14
     database_url: str = "sqlite:///./sepa.db"
     jwt_secret: str = "dev-secret-change-me-in-production-use-a-long-key"
     jwt_expire_minutes: int = 60 * 24 * 7

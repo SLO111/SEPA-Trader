@@ -22,15 +22,26 @@ PLANS: dict[str, dict] = {
         "pulse": False,  # vnicorn Pulse: daily confirmations / warnings
         "sepa_details": False,  # full Trend Template criteria + VCP (free sees the score and the chart-readable criteria)
         "ask_ai": False,  # Ask vnicornAI chart analysis
+        "ask_ai_monthly": 0,
+        "ideas_limit": 0,  # trade ideas per day
+        "ideas_shorts": False,
+        "ai_picks": False,  # vnicornAI picks and major-move probabilities
+        "instant_alerts": False,  # Telegram
+        "industry_groups": False,
+        "weekly_letter": False,
+        "custom_backtest": False,
+        "csv_export": False,
+        "eps_history": False,  # quarterly EPS / sales acceleration table
+        "exposure_details": False,  # market exposure % and reasons (free sees the label)
     },
     "pro": {
         "label": "Pro",
         "max_watchlists": 25,
         "max_symbols_per_watchlist": 200,
         "max_strategies_on_chart": 15,
-        "max_portfolios": 10,
-        "realtime_data": True,
-        "data_delay_minutes": 0,
+        "max_portfolios": 5,
+        "realtime_data": False,
+        "data_delay_minutes": 15,
         "alerts": True,
         "max_alert_rules": 50,
         "reports": False,
@@ -41,6 +52,17 @@ PLANS: dict[str, dict] = {
         "pulse": True,
         "sepa_details": True,
         "ask_ai": True,
+        "ask_ai_monthly": 20,
+        "ideas_limit": 10,
+        "ideas_shorts": False,
+        "ai_picks": False,
+        "instant_alerts": False,
+        "industry_groups": False,
+        "weekly_letter": False,
+        "custom_backtest": False,
+        "csv_export": False,
+        "eps_history": True,
+        "exposure_details": True,
     },
     "premium": {
         "label": "Premium",
@@ -60,21 +82,49 @@ PLANS: dict[str, dict] = {
         "pulse": True,
         "sepa_details": True,
         "ask_ai": True,
+        "ask_ai_monthly": UNLIMITED,
+        "ideas_limit": 50,
+        "ideas_shorts": True,
+        "ai_picks": True,
+        "instant_alerts": True,
+        "industry_groups": True,
+        "weekly_letter": True,
+        "custom_backtest": True,
+        "csv_export": True,
+        "eps_history": True,
+        "exposure_details": True,
     },
 }
 
 
 # List prices shown in the app (USD). The amount actually charged is the Stripe price configured for each plan.
+CURRENCY = "EUR"
 PRICES = {
-    "pro": {"monthly": 29, "yearly": 290},
-    "premium": {"monthly": 59, "yearly": 590},
+    "pro": {"monthly": 19, "yearly": 190},
+    "premium": {"monthly": 49, "yearly": 490},
 }
+
+
+def trial_until(user):
+    """End of an active Premium trial (only for accounts on Free), else None."""
+    from datetime import datetime, timezone
+
+    t = getattr(user, "trial", None)
+    if not t or user.plan != "free":
+        return None
+    end = t.ends_at if t.ends_at.tzinfo else t.ends_at.replace(tzinfo=timezone.utc)
+    return end if end > datetime.now(timezone.utc) else None
+
+
+def effective_plan(user) -> str:
+    return "premium" if trial_until(user) else (user.plan if user.plan in PLANS else "free")
 
 
 def limits_for(user) -> dict:
     # Everyone, administrators included, gets the limits of their own plan: an admin can switch their plan in the
     # Admin panel to test exactly what Free / Pro / Premium users see. Admin access depends only on the role.
-    return PLANS.get(user.plan, PLANS["free"])
+    # A Free account with an active trial gets Premium.
+    return PLANS[effective_plan(user)]
 
 
 # Trend Template criteria a free user sees: the ones anyone can read off the chart (price vs. the moving averages).

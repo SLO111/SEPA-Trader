@@ -43,6 +43,7 @@ function Settings() {
   const [sub, setSub] = useState<Sub | null>(null);
   const [digest, setDigest] = useState<Digest | null>(null);
   const [delPw, setDelPw] = useState("");
+  const [refInfo, setRefInfo] = useState<{ code: string; invited: number; rewarded: number; bonus_days: number; reward_days: number } | null>(null);
   const [msgs, setMsgs] = useState<Record<string, { ok: boolean; text: string } | null>>({});
   const say = (k: string, ok: boolean, text: string) => setMsgs((m) => ({ ...m, [k]: { ok, text } }));
   const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -51,6 +52,7 @@ function Settings() {
     api<Prefs>("/api/auth/prefs").then((p) => setPrefs({ ...p, theme: getThemePref() || p.theme })).catch(() => {});
     api<{ subscription: Sub }>("/api/billing/plans").then((r) => setSub(r.subscription)).catch(() => {});
     api<Digest>("/api/feed/digest").then(setDigest).catch(() => {});
+    api<typeof refInfo>("/api/auth/referral").then(setRefInfo).catch(() => {});
   }, []);
 
   const savePrefs = async (patchP: Partial<Prefs>) => {
@@ -203,6 +205,25 @@ function Settings() {
             <Msg m={msgs.sub ?? null} />
           </Section>
 
+          <Section id="referral" title="Invite friends" desc="Friends who join with your link get 7 extra Premium days. When one of them subscribes, you get 30 days of Premium.">
+            {refInfo ? (
+              <div className="space-y-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="rounded bg-panel-2 px-2 py-1">{typeof window !== "undefined" ? `${window.location.origin}/register?ref=${refInfo.code}` : refInfo.code}</code>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/register?ref=${refInfo.code}`).then(() => say("referral", true, "Link copied."))}
+                    className="rounded-md bg-panel-2 px-3 py-1 hover:bg-line"
+                  >
+                    Copy link
+                  </button>
+                </div>
+                <p className="text-muted">Invited: <b className="text-text">{refInfo.invited}</b> · Subscribed: <b className="text-text">{refInfo.rewarded}</b></p>
+                <Msg m={msgs.referral ?? null} />
+              </div>
+            ) : (
+              <p className="text-sm text-muted">Loading…</p>
+            )}
+          </Section>
           <Section id="danger" title="Delete account" desc="Deletes your account, watchlists, portfolios, trades and alerts. This can't be undone. Cancel any paid subscription first.">
             <div className="flex flex-wrap gap-2">
               <input type="password" placeholder="Your password" value={delPw} onChange={(e) => setDelPw(e.target.value)} className={`${input} max-w-xs`} />

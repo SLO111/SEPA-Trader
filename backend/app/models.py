@@ -321,3 +321,57 @@ class UserPrefs(Base):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     data: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class PlanTrial(Base):
+    """A free Premium period: 14 days at sign-up (more with a referral), extended by referral rewards."""
+
+    __tablename__ = "plan_trials"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(20), default="signup")  # signup | referral | admin
+
+
+class ReferralCode(Base):
+    __tablename__ = "referral_codes"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    code: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+
+
+class Referral(Base):
+    """Who invited whom; the inviter is rewarded once, when the invited user starts paying."""
+
+    __tablename__ = "referrals"
+
+    referred_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    rewarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Usage(Base):
+    """Monthly usage counters (e.g. Ask vnicornAI questions)."""
+
+    __tablename__ = "usage_counters"
+    __table_args__ = (UniqueConstraint("user_id", "month", "key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    month: Mapped[str] = mapped_column(String(7))  # YYYY-MM
+    key: Mapped[str] = mapped_column(String(30))
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class TermsAcceptance(Base):
+    __tablename__ = "terms_acceptances"
+    __table_args__ = (UniqueConstraint("user_id", "version"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    version: Mapped[str] = mapped_column(String(20))
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+User.trial = relationship(PlanTrial, uselist=False, lazy="selectin", viewonly=True)

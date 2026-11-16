@@ -83,6 +83,10 @@ def test_ideas_and_feed_api(client, register):
         first = build_feed(db)
         assert build_feed(db) == 0 or build_feed(db) < first  # events are stored once
     _plan("ideas-user@test.ro", "pro")
+    pro = client.get("/api/ideas", headers=h).json()
+    assert 0 < len(pro["ideas"]) <= 10 and all(i["side"] != "short" for i in pro["ideas"])  # Pro: top 10 longs per day
+    assert all(i["ai"] is None for i in pro["ideas"])  # vnicornAI picks are Premium
+    _plan("ideas-user@test.ro", "premium")
     r = client.get("/api/ideas", headers=h).json()
     assert r["ideas"] and r["summary"]["open"] == len(r["ideas"]) and r["updated"]
     f = client.get("/api/feed", headers=h).json()

@@ -185,7 +185,8 @@ def analysis(symbol: str, user: User = Depends(current_user)):
     from .. import vnicorn_service
     from ..db import SessionLocal
 
-    if not limits_for(user)["ask_ai"]:
+    lim = limits_for(user)
+    if not lim["ask_ai"]:
         raise HTTPException(403, "Ask vnicornAI is available on the Pro and Premium plans.")
     sym = symbol.upper().strip()
     market_data.watch(sym)
@@ -193,6 +194,10 @@ def analysis(symbol: str, user: User = Depends(current_user)):
         df = market_data.history(sym)
     except Exception:
         raise HTTPException(404, f"No data found for {sym}")
+    from ..growth_service import consume
+
+    with SessionLocal() as db:
+        left = consume(db, user, "ask_ai", lim["ask_ai_monthly"], "Ask vnicornAI questions")
 
     def build():
         try:
@@ -216,7 +221,8 @@ def analysis(symbol: str, user: User = Depends(current_user)):
         out["name"] = market_data.symbol_meta(sym).get("name", sym)
         return out
 
-    return market_data._fast(f"analysis:{sym}", 600, build)
+    out = market_data._fast(f"analysis:{sym}", 600, build)
+    return {**out, "quota_left": None if lim["ask_ai_monthly"] >= 10**8 else left}
 
 
 @router.get("/market/levels/{symbol}")

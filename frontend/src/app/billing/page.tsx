@@ -9,23 +9,29 @@ import type { PlanLimits } from "@/lib/types";
 
 type Sub = { status: string; plan: string; interval?: string | null; amount?: number; currency?: string; current_period_end?: string | null; cancel_at_period_end?: boolean };
 type Plan = { id: "free" | "pro" | "premium"; label: string; prices: { monthly: number; yearly: number }; available: { monthly: boolean; yearly: boolean }; limits: PlanLimits };
-type Plans = { enabled: boolean; current_plan: string; subscription: Sub; plans: Plan[] };
+type Plans = { enabled: boolean; current_plan: string; effective_plan: string; trial_until: string | null; currency: string; subscription: Sub; plans: Plan[] };
 
 const lim = (n: number) => (n >= 1e6 ? "Unlimited" : String(n));
 
 function features(l: PlanLimits): [string, boolean][] {
   return [
-    [l.realtime_data ? "Real-time data" : `${l.data_delay_minutes}-minute delayed data`, true],
+    ["Charts, indicators, free screener, market overview", true],
     [`${lim(l.max_watchlists)} watchlist${l.max_watchlists === 1 ? "" : "s"}, ${lim(l.max_symbols_per_watchlist)} symbols each`, true],
-    [`${lim(l.max_strategies_on_chart)} strategies per chart`, true],
+    [`${lim(l.max_strategies_on_chart)} indicators per chart`, true],
     [`${lim(l.max_portfolios)} portfolio${l.max_portfolios === 1 ? "" : "s"}`, true],
-    [`Trading journal (${lim(l.max_journal_trades)} trades)`, true],
-    ["Move Detector scores & scanner", l.move_detector],
-    ["Stock screener", l.move_detector],
-    [`Alerts${l.alerts ? ` (${lim(l.max_alert_rules)} rules)` : ""}`, l.alerts],
-    ["PDF company reports", l.reports],
-    ["Trade Review grades", l.trade_review],
-    ["Backtesting & ML validation", l.backtesting],
+    ["Full Trend Template, VCP & vnicorn Pulse", !!l.sepa_details],
+    ["Move Detector, screens & filters", l.move_detector],
+    [l.ideas_limit ? `Trade ideas: top ${l.ideas_limit} a day${l.ideas_shorts ? ", incl. shorts" : ", longs"}` : "Trade ideas", l.ideas_limit > 0],
+    ["Backtesting, TradeGrader & analytics", l.backtesting],
+    ["Quarterly EPS & sales acceleration", l.eps_history],
+    [`Email alerts${l.alerts ? ` (${lim(l.max_alert_rules)} rules)` : ""}`, l.alerts],
+    [l.ask_ai_monthly >= 1e6 ? "Ask vnicornAI: unlimited" : `Ask vnicornAI${l.ask_ai_monthly ? ` (${l.ask_ai_monthly}/month)` : ""}`, !!l.ask_ai],
+    ["vnicornAI picks & move probabilities", l.ai_picks],
+    ["Industry group rankings", l.industry_groups],
+    ["Weekly market letter", l.weekly_letter],
+    ["Custom strategy backtests", l.custom_backtest],
+    ["Instant Telegram alerts", l.instant_alerts],
+    ["CSV export", l.csv_export],
   ];
 }
 
@@ -64,6 +70,8 @@ function Billing() {
   const sub = data.subscription;
   const subscribed = ["active", "trialing", "past_due"].includes(sub.status);
   const isAdmin = user?.role === "admin";
+  const cur = data.currency === "EUR" ? "€" : "$";
+  const trialDays = data.trial_until ? Math.max(0, Math.ceil((new Date(data.trial_until).getTime() - Date.now()) / 86_400_000)) : 0;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -79,13 +87,18 @@ function Billing() {
           </p>
         )}
         {error && <p className="mb-4 rounded-md bg-down/10 px-3 py-2 text-sm text-down">{error}</p>}
+        {data.trial_until && (
+          <p className="mb-4 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-200">
+            ✦ Premium trial: {trialDays} day{trialDays === 1 ? "" : "s"} left (until {new Date(data.trial_until).toLocaleDateString("en-US")}). Pick a plan to keep the features; otherwise you return to Free automatically.
+          </p>
+        )}
 
         {subscribed && (
           <section className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-line bg-panel p-4">
             <div>
               <div className="text-xs text-muted">Current subscription</div>
               <div className="text-lg font-semibold">
-                {sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1)} · ${sub.amount}/{sub.interval === "year" ? "year" : "month"}
+                {sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1)} · {cur}{sub.amount}/{sub.interval === "year" ? "year" : "month"}
               </div>
               <div className={`text-sm ${sub.status === "past_due" ? "text-down" : "text-muted"}`}>
                 {sub.status === "past_due"
@@ -122,13 +135,14 @@ function Billing() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">{p.label}</h2>
                   {current && <span className="rounded bg-up/15 px-2 py-0.5 text-xs text-up">Current plan</span>}
+                  {!current && data.trial_until && p.id === "premium" && <span className="rounded bg-violet-500/20 px-2 py-0.5 text-xs text-violet-200">On trial</span>}
                   {!current && highlight && <span className="rounded bg-accent/20 px-2 py-0.5 text-xs text-blue-300">Most popular</span>}
                 </div>
                 <p className="mt-2">
-                  <span className="text-3xl font-bold">${price}</span>
+                  <span className="text-3xl font-bold">{cur}{price}</span>
                   <span className="text-muted">{p.id === "free" ? "" : interval === "monthly" ? "/month" : "/year"}</span>
                 </p>
-                {p.id !== "free" && interval === "yearly" && <p className="text-xs text-muted">${(price / 12).toFixed(2)}/month billed yearly</p>}
+                {p.id !== "free" && interval === "yearly" && <p className="text-xs text-muted">{cur}{(price / 12).toFixed(2)}/month billed yearly</p>}
                 <ul className="mt-4 flex-1 space-y-1.5 text-sm">
                   {features(p.limits).map(([f, ok]) => (
                     <li key={f} className={ok ? "" : "text-muted/60 line-through"}>

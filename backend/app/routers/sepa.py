@@ -90,7 +90,10 @@ def scan(
     with SessionLocal() as db:
         vnicorn_service.load(db)  # makes the stored major-move probabilities available after a restart
     pm = pulse_map() if limits_for(user)["pulse"] else {}
-    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"]), "pulse": pm.get(r["symbol"])} for r in cached_scan()]
+    ai = limits_for(user)["ai_picks"]
+    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"]) if ai else None, "pulse": pm.get(r["symbol"])} for r in cached_scan()]
+    if sort == "ai" and not ai:
+        raise HTTPException(403, "vnicornAI move probabilities are part of Premium.")
     key = {"bull": "bull_score", "bear": "bear_score", "rs": "rs_rating", "ai": "ai_prob"}[sort]
     out = [
         r

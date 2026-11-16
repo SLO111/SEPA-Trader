@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..models import User, Watchlist, WatchlistItem
-from ..plans import limits_for
+from ..plans import effective_plan, limits_for, trial_until
 from ..security import create_token, current_user, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -18,6 +18,8 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     name: str = Field(default="", max_length=120)
+    ref: str | None = Field(default=None, max_length=16)  # referral code
+    accept_terms: bool = True
 
 
 class LoginIn(BaseModel):
@@ -58,6 +60,8 @@ def user_out(u: User) -> dict:
         "role": u.role,
         "plan": u.plan,
         "limits": limits_for(u),
+        "effective_plan": effective_plan(u),
+        "trial_until": t.isoformat() if (t := trial_until(u)) else None,
         "created_at": u.created_at.isoformat(),
     }
 
@@ -80,6 +84,10 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
     user.watchlists = [wl]
     db.add(user)
     db.commit()
+    from ..growth_service import on_signup
+
+    on_signup(db, user, body.ref, body.accept_terms)
+    db.refresh(user)
     return {"token": create_token(user.id), "user": user_out(user)}
 
 
@@ -97,7 +105,24 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
 @router.get("/me")
 def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
     ensure_admin(user, db)
-    return user_out(user)
+    from ..growth_service import accepted_terms
+
+    return {**user_out(user), "terms_accepted": accepted_terms(db, user)}
+
+
+@router.post("/accept-terms")
+def accept_terms_now(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..growth_service import accept_terms
+
+    accept_terms(db, user)
+    return {"ok": True}
+
+
+@router.get("/referral")
+def referral(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..growth_service import referral_stats
+
+    return referral_stats(db, user)
 
 
 # ---------------- account settings ----------------
@@ -196,5 +221,8 @@ def delete_account(body: DeleteIn, user: User = Depends(current_user), db: Sessi
         raise HTTPException(400, "The password is not correct")
     if user.role == "admin" and user.email == settings.admin_email.lower().strip():
         raise HTTPException(400, "The main administrator account can't be deleted")
+    from ..growth_service import purge
+
+    purge(db, user.id)
     db.delete(user)
     db.commit()
