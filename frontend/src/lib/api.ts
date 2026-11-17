@@ -40,6 +40,11 @@ const CACHE_TTL: [string, number][] = [
   ["/api/watchlists", 30_000],
 ];
 const cache = new Map<string, { at: number; data: unknown }>();
+
+/** Forget cached GET responses (e.g. after a background job changed the data). */
+export function clearApiCache() {
+  cache.clear();
+}
 const inflight = new Map<string, Promise<unknown>>();
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {

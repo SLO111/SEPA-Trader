@@ -28,7 +28,7 @@ def invalidate_scan() -> None:
     """New prices: mark the scan stale. Requests keep getting the previous scan while a new one is built."""
     with _lock:
         for k, (_, rows) in list(_scan_cache.items()):
-            _scan_cache[k] = (0.0, rows)
+            _scan_cache[k] = (float("-inf"), rows)  # stale whatever the clock (monotonic time can be small after boot)
 
 
 def _build_scan(key: str) -> list[dict]:

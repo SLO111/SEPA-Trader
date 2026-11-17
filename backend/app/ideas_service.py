@@ -41,10 +41,25 @@ def _histories() -> dict[str, pd.DataFrame]:
     return out
 
 
-def _scan() -> dict[str, dict]:
-    from .routers.sepa import cached_scan
+def _scan(symbols: list[str] | None = None) -> dict[str, dict]:
+    """The Move Detector scan (RS, Trend Template, Bull / Bear scores) by symbol. With `symbols`, it must cover them:
+    a scan built for a smaller universe (or served stale) is rebuilt now, or new stocks would get default scores
+    and never pass the idea rules."""
+    from . import market_data
+    from .routers import sepa
 
-    return {r["symbol"]: r for r in cached_scan()}
+    rows = sepa.cached_scan()
+    if symbols:
+        have = {r["symbol"] for r in rows}
+        if len(have & set(symbols)) < 0.9 * len(symbols):
+            prev = market_data.in_background()
+            market_data._tls.rebuilding = True  # compute it here instead of returning the previous scan
+            try:
+                sepa.invalidate_scan()
+                rows = sepa.cached_scan()
+            finally:
+                market_data._tls.rebuilding = prev
+    return {r["symbol"]: r for r in rows}
 
 
 def classify(symbol: str) -> tuple[str, str]:
@@ -95,7 +110,8 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
             db.query(AIPick).filter(AIPick.idea_id.in_(drop)).delete(synchronize_session=False)
             db.query(TradeIdea).filter(TradeIdea.id.in_(drop)).delete(synchronize_session="fetch")
         db.commit()
-    ideas = generate(hist, _scan(), max_long=60, max_short=15, industry_of=industry_map(list(hist)))  # top 75 per day
+    scan = _scan([s for s, df in hist.items() if len(df) >= 260])  # the stocks long enough for the idea rules
+    ideas = generate(hist, scan, max_long=60, max_short=15, industry_of=industry_map(list(hist)))  # top 75 per day
     ideas = [i for i in ideas if i.symbol not in kept]
     rows = []
     for i in ideas:

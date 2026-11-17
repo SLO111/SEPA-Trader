@@ -288,7 +288,7 @@ def test_forced_regenerate_keeps_triggered_and_taken_ideas(monkeypatch):
     day = max(df.index[-1] for df in hist.values()).date()
     monkeypatch.setattr(ideas_service, "_histories", lambda: hist)
     monkeypatch.setattr(ideas_service, "_completed_sessions", lambda h, now=None: h)
-    monkeypatch.setattr(ideas_service, "_scan", lambda: {})
+    monkeypatch.setattr(ideas_service, "_scan", lambda *a: {})
     monkeypatch.setattr(ideas_service, "_vnicorn", lambda *a, **k: [])
     monkeypatch.setattr(ideas_service, "publish_summary", lambda *a, **k: None)
     monkeypatch.setattr(ideas_service, "add_feed", lambda *a, **k: 0)
@@ -550,3 +550,71 @@ def test_background_rebuild_uses_fresh_inputs(monkeypatch):
     market_data._fast_cache["t:inner"] = (float("-inf"), 2)
     assert market_data._fast("t:inner", 999, inner, stale_ok=True) == 2  # a request thread gets the old value at once
     market_data._fast_cache.pop("t:inner", None)
+
+
+def test_ideas_scan_rebuilt_when_it_misses_stocks(monkeypatch):
+    """A scan built for a smaller universe is rebuilt before generating, so new stocks get real scores."""
+    from app import ideas_service
+    from app.routers import sepa
+
+    p = SyntheticProvider()
+    syms = ["AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "AVGO", "AMD", "JPM", "KO"]
+    calls = {"n": 0}
+
+    def fake_scan(history, symbols=None):
+        calls["n"] += 1
+        return [{"symbol": s, "rs_rating": 80} for s in (syms[:2] if calls["n"] == 1 else syms)]
+
+    monkeypatch.setattr(sepa, "scan_universe", fake_scan)
+    sepa._scan_cache.clear()
+    try:
+        old = sepa.cached_scan()
+        assert len(old) == 2  # built when only 2 stocks were known
+        got = ideas_service._scan(syms)
+        assert set(got) == set(syms) and calls["n"] == 2
+        assert len(ideas_service._scan(syms)) == len(syms) and calls["n"] == 2  # covered now: no rebuild
+    finally:
+        sepa._scan_cache.clear()
+
+
+def test_vnicorn_retrains_when_universe_grew(monkeypatch):
+    from app import vnicorn_service as vs
+
+    trained = []
+    monkeypatch.setattr(vs, "load", lambda db: {"symbols": 36, "models": {"x": 1}})
+    monkeypatch.setattr(vs, "_trained_at", __import__("datetime").datetime.now(__import__("datetime").timezone.utc))
+    monkeypatch.setattr(vs, "_liquid", lambda hist, n: {f"S{i}": None for i in range(120)})
+    monkeypatch.setattr(vs, "real_trades", lambda db, hist: [])
+    monkeypatch.setattr(vs.ai, "train", lambda subset, bench, trades, trade_histories=None: trained.append(len(subset)) or {"models": {"y": 1}})
+    monkeypatch.setattr(vs, "_save", lambda db, b: None)
+    vs.ensure_trained(None, {}, None)
+    assert trained == [120]  # 36 << 120 available: retrained although trained this week
+    trained.clear()
+    monkeypatch.setattr(vs, "load", lambda db: {"symbols": 118, "models": {"x": 1}})
+    vs.ensure_trained(None, {}, None)
+    assert trained == []  # close enough: keeps the weekly schedule
+
+
+def test_regenerate_runs_in_background(client, register, monkeypatch):
+    import time
+
+    from app import ideas_service
+    from app.models import User
+    from app.routers import ideas as ideas_router
+
+    h, _ = register("regen-admin@test.ro")
+    with SessionLocal() as db:
+        db.query(User).filter_by(email="regen-admin@test.ro").one().role = "admin"
+        db.commit()
+    monkeypatch.setattr(ideas_service, "_data_ready", lambda: False)
+    assert client.post("/api/ideas/regenerate", headers=h).status_code == 409
+    monkeypatch.setattr(ideas_service, "_data_ready", lambda: True)
+    monkeypatch.setattr(ideas_router, "run_ideas", lambda db, force=False: [1, 2, 3])
+    r = client.post("/api/ideas/regenerate", headers=h)
+    assert r.status_code == 200 and r.json()["started"]
+    for _ in range(50):
+        st = client.get("/api/ideas/regenerate", headers=h).json()
+        if not st["running"]:
+            break
+        time.sleep(0.05)
+    assert st["generated"] == 3 and st["error"] is None

@@ -97,9 +97,11 @@ def real_trades(db: Session, hist: dict[str, pd.DataFrame]) -> list[dict]:
 def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFrame | None, force: bool = False) -> dict | None:
     bundle = load(db)
     fresh = _trained_at is not None and datetime.now(timezone.utc) - _trained_at < timedelta(days=RETRAIN_DAYS)
-    if bundle is not None and fresh and not force:
-        return bundle
     subset = _liquid(hist, TRAIN_SYMBOLS)
+    # the universe grew (e.g. 36 -> 850 stocks): a model that learned from far fewer stocks than it could is retrained now
+    grown = bundle is not None and (bundle.get("symbols") or 0) < 0.8 * len(subset)
+    if bundle is not None and fresh and not force and not grown:
+        return bundle
     if len(subset) < 10:
         return bundle
     trades = real_trades(db, hist)

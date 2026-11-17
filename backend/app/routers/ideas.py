@@ -118,11 +118,47 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     }
 
 
+_regen: dict = {"running": False, "started_at": None, "finished_at": None, "generated": None, "error": None}
+
+
+def _regenerate_job() -> None:
+    from datetime import datetime, timezone
+
+    from ..db import SessionLocal
+
+    try:
+        with SessionLocal() as db:
+            rows = run_ideas(db, force=True)
+            refresh_statuses(db)
+        _regen.update(generated=len(rows), error=None)
+    except Exception as e:
+        import logging
+
+        logging.getLogger("sepa.ideas").exception("Regenerate failed")
+        _regen.update(error=f"{type(e).__name__}: {str(e)[:150]}")
+    finally:
+        _regen.update(running=False, finished_at=datetime.now(timezone.utc).isoformat())
+
+
 @router.post("/ideas/regenerate")
-def regenerate(_: User = Depends(admin_user), db: Session = Depends(get_db)):
-    rows = run_ideas(db, force=True)
-    refresh_statuses(db)
-    return {"generated": len(rows)}
+def regenerate(_: User = Depends(admin_user)):
+    """Rebuild the latest batch in the background (it can take a few minutes over the whole universe)."""
+    import threading
+    from datetime import datetime, timezone
+
+    from ..ideas_service import _data_ready
+
+    if not _data_ready():
+        raise HTTPException(409, "Market data is still loading after a restart. Try again in a few minutes.")
+    if not _regen["running"]:
+        _regen.update(running=True, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None, generated=None, error=None)
+        threading.Thread(target=_regenerate_job, name="ideas-regenerate", daemon=True).start()
+    return {"started": True, **_regen}
+
+
+@router.get("/ideas/regenerate")
+def regenerate_status(_: User = Depends(admin_user)):
+    return dict(_regen)
 
 
 @router.get("/feed")
