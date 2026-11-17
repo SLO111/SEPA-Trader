@@ -385,7 +385,7 @@ class DataStore:
         if _finnhub() is not None:
             # Partial Yahoo fallbacks are replaced as soon as Finnhub is available.
             for sym, v in list(self.slow["fundamentals"].items()):
-                if v.get("partial") or v.get("market_cap_b") is None or v.get("source") != "finnhub":
+                if v.get("partial") or v.get("market_cap_b") is None or v.get("source") != "finnhub" or v.get("ccy") != "USD":
                     self.updated.pop(f"fundamentals:{sym}", None)
         todo = [s for s in symbols if self.stale(f"fundamentals:{s}", SLOW_TTL) or self.stale(f"earnings:{s}", SLOW_TTL)]
         self.status.update(slow_total=len(symbols), slow_done=len(symbols) - len(todo))

@@ -322,3 +322,26 @@ def test_forced_regenerate_keeps_triggered_and_taken_ideas(monkeypatch):
             db.query(PaperTrade).filter(PaperTrade.idea_id.in_(ids)).delete(synchronize_session=False)
             db.query(TradeIdea).filter(TradeIdea.batch_date == day).delete()
             db.commit()
+
+
+def test_foreign_company_amounts_in_usd(monkeypatch):
+    """Finnhub reports TSMC in Taiwan dollars: the market cap is converted and local per-share figures are skipped."""
+    from engine.data import finnhub
+
+    monkeypatch.setitem(finnhub._fx, "TWD", (1e18, 0.031))  # cached rate, no network
+    fh = finnhub.Finnhub.__new__(finnhub.Finnhub)
+    prof = {"name": "Taiwan Semiconductor", "currency": "TWD", "marketCapitalization": 57_440_000, "finnhubIndustry": "Semiconductors",
+            "shareOutstanding": 25_930}
+    met = {"peTTM": 22.5, "52WeekHigh": 2590, "52WeekLow": 1375, "epsTTM": 98.25, "grossMarginTTM": 65.9}
+    monkeypatch.setattr(fh, "profile", lambda s: prof, raising=False)
+    monkeypatch.setattr(fh, "metrics", lambda s: met, raising=False)
+    monkeypatch.setattr(fh, "recommendations", lambda s: [], raising=False)
+    f = fh.fundamentals("TSM")
+    assert f["market_cap_b"] == round(57_440 * 0.031, 1) and f["ccy"] == "USD" and f["pe"] == 22.5
+    co = fh.enrich_company({"symbol": "TSM", "analysts": {"total": 1}})
+    assert co["stats"]["market_cap_b"] == round(57_440 * 0.031, 1)
+    assert "week52_high" not in co["stats"] and "eps_ttm" not in co["stats"]
+    assert co["profitability"]["gross_margin"] == 65.9
+    monkeypatch.setitem(finnhub._fx, "XYZ", (1e18, None))
+    assert finnhub.Finnhub.cap_usd_b({"currency": "XYZ", "marketCapitalization": 5}) is None
+    assert finnhub.Finnhub.cap_usd_b({"currency": "USD", "marketCapitalization": 3_000_000}) == 3000.0

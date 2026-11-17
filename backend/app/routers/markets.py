@@ -182,27 +182,50 @@ def screener(
     min_growth: float | None = None,
     template_only: bool = False,
     above_ma50: bool = False,
+    sort: str = "market_cap_b",
+    dir: Literal["asc", "desc"] = "desc",
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(current_user),
 ):
+    """One page of the screen (50 rows by default), largest companies first unless another column is chosen."""
     paid = limits_for(user)["move_detector"]
     if preset and preset not in mt.PRESETS:
         raise HTTPException(400, f"Unknown preset: {preset}")
     if not paid and (preset or sector or min_cap_b or max_pe or min_yield or min_rs or min_growth is not None or template_only or above_ma50):
         raise HTTPException(403, "Screens and filters are available on the Pro and Premium plans.")
-    fundamentals = {s: market_data.cached("fundamentals", s) or {} for s in stock_symbols()}
-    aths = {s: market_data.cached("ath", s) for s in stock_symbols()}
-    rows = mt.screen_rows(_rows(), cached_scan(), fundamentals, aths)
-    out = mt.screen(rows, preset, sector, min_cap_b, max_pe, min_yield, min_rs, min_growth, template_only, above_ma50)
-    if limits_for(user)["industry_groups"]:
+    out = mt.screen(_screen_rows(), preset, sector, min_cap_b, max_pe, min_yield, min_rs, min_growth, template_only, above_ma50)
+    groups = limits_for(user)["industry_groups"]
+    if groups:
         from engine.industry import symbol_ranks
 
         ranks = symbol_ranks(groups_ranked())
         out = [{**r, "group": ranks.get(r["symbol"], {}).get("group"), "group_rank": ranks.get(r["symbol"], {}).get("rank")} for r in out]
-    if not paid:
-        # Free: the general information only (price, market cap, valuation, dividend), largest companies first
-        out = [{k: v for k, v in r.items() if k not in mt.PAID_SCREEN_FIELDS} for r in out]
-        out.sort(key=lambda r: -(r.get("market_cap_b") or 0))
-    return {"count": len(out), "results": out, "locked": not paid}
+    allowed = SCREEN_SORT_FREE | (SCREEN_SORT_PAID if paid else set()) | ({"group_rank"} if groups else set())
+    key = sort if sort in allowed else "market_cap_b"
+    present = [r for r in out if r.get(key) is not None]
+    missing = [r for r in out if r.get(key) is None]  # empty values always last
+    present.sort(key=lambda r: (str(r[key]).upper() if key == "symbol" else r[key]), reverse=dir == "desc")
+    out = present + missing
+    page = out[offset:offset + limit]
+    if not paid:  # Free: the general information only (price, market cap, valuation, dividend)
+        page = [{k: v for k, v in r.items() if k not in mt.PAID_SCREEN_FIELDS} for r in page]
+    return {"count": len(out), "offset": offset, "has_more": offset + limit < len(out), "results": page, "locked": not paid,
+            "sort": key, "dir": dir}
+
+
+SCREEN_SORT_FREE = {"symbol", "price", "change_pct", "market_cap_b", "pe", "pe_vs_sector_pct", "eps_growth", "dividend_yield"}
+SCREEN_SORT_PAID = {"rsi14", "rs_rating", "template_passed", "from_ath_pct", "bull_score"}
+
+
+def _screen_rows() -> list[dict]:
+    """The screener table for the whole universe, shared by every user (refreshed in the background every 2 minutes)."""
+    def build():
+        fundamentals = {s: market_data.cached("fundamentals", s) or {} for s in stock_symbols()}
+        aths = {s: market_data.cached("ath", s) for s in stock_symbols()}
+        return mt.screen_rows(_rows(), cached_scan(), fundamentals, aths)
+
+    return market_data._fast(f"{settings.data_provider}:screen-rows", 120, build, stale_ok=True)
 
 
 

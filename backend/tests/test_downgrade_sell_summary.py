@@ -168,3 +168,32 @@ def test_ath_distance():
     far = _ath({"price": 80, "week52_high": 90}, {"ath": 120})
     assert far["ath"] == 120 and far["from_ath_pct"] == -33.33 and not far["at_ath"]
     assert _ath({"price": 130, "week52_high": 131}, {"ath": 120})["ath"] == 131  # a new high beats the stored value
+
+
+def test_screener_pages_of_50_sorted_server_side(client, register):
+    from engine.data import universe
+
+    saved = dict(universe.SYMBOLS)
+    for i in range(70):  # a universe bigger than one page (no prices: they still list with empty values)
+        universe.SYMBOLS[f"ZP{i:03d}"] = {"name": f"Page {i}", "sector": "Industrials", "exchange": ""}
+    from app import market_data
+
+    market_data._fast_cache.clear()
+    try:
+        h, _ = register("screen-pages@test.ro")
+        first = client.get("/api/markets/screener", headers=h).json()
+        n = first["count"]
+        assert len(first["results"]) == min(50, n) and first["offset"] == 0 and first["sort"] == "market_cap_b"
+        if n > 50:
+            assert first["has_more"]
+            second = client.get("/api/markets/screener?offset=50", headers=h).json()
+            assert {r["symbol"] for r in first["results"]}.isdisjoint({r["symbol"] for r in second["results"]})
+        az = client.get("/api/markets/screener?sort=symbol&dir=asc&limit=10", headers=h).json()["results"]
+        syms = [r["symbol"] for r in az]
+        assert syms == sorted(syms)
+        # Free users can't sort by paid columns: falls back to market cap
+        assert client.get("/api/markets/screener?sort=rs_rating", headers=h).json()["sort"] == "market_cap_b"
+    finally:
+        universe.SYMBOLS.clear()
+        universe.SYMBOLS.update(saved)
+        market_data._fast_cache.clear()

@@ -5,7 +5,7 @@ import ExportButton from "@/components/ExportButton";
 import AddToWatchlist from "@/components/AddToWatchlist";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScoreBar } from "@/components/ScoreBadge";
 import { ApiError, api } from "@/lib/api";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
@@ -381,8 +381,14 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
   const ext = EXT_PRESETS.find((p) => p.id === preset);
   const [filters, setFilters] = useState({ sector: "", min_cap_b: "", max_pe: "", min_yield: "", min_rs: "", template_only: false, above_ma50: false });
   const [rows, setRows] = useState<ScreenRow[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  // sorted on the server, 50 rows at a time; default: largest market cap first
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
+  const sentinel = useRef<HTMLTableRowElement | null>(null);
+  const reqId = useRef(0);
 
   useEffect(() => {
     api<Presets>("/api/markets/screener/presets").then(setPresets).catch(() => {});
@@ -391,8 +397,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
     setPreset(paid ? initialPreset : ""); // the plan is known once the account has loaded
   }, [paid, initialPreset]);
 
-  useEffect(() => {
-    if (EXT_PRESETS.some((p) => p.id === preset)) return;
+  const query = useMemo(() => {
     const qs = new URLSearchParams();
     if (paid) {
       if (preset) qs.set("preset", preset);
@@ -401,25 +406,56 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
         else if (v) qs.set(k, String(v));
       });
     }
+    qs.set("sort", sort?.key ?? "market_cap_b");
+    qs.set("dir", sort ? (sort.dir === 1 ? "asc" : "desc") : "desc");
+    qs.set("limit", "50");
+    return qs.toString();
+  }, [preset, filters, paid, sort]);
+
+  type Page = { results: ScreenRow[]; count: number; has_more: boolean };
+  useEffect(() => {
+    if (EXT_PRESETS.some((p) => p.id === preset)) return;
+    const id = ++reqId.current;
     setRows(null);
     setError("");
     const t = setTimeout(() => {
-      api<{ results: ScreenRow[] }>(`/api/markets/screener?${qs}`).then((r) => setRows(r.results)).catch((e) => setError(e.message));
+      api<Page>(`/api/markets/screener?${query}&offset=0`)
+        .then((r) => {
+          if (id !== reqId.current) return;
+          setRows(r.results);
+          setTotal(r.count);
+          setHasMore(r.has_more);
+        })
+        .catch((e) => setError(e.message));
     }, 250);
     return () => clearTimeout(t);
-  }, [preset, filters, paid]);
+  }, [query, preset]);
 
-  const sorted = useMemo(() => {
-    if (!rows || !sort) return rows;
-    const { key, dir } = sort;
-    return [...rows].sort((a, b) => {
-      const x = a[key as keyof ScreenRow], y = b[key as keyof ScreenRow];
-      if (x === null || x === undefined) return 1; // empty values always last
-      if (y === null || y === undefined) return -1;
-      if (typeof x === "string" && typeof y === "string") return x.localeCompare(y) * dir;
-      return ((x as number) - (y as number)) * dir;
-    });
-  }, [rows, sort]);
+  const loadMore = () => {
+    if (!rows || !hasMore || loadingMore) return;
+    const id = reqId.current;
+    setLoadingMore(true);
+    api<Page>(`/api/markets/screener?${query}&offset=${rows.length}`)
+      .then((r) => {
+        if (id !== reqId.current) return; // the filters changed meanwhile
+        setRows((cur) => {
+          const have = new Set((cur ?? []).map((x) => x.symbol));
+          return [...(cur ?? []), ...r.results.filter((x) => !have.has(x.symbol))];
+        });
+        setHasMore(r.has_more);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
+  };
+  // the next 50 load when the end of the list scrolls into view
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !hasMore) return;
+    const io = new IntersectionObserver((entries) => entries[0].isIntersecting && loadMore(), { rootMargin: "400px" });
+    io.observe(el);
+    return () => io.disconnect();
+  });
+  const sorted = rows;
 
   const set = (k: keyof typeof filters, v: string | boolean) => setFilters((f) => ({ ...f, [k]: v }));
   const input = "w-20 rounded border border-line bg-bg px-2 py-1 text-sm outline-none focus:border-accent";
@@ -523,7 +559,8 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
               <tr key={r.symbol} className="border-t border-line hover:bg-panel/60">
                 <td className="sticky left-0 z-[1] bg-bg px-3 py-2">
                   <span className="flex items-center gap-1"><AddToWatchlist symbol={r.symbol} /><StockLink s={r.symbol} /></span>
-                  <div className="max-w-[170px] truncate text-xs text-muted">{r.sector}</div>
+                  {r.name && r.name !== r.symbol && <div className="max-w-[170px] truncate text-[11px] text-muted/90" title={r.name}>{r.name}</div>}
+                  <div className="max-w-[170px] truncate text-[10px] text-muted/60">{r.sector}</div>
                 </td>
                 <td className="tabular px-3 py-2 text-right">{fmt(r.price)}</td>
                 <td className={`tabular px-3 py-2 text-right ${tone(r.change_pct)}`}>{pct(r.change_pct)}</td>
@@ -534,9 +571,6 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
                 <td className="tabular px-3 py-2 text-right">{fmt(r.dividend_yield, 2, "%")}</td>
                 {paid && (
                   <>
-                    {hasGroups && (
-                      <td className={`tabular px-3 py-2 text-right ${(r.group_rank ?? 999) <= 20 ? "text-up" : ""}`} title={r.group ?? ""}>{r.group_rank ?? "—"}</td>
-                    )}
                     <td className="tabular px-3 py-2 text-right" title={r.ath ? `All-time high ${fmt(r.ath)}` : undefined}>
                       {r.at_ath ? (
                         <span className="rounded bg-up/15 px-1.5 py-0.5 text-[11px] font-semibold text-up">ATH</span>
@@ -544,6 +578,9 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
                         <span className={r.from_ath_pct > -10 ? "" : "text-muted"}>{pct(r.from_ath_pct, 1)}</span>
                       )}
                     </td>
+                    {hasGroups && (
+                      <td className={`tabular px-3 py-2 text-right ${(r.group_rank ?? 999) <= 20 ? "text-up" : ""}`} title={r.group ?? ""}>{r.group_rank ?? "—"}</td>
+                    )}
                     <td className={`tabular px-3 py-2 text-right ${(r.rsi14 ?? 50) <= 30 ? "text-up" : (r.rsi14 ?? 50) >= 70 ? "text-down" : ""}`}>{r.rsi14?.toFixed(0) ?? "—"}</td>
                     <td className="tabular px-3 py-2 text-right">{r.rs_rating ?? "—"}</td>
                     <td className={`tabular px-3 py-2 text-right ${r.template_passed === 8 ? "text-up" : "text-muted"}`}>{r.template_passed ?? "—"}/8</td>
@@ -552,9 +589,17 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
                 )}
               </tr>
             ))}
+            {rows && hasMore && (
+              <tr ref={sentinel}>
+                <td colSpan={cols} className="px-3 py-4 text-center text-xs text-muted">
+                  {loadingMore ? "Loading more…" : <button onClick={loadMore} className="hover:text-text">Load more</button>}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+      {rows && rows.length > 0 && <p className="text-right text-xs text-muted">Showing {rows.length} of {total}</p>}
       </>
       )}
     </div>

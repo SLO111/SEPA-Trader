@@ -333,9 +333,19 @@ class YFinanceProvider(DataProvider):
     def company(self, symbol: str) -> dict:
         from .company import yfinance_company
 
-        co = yfinance_company(symbol, self.history(symbol), self.dividends(symbol))
+        hist = self.history(symbol)
+        co = yfinance_company(symbol, hist, self.dividends(symbol))
         fh = _finnhub()
-        return fh.enrich_company(co) if fh is not None else co
+        if fh is not None:
+            co = fh.enrich_company(co)
+        # still missing (Yahoo's profile blocked, foreign company): from the US price history itself
+        st = co.setdefault("stats", {})
+        if len(hist):
+            last = hist.iloc[-252:]
+            st["week52_high"] = st.get("week52_high") or round(float(last["high"].max()), 2)
+            st["week52_low"] = st.get("week52_low") or round(float(last["low"].min()), 2)
+            st["avg_volume"] = st.get("avg_volume") or int(hist["volume"].iloc[-50:].mean())
+        return co
 
     def earnings(self, symbol: str) -> dict:
         fh = _finnhub()

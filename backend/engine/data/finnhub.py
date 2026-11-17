@@ -90,15 +90,25 @@ class Finnhub:
         return self.get("/company-news", symbol=symbol, **{"from": (today - timedelta(days=days)).isoformat(), "to": today.isoformat()}) or []
 
     # ------------------------------------------------------------ mapped to Vnicorn Investments's formats
+    @staticmethod
+    def cap_usd_b(p: dict) -> float | None:
+        """Market cap in $B. Finnhub reports it in the company's own currency (TSMC: Taiwan dollars), so foreign
+        companies are converted; unknown exchange rate -> None rather than a wrong number."""
+        cap_m = p.get("marketCapitalization")
+        if not cap_m:
+            return None
+        rate = usd_rate(p.get("currency"))
+        return round(cap_m / 1000 * rate, 1) if rate else None
+
     def fundamentals(self, symbol: str, name: str = "", sector: str = "") -> dict:
         p, m = self.profile(symbol), self.metrics(symbol)
         pe = m.get("peTTM") or m.get("peBasicExclExtraTTM")
-        cap_m = p.get("marketCapitalization")
         return {
             "name": p.get("name") or name or symbol,
             "sector": sector or p.get("finnhubIndustry") or "Other",
             "industry": p.get("finnhubIndustry") or "",
-            "market_cap_b": round(cap_m / 1000, 1) if cap_m else None,
+            "market_cap_b": self.cap_usd_b(p),
+            "ccy": "USD",  # amounts in US dollars (older cache entries without it are refetched)
             "pe": round(pe, 1) if pe and pe > 0 else None,
             "dividend_yield": round(m["dividendYieldIndicatedAnnual"], 2) if m.get("dividendYieldIndicatedAnnual") is not None else None,
             "eps_growth": round(m["epsGrowthTTMYoy"], 1) if m.get("epsGrowthTTMYoy") is not None else None,
@@ -142,12 +152,16 @@ class Finnhub:
             if sec.get(key) is None and value is not None:
                 sec[key] = round(value, 2) if isinstance(value, float) else value
 
-        fill("stats", "market_cap_b", round(p["marketCapitalization"] / 1000, 1) if p.get("marketCapitalization") else None)
-        fill("stats", "shares_outstanding_m", p.get("shareOutstanding"))
+        local = (p.get("currency") or "USD").upper() != "USD"
+        fill("stats", "market_cap_b", self.cap_usd_b(p))
         fill("stats", "beta", m.get("beta"))
-        fill("stats", "week52_high", m.get("52WeekHigh"))
-        fill("stats", "week52_low", m.get("52WeekLow"))
-        fill("stats", "eps_ttm", m.get("epsTTM") or m.get("epsBasicExclExtraItemsTTM"))
+        if not local:
+            # Per-share figures of a foreign company are in its own currency and per local share (a TSM ADR is 5 shares
+            # of 2330.TW): they don't match the US price, so they are left to the price history / Yahoo.
+            fill("stats", "shares_outstanding_m", p.get("shareOutstanding"))
+            fill("stats", "week52_high", m.get("52WeekHigh"))
+            fill("stats", "week52_low", m.get("52WeekLow"))
+            fill("stats", "eps_ttm", m.get("epsTTM") or m.get("epsBasicExclExtraItemsTTM"))
         fill("valuation", "pe", m.get("peTTM") or m.get("peBasicExclExtraTTM"))
         fill("valuation", "pb", m.get("pbQuarterly") or m.get("pbAnnual"))
         fill("valuation", "ps", m.get("psTTM"))
@@ -212,3 +226,28 @@ class Finnhub:
             except Exception:
                 pass
         return co
+
+
+_fx: dict[str, tuple[float, float | None]] = {}
+
+
+def usd_rate(currency: str | None) -> float | None:
+    """US dollars per unit of `currency` (1.0 for USD), from Yahoo's FX quotes, cached for a day."""
+    import time
+
+    cur = (currency or "USD").upper()
+    if cur == "USD":
+        return 1.0
+    hit = _fx.get(cur)
+    if hit and time.time() - hit[0] < 86400:
+        return hit[1]
+    rate = None
+    try:
+        import yfinance as yf
+
+        closes = yf.Ticker(f"{cur}USD=X").history(period="5d")["Close"].dropna()
+        rate = float(closes.iloc[-1]) if len(closes) else None
+    except Exception:
+        rate = None
+    _fx[cur] = (time.time(), rate)
+    return rate
