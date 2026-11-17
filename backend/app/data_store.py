@@ -120,6 +120,17 @@ class DataStore:
 
         n = 0
         with self._session_factory() as db:
+            # the universe first, so screens and /api/health know all the stocks while the prices are still loading
+            urow = db.get(MarketCache, _universe_key())
+            if urow is not None:
+                try:
+                    from engine.data.universe import extend
+
+                    extend(_unpack(urow.payload))
+                    ts = urow.updated_at if urow.updated_at.tzinfo else urow.updated_at.replace(tzinfo=timezone.utc)
+                    self.updated[urow.key] = ts
+                except Exception:
+                    log.warning("Saved universe could not be read", exc_info=True)
             for row in db.scalars(select(MarketCache)):
                 kind, _, sym = row.key.partition(":")
                 try:
@@ -137,10 +148,7 @@ class DataStore:
                     elif kind == "directory":
                         self.directory = obj
                     elif kind == "universe":
-                        if sym == _universe_key().partition(":")[2]:  # only the list for the configured UNIVERSE
-                            from engine.data.universe import extend
-
-                            extend(obj)
+                        pass  # loaded above (only the list for the configured UNIVERSE)
                     self.updated[row.key] = ts
                 n += 1
         if self.prices:

@@ -506,3 +506,23 @@ def test_one_broken_stock_does_not_empty_the_screens():
     assert len(screen) == 3  # the malformed row is skipped
     scan = scan_universe(lambda s: hist2[s] if s in hist2 else p.history(s), list(hist2))
     assert {"AAPL", "MSFT", "NVDA"} <= {r["symbol"] for r in scan} and "ZNAN" not in {r["symbol"] for r in scan}
+
+
+def test_saved_universe_restored_on_startup(monkeypatch, saved_universe):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "universe", "sp500+r1000")
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    s._save("universe:wide2", {"ZREST": {"name": "Restored", "sector": "Energy", "exchange": ""}})
+    s._save("universe:wide", {"ZOLD": {"name": "Old", "sector": "Energy", "exchange": ""}})  # an older key: ignored
+    try:
+        fresh = ds.DataStore(SyntheticProvider, SessionLocal)
+        fresh.load_all()
+        assert "ZREST" in universe.SYMBOLS and "ZOLD" not in universe.SYMBOLS
+        assert not fresh.stale("universe:wide2", ds.UNIVERSE_TTL)
+    finally:
+        from app.models import MarketCache
+
+        with SessionLocal() as db:
+            db.query(MarketCache).filter(MarketCache.key.in_(["universe:wide2", "universe:wide"])).delete(synchronize_session=False)
+            db.commit()
