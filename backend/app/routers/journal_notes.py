@@ -149,6 +149,7 @@ def export(kind: str, portfolio_id: int | None = None, source: str = "all", pres
         from .markets import screener
 
         rows = screener(preset=preset, sector=None, min_cap_b=None, max_pe=None, min_yield=None, min_rs=None, min_growth=None,
-                        template_only=False, above_ma50=False, user=user)["results"]
+                        template_only=False, above_ma50=False, sort="market_cap_b", dir="desc", offset=0, limit=100_000,
+                        user=user)["results"]  # the export holds every row, not one page
         return csv_response(rows, f"screener-{day}.csv")
     raise HTTPException(400, "Unknown export")
