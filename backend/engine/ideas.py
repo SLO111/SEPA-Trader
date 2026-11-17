@@ -116,7 +116,27 @@ def _long(sym, tf, entry, stop, lv, hi52, score, reason) -> Idea | None:
     return Idea(sym, tf, "long", round(entry, 2), round(stop, 2), round(trim, 2) if trim else None, round(target, 2), round(rr, 1), _weight(entry, stop), round(score, 1), reason)
 
 
-def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long: int = 12, max_short: int = 5) -> list[Idea]:
+PER_INDUSTRY = 3  # among the top ideas, at most this many from one industry (the rest move down the list)
+
+
+def diversify(items: list, industry_of: dict[str, str] | None, per: int = PER_INDUSTRY) -> list:
+    """Keep the ranking, but move the 4th+ idea of an industry behind the others, so the top of the list spans
+    several industries instead of one hot group. Items need a `.symbol`; unknown industries are not limited."""
+    if not industry_of:
+        return list(items)
+    first, rest, seen = [], [], {}
+    for it in items:
+        k = industry_of.get(it.symbol) or ""
+        if k and seen.get(k, 0) >= per:
+            rest.append(it)
+            continue
+        seen[k] = seen.get(k, 0) + 1
+        first.append(it)
+    return first + rest
+
+
+def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long: int = 12, max_short: int = 5,
+             industry_of: dict[str, str] | None = None) -> list[Idea]:
     """Daily idea list from price history and the Move Detector scan (rs_rating, template_passed, bull/bear scores, vcp)."""
     longs: list[Idea] = []
     shorts: list[Idea] = []
@@ -203,7 +223,7 @@ def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long
 
     longs.sort(key=lambda i: -(i.score + i.rr * 5))
     shorts.sort(key=lambda i: -(i.score + i.rr * 5))
-    return longs[:max_long] + shorts[:max_short]
+    return diversify(longs, industry_of)[:max_long] + diversify(shorts, industry_of)[:max_short]
 
 
 MIN_RR_SIGNALS = 1.5  # below this remaining reward/risk an idea is no longer offered in Signals

@@ -25,4 +25,7 @@ services:
       - key: DATA_PROVIDER
         value: yfinance
       - key: UNIVERSE
-        value: sp500+ # S&P 500 + Nasdaq-100; "core" = only the built-in symbols, lighter
+        value: sp500+r1000 # S&P 500 + Nasdaq-100 + theme lists + the largest other Russell 1000 stocks (~800 in all).
+        # Lighter: "sp500+" (~560) or "core" (built-in symbols only).
+      - key: UNIVERSE_EXTRA
+        value: "300" # extra Russell 1000 stocks with sp500+r1000; lower it (e.g. 150) if the free server runs short of memory

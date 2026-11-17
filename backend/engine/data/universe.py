@@ -121,3 +121,119 @@ def extend(entries: dict[str, dict]) -> int:
         else:
             SYMBOLS[s] = meta
     return len(new)
+
+
+# Russell 1000 (large + mid caps) from the iShares IWB holdings file. With UNIVERSE=sp500+r1000 the largest
+# `UNIVERSE_EXTRA` members that are not already in the universe are added (mid-cap growth names, new listings).
+R1000_CSV = (
+    "https://www.ishares.com/us/products/239707/ishares-russell-1000-etf/1467271812596.ajax"
+    "?fileType=csv&fileName=IWB_holdings&dataType=fund"
+)
+ISHARES_SECTORS = {"Information Technology": "Technology", "Communication": "Communication Services"}
+ISHARES_TICKERS = {"BRKB": "BRK-B", "BFB": "BF-B", "BFA": "BF-A", "LENB": "LEN-B", "HEIA": "HEI-A"}
+
+
+def _num(text: str) -> float:
+    try:
+        return float((text or "").replace(",", "").strip() or 0)
+    except ValueError:
+        return 0.0
+
+
+def parse_ishares_holdings(text: str) -> dict[str, dict]:
+    """Parse an iShares holdings CSV (a few preamble lines, then a 'Ticker,...' table, then disclaimers).
+    Equities only, Yahoo-style symbols, ordered by fund weight (largest first)."""
+    import csv
+    import io
+
+    lines = text.lstrip("﻿").splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.strip().strip('"').startswith("Ticker")), None)
+    if start is None:
+        return {}
+    rows = []
+    for row in csv.DictReader(io.StringIO("\n".join(lines[start:]))):
+        if (row.get("Asset Class") or "").strip() != "Equity":
+            continue
+        raw = (row.get("Ticker") or "").strip().upper()
+        sym = ISHARES_TICKERS.get(raw, raw.replace(".", "-").replace(" ", "-"))
+        if not sym or not all(ch.isalpha() or ch == "-" for ch in sym):
+            continue
+        sector = (row.get("Sector") or "Other").strip()
+        exch = (row.get("Exchange") or "").lower()
+        rows.append((_num(row.get("Weight (%)", "")), sym, {
+            "name": (row.get("Name") or sym).strip().title(),
+            "sector": ISHARES_SECTORS.get(sector, sector),
+            "exchange": "NASDAQ" if "nasdaq" in exch else "NYSE" if "new york" in exch else "",
+        }))
+    rows.sort(key=lambda r: -r[0])
+    return {sym: meta for _, sym, meta in rows}
+
+
+# Stocks from the ready-made theme lists that may sit outside the indexes (always scanned with the sp500 universes).
+THEME_META: dict[str, dict] = {
+    "TSM": {"name": "Taiwan Semiconductor", "sector": "Technology", "exchange": "NYSE"},
+    "SNDK": {"name": "Sandisk", "sector": "Technology", "exchange": "NASDAQ"},
+    "PSTG": {"name": "Pure Storage", "sector": "Technology", "exchange": "NYSE"},
+    "CRWV": {"name": "CoreWeave", "sector": "Technology", "exchange": "NASDAQ"},
+    "NBIS": {"name": "Nebius Group", "sector": "Technology", "exchange": "NASDAQ"},
+    "VRT": {"name": "Vertiv Holdings", "sector": "Industrials", "exchange": "NYSE"},
+    "SNOW": {"name": "Snowflake", "sector": "Technology", "exchange": "NYSE"},
+    "NET": {"name": "Cloudflare", "sector": "Technology", "exchange": "NYSE"},
+    "SOFI": {"name": "SoFi Technologies", "sector": "Financials", "exchange": "NASDAQ"},
+    "HOOD": {"name": "Robinhood Markets", "sector": "Financials", "exchange": "NASDAQ"},
+    "AFRM": {"name": "Affirm Holdings", "sector": "Financials", "exchange": "NASDAQ"},
+    "IONQ": {"name": "IonQ", "sector": "Technology", "exchange": "NYSE"},
+    "RGTI": {"name": "Rigetti Computing", "sector": "Technology", "exchange": "NASDAQ"},
+    "QBTS": {"name": "D-Wave Quantum", "sector": "Technology", "exchange": "NYSE"},
+    "QUBT": {"name": "Quantum Computing Inc.", "sector": "Technology", "exchange": "NASDAQ"},
+    "CCJ": {"name": "Cameco", "sector": "Energy", "exchange": "NYSE"},
+    "OKLO": {"name": "Oklo", "sector": "Utilities", "exchange": "NYSE"},
+    "SMR": {"name": "NuScale Power", "sector": "Industrials", "exchange": "NYSE"},
+    "NNE": {"name": "Nano Nuclear Energy", "sector": "Industrials", "exchange": "NASDAQ"},
+    "LEU": {"name": "Centrus Energy", "sector": "Energy", "exchange": "NYSE"},
+    "BWXT": {"name": "BWX Technologies", "sector": "Industrials", "exchange": "NYSE"},
+    "MARA": {"name": "MARA Holdings", "sector": "Technology", "exchange": "NASDAQ"},
+    "RIOT": {"name": "Riot Platforms", "sector": "Technology", "exchange": "NASDAQ"},
+    "RIVN": {"name": "Rivian Automotive", "sector": "Consumer Discretionary", "exchange": "NASDAQ"},
+    "LCID": {"name": "Lucid Group", "sector": "Consumer Discretionary", "exchange": "NASDAQ"},
+    "TM": {"name": "Toyota Motor", "sector": "Consumer Discretionary", "exchange": "NYSE"},
+    "NVO": {"name": "Novo Nordisk", "sector": "Health Care", "exchange": "NYSE"},
+}
+ETF_PRESETS = {"index-etfs", "sector-etfs"}
+NON_STOCK_THEME = {"IBIT"}
+
+
+def theme_symbols() -> dict[str, dict]:
+    """Every stock in the ready-made theme lists (ETFs left out), with a name and sector."""
+    from .presets import PRESETS
+
+    out: dict[str, dict] = {}
+    for p in PRESETS:
+        if p["id"] in ETF_PRESETS:
+            continue
+        for s in p["symbols"]:
+            if s in NON_STOCK_THEME or s in out:
+                continue
+            known = SYMBOLS.get(s)
+            if known and known["sector"] in NON_STOCK_SECTORS:
+                continue
+            out[s] = THEME_META.get(s) or known or {"name": s, "sector": "Other", "exchange": ""}
+    return out
+
+
+def merge_universe(sp500: dict[str, dict], plus: bool, r1000: dict[str, dict] | None = None, extra: int = 0) -> dict[str, dict]:
+    """The universe's entries: S&P 500 (its metadata wins), Nasdaq-100 extras with '+', the theme lists, and the
+    largest `extra` Russell 1000 members not already included."""
+    entries: dict[str, dict] = {**theme_symbols()}
+    if plus:
+        entries.update(NASDAQ100_EXTRA)
+    entries.update(sp500)
+    if r1000 and extra > 0:
+        added = 0
+        for s, meta in r1000.items():  # ordered by weight
+            if added >= extra:
+                break
+            if s not in entries:
+                entries[s] = meta
+                added += 1
+    return entries

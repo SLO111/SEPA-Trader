@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import market_data
 from ..db import get_db
-from ..ideas_service import latest_batch, refresh_statuses, run_ideas
+from ..ideas_service import classify, latest_batch, refresh_statuses, run_ideas
 from ..models import DailyDigest, FeedItem, TradeIdea, User
 from ..plans import limits_for
 from ..security import admin_user, current_user
@@ -44,16 +44,21 @@ def idea_out(r: TradeIdea, with_structure: bool = False) -> dict:
 
 
 def _plan_cut(rows: list, lim: dict) -> list:
-    """Per daily batch: the best `ideas_limit` ideas (by score); shorts only on plans that include them."""
-    out, per_day = [], {}
+    """Per daily batch: the best `ideas_limit` ideas (by score, at most 3 per industry while others are available);
+    shorts only on plans that include them."""
+    from engine.ideas import diversify
+
+    from ..ideas_service import industry_map
+
+    days: dict = {}
     for r in rows:
         if not lim["ideas_shorts"] and (r.side == "short" or r.timeframe == "SHORT"):
             continue
-        n = per_day.get(r.batch_date, 0)
-        if n >= lim["ideas_limit"]:
-            continue
-        per_day[r.batch_date] = n + 1
-        out.append(r)
+        days.setdefault(r.batch_date, []).append(r)
+    inds = industry_map(list({r.symbol for r in rows}))
+    out = []
+    for day_rows in days.values():  # rows arrive newest day first, best score first
+        out += diversify(day_rows, inds)[: lim["ideas_limit"]]
     return out
 
 
@@ -94,6 +99,7 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
         "updated": latest_batch(db).isoformat() if latest_batch(db) else None,
         "plan": {"ideas_limit": lim["ideas_limit"], "shorts": lim["ideas_shorts"], "ai_picks": lim["ai_picks"], "min_rr": MIN_RR_SIGNALS},
         "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken, "ai": ai_of.get(r.id),
+                   **dict(zip(("sector", "industry"), classify(r.symbol))),
                    "rr_now": _rr(r) if r.status in OPEN else None,
                    "earnings_in": market_data.earnings_in_days(r.symbol) if r.status in OPEN else None} for r in rows],
         "summary": {

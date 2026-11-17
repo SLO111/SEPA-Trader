@@ -47,6 +47,17 @@ def _scan() -> dict[str, dict]:
     return {r["symbol"]: r for r in cached_scan()}
 
 
+def classify(symbol: str) -> tuple[str, str]:
+    """(sector, industry) of a stock from the universe and the cached fundamentals; industry falls back to the sector."""
+    f = market_data.cached("fundamentals", symbol) or {}
+    sector = SYMBOLS.get(symbol, {}).get("sector") or f.get("sector") or ""
+    return sector, f.get("industry") or sector
+
+
+def industry_map(symbols: list[str]) -> dict[str, str]:
+    return {s: classify(s)[1] for s in symbols}
+
+
 def latest_batch(db: Session) -> date | None:
     return db.scalar(select(func.max(TradeIdea.batch_date)))
 
@@ -66,7 +77,7 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
         if ids:
             db.query(AIPick).filter(AIPick.idea_id.in_(ids)).delete(synchronize_session=False)
         db.query(TradeIdea).filter(TradeIdea.batch_date == day).delete()
-    ideas = generate(hist, _scan(), max_long=40, max_short=10)  # top 50 per day
+    ideas = generate(hist, _scan(), max_long=60, max_short=15, industry_of=industry_map(list(hist)))  # top 75 per day
     rows = []
     for i in ideas:
         row = TradeIdea(batch_date=day, **i.to_dict(), status="WAIT", current=i.entry)

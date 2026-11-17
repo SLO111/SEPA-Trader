@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth";
 import { fmt, pct, tone } from "@/lib/format";
 
 type Idea = {
-  id: number; date: string; symbol: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
+  id: number; date: string; symbol: string; sector?: string; industry?: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
   entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; rr_now?: number | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
@@ -56,6 +56,7 @@ function Ideas() {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
   const [tf, setTf] = useState<"ALL" | "AIPICKS" | "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI">("ALL");
+  const [sector, setSector] = useState("");
 
   const load = () =>
     api<Resp>(`/api/ideas?view=${view}`)
@@ -145,6 +146,16 @@ function Ideas() {
                   </button>
                 );
               })}
+              <select value={sector} onChange={(e) => setSector(e.target.value)} aria-label="Sector"
+                className="ml-auto rounded-md border border-line bg-panel px-2 py-0.5 text-xs text-muted">
+                <option value="">All sectors</option>
+                {Object.entries((data?.ideas ?? []).filter((i) => match(i, tf)).reduce<Record<string, number>>((m, i) => {
+                  if (i.sector) m[i.sector] = (m[i.sector] ?? 0) + 1;
+                  return m;
+                }, {})).sort((a, b) => b[1] - a[1]).map(([s, n]) => (
+                  <option key={s} value={s}>{s} ({n})</option>
+                ))}
+              </select>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-sm">
@@ -161,7 +172,7 @@ function Ideas() {
                 <tbody>
                   {!data && <tr><td colSpan={11} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
                   {data?.ideas.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
-                  {data?.ideas.filter((i) => match(i, tf)).sort((a, b) => (tf === "AIPICKS" ? (b.ai?.ev ?? -9) - (a.ai?.ev ?? -9) : 0)).map((i) => {
+                  {data?.ideas.filter((i) => match(i, tf) && (!sector || i.sector === sector)).sort((a, b) => (tf === "AIPICKS" ? (b.ai?.ev ?? -9) - (a.ai?.ev ?? -9) : 0)).map((i) => {
                     const move = i.current !== null ? ((i.current / i.entry - 1) * 100 * (i.side === "short" ? -1 : 1)) : null;
                     return (
                       <Fragment key={i.id}>
@@ -176,6 +187,7 @@ function Ideas() {
                               <EarningsBadge days={i.earnings_in} />
                             </div>
                             <div className="mt-0.5 text-[10px] text-muted" title={`Suggested weight ${i.weight}% of the account`}>{i.date.slice(5)} · {i.weight}%</div>
+                            {i.industry && <div className="max-w-[150px] truncate text-[10px] text-muted/80" title={i.sector}>{i.industry}</div>}
                           </td>
                           <td className="tabular whitespace-nowrap px-2 py-2 text-right">
                             <div>${fmt(i.entry)}</div>

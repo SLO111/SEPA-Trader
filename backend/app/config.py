@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     # Folder with the statically exported frontend (in Docker). Served at "/" if present.
     static_dir: str = "static"
     # Universe of stocks in live mode: "sp500+" (S&P 500 + Nasdaq-100 + the built-in list), "sp500", or "core" (built-in only).
-    universe: str = "sp500+"
+    universe: str = "sp500+"  # core | sp500 | sp500+ | sp500+r1000
+    universe_extra: int = 300  # with sp500+r1000: how many extra Russell 1000 stocks (largest first)
     # Keep a persistent market-data cache and refresh it in the background (live providers only).
     data_refresh: bool = True
     # Background alert checks: interval in seconds (0 disables the background loop).

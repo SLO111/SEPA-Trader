@@ -31,6 +31,10 @@ FULL_INTERVAL = 15 * 60  # seconds: the whole universe
 HOT_WINDOW = timedelta(minutes=30)
 SLOW_TTL = timedelta(hours=24)
 UNIVERSE_TTL = timedelta(days=7)
+
+
+def _universe_key() -> str:
+    return "universe:r1000" if settings.universe == "sp500+r1000" else "universe:sp500"
 CHUNK = 100
 SLOW_PAUSE = 1.2  # seconds between per-symbol requests, to stay polite with the provider
 BREAKER_FAILURES = 5  # consecutive refusals before backing off
@@ -113,9 +117,10 @@ class DataStore:
                     elif kind == "directory":
                         self.directory = obj
                     elif kind == "universe":
-                        from engine.data.universe import extend
+                        if sym == _universe_key().partition(":")[2]:  # only the list for the configured UNIVERSE
+                            from engine.data.universe import extend
 
-                        extend(obj)
+                            extend(obj)
                     self.updated[row.key] = ts
                 n += 1
         if self.prices:
@@ -224,36 +229,52 @@ class DataStore:
 
     # ---------------------------------------------------------------- refresh jobs
     def refresh_universe(self) -> int:
-        """Load the S&P 500 list (weekly) and add it to the universe."""
-        if settings.universe not in ("sp500", "sp500+") or not self.stale("universe:sp500", UNIVERSE_TTL):
+        """Load the S&P 500 list (weekly) and add it to the universe, plus the Nasdaq-100 extras, the theme lists and,
+        with UNIVERSE=sp500+r1000, the largest other Russell 1000 stocks."""
+        key = _universe_key()
+        if settings.universe not in ("sp500", "sp500+", "sp500+r1000") or not self.stale(key, UNIVERSE_TTL):
             return 0
         import httpx
 
-        from engine.data.universe import SP500_CSV, extend, parse_constituents
+        from engine.data.universe import R1000_CSV, SP500_CSV, SYMBOLS, NON_STOCK_SECTORS, extend, merge_universe, parse_constituents, parse_ishares_holdings
 
         try:
             r = httpx.get(SP500_CSV, timeout=20, follow_redirects=True)
             r.raise_for_status()
-            entries = parse_constituents(r.text)
-            if len(entries) < 400:
+            sp500 = parse_constituents(r.text)
+            if len(sp500) < 400:
                 raise ValueError("short list")
         except Exception:
             # Bundled copy, so the universe is complete even when GitHub can't be reached.
             from pathlib import Path
 
             log.warning("S&P 500 download failed; using the bundled list")
-            entries = parse_constituents((Path(__file__).resolve().parent.parent / "engine" / "data" / "sp500_constituents.csv").read_text())
-        if len(entries) < 400:  # sanity check: never shrink the universe because of a bad download
-            raise ValueError(f"Unexpected constituents list ({len(entries)} rows)")
-        if settings.universe == "sp500+":
-            from engine.data.universe import NASDAQ100_EXTRA
-
-            entries = {**NASDAQ100_EXTRA, **entries}
+            sp500 = parse_constituents((Path(__file__).resolve().parent.parent / "engine" / "data" / "sp500_constituents.csv").read_text())
+        if len(sp500) < 400:  # sanity check: never shrink the universe because of a bad download
+            raise ValueError(f"Unexpected constituents list ({len(sp500)} rows)")
+        r1000 = None
+        if settings.universe == "sp500+r1000":
+            try:
+                r1000 = self._fetch_r1000(httpx, R1000_CSV, parse_ishares_holdings)
+            except Exception:
+                log.warning("Russell 1000 download failed; keeping the stocks already in the universe", exc_info=True)
+        entries = merge_universe(sp500, settings.universe != "sp500", r1000, settings.universe_extra if r1000 else 0)
+        if settings.universe == "sp500+r1000" and r1000 is None:  # never drop names because of a failed download
+            entries = {**{s: m for s, m in SYMBOLS.items() if m["sector"] not in NON_STOCK_SECTORS}, **entries}
         added = extend(entries)
-        self._save("universe:sp500", entries)
-        self.updated["universe:sp500"] = _now()
-        log.info("Universe: %d S&P 500 symbols (%d new)", len(entries), added)
+        self._save(key, entries)
+        self.updated[key] = _now()
+        log.info("Universe: %d stocks (%d new)", len(entries), added)
         return added
+
+    @staticmethod
+    def _fetch_r1000(httpx, url: str, parse) -> dict:
+        r = httpx.get(url, timeout=30, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        out = parse(r.text)
+        if len(out) < 800:  # sanity check against a truncated or changed file
+            raise ValueError(f"Unexpected Russell 1000 list ({len(out)} rows)")
+        return out
 
     def refresh_directory(self) -> int:
         """All US-listed stocks and ETFs (Nasdaq Trader symbol files), refreshed weekly. Powers the search."""
