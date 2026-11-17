@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { SimBadge } from "@/components/legal/LegalPage";
 import { useEffect, useState } from "react";
 import { api, post } from "@/lib/api";
 
@@ -83,7 +82,6 @@ export default function AskVnicorn({ symbol, onClose, locked = false }: { symbol
           <button onClick={onClose} className="rounded px-2 py-1 text-muted hover:bg-panel-2" aria-label="Close">✕</button>
         </div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-          <SimBadge />
           {locked && (
             <div className="space-y-4">
               <div className="space-y-2 opacity-60 blur-[2px]" aria-hidden>

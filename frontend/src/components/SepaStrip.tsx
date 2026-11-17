@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { ScoreBlock, SepaReport } from "@/lib/types";
+import type { ScoreBlock, SepaReport, SymbolInfo } from "@/lib/types";
 import Locked from "./Locked";
 import { scoreColor } from "./ScoreBadge";
 
@@ -35,6 +35,48 @@ function Factors({ title, block, kind }: { title: string; block: ScoreBlock; kin
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+type PulseData = Exclude<SymbolInfo["pulse"], null | undefined>;
+
+/** vnicorn Pulse in the details panel: every day of the last 10 with its confirmations and warnings. */
+function PulseDetails({ symbol }: { symbol: string }) {
+  const [p, setP] = useState<PulseData | null | undefined>(undefined);
+  useEffect(() => {
+    setP(undefined);
+    api<SymbolInfo>(`/api/market/info/${encodeURIComponent(symbol)}`).then((i) => setP(i.pulse ?? null)).catch(() => setP(null));
+  }, [symbol]);
+  if (p === undefined) return <p className="text-xs text-muted">Loading vnicorn Pulse…</p>;
+  if (p === null) return null;
+  if ("locked" in p) {
+    return <Locked feature="vnicorn Pulse · 10 days" text="Daily confirmations and warnings: up on volume, closes near the high, RS new highs… or lower lows and moving-average breaks. See at a glance if a stock is acting right." />;
+  }
+  const tone = p.tone === "constructive" ? "text-up" : p.tone === "warning" ? "text-down" : "text-amber-300";
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <h4 className="text-sm font-semibold">vnicorn Pulse · last 10 days</h4>
+        <span className={`tabular text-sm font-semibold ${tone}`}>
+          {p.conf} confirmations / {p.warn} warnings · <span className="capitalize">{p.tone}</span>
+        </span>
+      </div>
+      {p.recent.length === 0 ? (
+        <p className="text-xs text-muted">No confirmations or warnings in the last 10 days: the stock is quiet.</p>
+      ) : (
+        <ul className="grid gap-x-6 gap-y-1.5 text-xs lg:grid-cols-2">
+          {p.recent.map((d) => (
+            <li key={d.date} className="flex items-start gap-2">
+              <span className="tabular w-11 shrink-0 pt-0.5 text-muted">{d.date.slice(5)}</span>
+              <span className="flex flex-wrap items-start gap-1">
+                {d.conf.map((x) => <span key={x} className="rounded bg-up/10 px-1.5 py-0.5 text-up">✓ {x}</span>)}
+                {d.warn.map((x) => <span key={x} className="rounded bg-down/10 px-1.5 py-0.5 text-down">! {x}</span>)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -82,8 +124,8 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-20 grid max-h-[70vh] gap-6 overflow-y-auto border-b border-line bg-panel p-4 shadow-2xl md:grid-cols-3">
-          <div>
+        <div className="absolute left-0 right-0 top-full z-20 grid max-h-[70vh] gap-6 overflow-y-auto border-b border-line bg-panel p-4 shadow-2xl md:grid-cols-3 md:grid-rows-[auto_1fr]">
+          <div className="md:row-span-2">
             <h4 className="mb-2 text-sm font-semibold">Trend Template · {tt.passed_count}/{tt.total ?? 8}</h4>
             <ul className="space-y-1.5 text-xs">
               {tt.criteria.map((c) => (
@@ -135,11 +177,17 @@ export default function SepaStrip({ symbol }: { symbol: string }) {
             <>
               <Factors title="Bull Score: upside potential" block={md.bull} kind="bull" />
               <Factors title="Bear Score: downside risk" block={md.bear} kind="bear" />
+              <div className="self-start border-t border-line pt-4 md:col-span-2 md:col-start-2 md:row-start-2">
+                <PulseDetails symbol={symbol} />
+              </div>
             </>
           ) : (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm md:col-span-2">
               <p className="font-medium text-amber-300">Move Detector is available on the Pro and Premium plans.</p>
               <p className="mt-1 text-muted">Get Bull/Bear scores with a per-factor breakdown, plus a scanner that searches the whole market for stocks set up for a major move.</p>
+              <div className="mt-4 border-t border-line pt-4">
+                <PulseDetails symbol={symbol} />
+              </div>
             </div>
           )}
         </div>

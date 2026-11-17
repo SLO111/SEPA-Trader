@@ -2,7 +2,6 @@
 
 import EarningsBadge from "@/components/EarningsBadge";
 
-import { SimBadge } from "@/components/legal/LegalPage";
 import { useAuth } from "@/lib/auth";
 
 import Link from "next/link";
@@ -79,7 +78,7 @@ function Scanner() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-[1600px] p-3 sm:p-6">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="flex items-center gap-2 text-xl font-semibold">Move Detector <SimBadge /></h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold">Move Detector</h1>
           <span className="text-xs text-muted">Scores refresh every 5 minutes</span>
         </div>
         <p className="mb-5 text-sm text-muted">{TABS.find((t) => t.id === tab)?.hint}</p>

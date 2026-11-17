@@ -33,8 +33,7 @@ def weekly_letter(week: str, indices: list[dict], exposure: dict | None, groups:
         paras.append("Earnings next week: " + ", ".join(f"{e['symbol']} ({e['date'][5:]})" for e in earnings[:15])
                      + ". Reports can gap a stock past its stop: many traders reduce size before them.")
     if record.get("closed"):
-        paras.append(f"Simulated trade ideas closed this week: {record['closed']}, win rate {record['win_rate']}%, total {record['total_r']:+.1f}R.")
-    paras.append("Educational simulation, not investment advice.")
+        paras.append(f"Trade ideas closed this week: {record['closed']}, win rate {record['win_rate']}%, total {record['total_r']:+.1f}R.")
     title = f"Weekly letter {week}: {tone}" + (f", S&P 500 {_pct(spy['week_pct'])}" if spy else "")
     body = {"week": week, "paragraphs": paras, "indices": indices, "exposure": exposure, "groups_top": groups[:5], "groups_bottom": groups[-3:],
             "leaders": leaders[:8], "warnings": warnings[:6], "earnings": earnings[:15], "record": record}

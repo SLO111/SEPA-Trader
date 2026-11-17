@@ -121,7 +121,7 @@ def export(kind: str, portfolio_id: int | None = None, source: str = "all", pres
         from .ideas import paper_trades
 
         src = source if source in ("all", "ideas", "md", "chart") else "all"
-        return csv_response(paper_trades(source=src, user=user, db=db)["trades"], f"simulated-trades-{day}.csv")
+        return csv_response(paper_trades(source=src, user=user, db=db)["trades"], f"tracked-trades-{day}.csv")
     if kind == "grader":
         from .ideas import _graded
 

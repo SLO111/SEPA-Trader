@@ -7,7 +7,6 @@ import AppShell from "@/components/AppShell";
 import NotificationsCard from "@/components/alerts/NotificationsCard";
 import { api, patch, post, put } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { setLang, useLang, useT } from "@/lib/i18n";
 import { applyTheme, getThemePref, type ThemePref } from "@/lib/theme";
 
 type Prefs = { theme: ThemePref; default_interval: string; start_page: string; compact_tables: boolean };
@@ -35,8 +34,6 @@ function Msg({ m }: { m: { ok: boolean; text: string } | null }) {
 
 function Settings() {
   const { user, refresh, logout } = useAuth();
-  const lang = useLang();
-  const t = useT();
   const router = useRouter();
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -87,7 +84,7 @@ function Settings() {
         <div className="space-y-5">
           <h1 className="text-xl font-semibold">Settings</h1>
 
-          <Section id="profile" {...{title: t("Profile")}}>
+          <Section id="profile" title="Profile">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="text-xs text-muted">Name</label>
@@ -128,7 +125,7 @@ function Settings() {
             <Msg m={msgs.pw ?? null} />
           </Section>
 
-          <Section id="appearance" {...{title: t("Appearance")}} desc="Choose a theme. System follows your device's light or dark setting.">
+          <Section id="appearance" title="Appearance" desc="Choose a theme. System follows your device's light or dark setting.">
             <div className="grid grid-cols-3 gap-3 sm:max-w-md">
               {(["dark", "light", "system"] as ThemePref[]).map((t) => (
                 <button key={t} onClick={() => savePrefs({ theme: t })}
@@ -140,15 +137,7 @@ function Settings() {
             </div>
           </Section>
 
-          <Section id="preferences" {...{title: t("Preferences")}}>
-            <label className="mb-3 flex items-center justify-between gap-3 text-sm">
-              <span>{t("Language")}</span>
-              <select value={lang} onChange={(e) => { setLang(e.target.value as "en" | "ro"); put("/api/auth/prefs", { lang: e.target.value }).catch(() => {}); }}
-                className="rounded-md border border-line bg-bg px-2 py-1">
-                <option value="en">English</option>
-                <option value="ro">Română</option>
-              </select>
-            </label>
+          <Section id="preferences" title="Preferences">
             {prefs && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-xs text-muted">
@@ -168,7 +157,7 @@ function Settings() {
             <Msg m={msgs.prefs ?? null} />
           </Section>
 
-          <Section id="notifications" {...{title: t("Notifications")}} desc="Where alerts are sent, and the daily summary email.">
+          <Section id="notifications" title="Notifications" desc="Where alerts are sent, and the daily summary email.">
             {digest && (
               <label className="mb-4 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={digest.enabled} className="accent-blue-500" onChange={async (e) => {
@@ -180,7 +169,7 @@ function Settings() {
             {user?.limits.alerts ? <NotificationsCard /> : <p className="text-sm text-muted">Alert notifications are part of the Pro and Premium plans.</p>}
           </Section>
 
-          <Section id="subscription" {...{title: t("Subscription")}}>
+          <Section id="subscription" title="Subscription">
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span>Plan: <b>{user?.limits.label}</b></span>
               {sub && sub.status !== "none" && (
@@ -216,7 +205,7 @@ function Settings() {
             <Msg m={msgs.sub ?? null} />
           </Section>
 
-          <Section id="referral" {...{title: t("Invite friends")}} desc="Friends who join with your link get 7 extra Premium days. When one of them subscribes, you get 30 days of Premium.">
+          <Section id="referral" title="Invite friends" desc="Friends who join with your link get 7 extra Premium days. When one of them subscribes, you get 30 days of Premium.">
             {refInfo ? (
               <div className="space-y-2 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
@@ -235,7 +224,7 @@ function Settings() {
               <p className="text-sm text-muted">Loading…</p>
             )}
           </Section>
-          <Section id="danger" {...{title: t("Delete account")}} desc="Deletes your account, watchlists, portfolios, trades and alerts. This can't be undone. Cancel any paid subscription first.">
+          <Section id="danger" title="Delete account" desc="Deletes your account, watchlists, portfolios, trades and alerts. This can't be undone. Cancel any paid subscription first.">
             <div className="flex flex-wrap gap-2">
               <input type="password" placeholder="Your password" value={delPw} onChange={(e) => setDelPw(e.target.value)} className={`${input} max-w-xs`} />
               <button disabled={!delPw} className="rounded-md bg-down px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-40" onClick={async () => {

@@ -2,7 +2,6 @@
 
 import EarningsBadge from "@/components/EarningsBadge";
 
-import { SimBadge } from "@/components/legal/LegalPage";
 
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
@@ -14,7 +13,7 @@ import { fmt, pct, tone } from "@/lib/format";
 
 type Idea = {
   id: number; date: string; symbol: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
-  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
+  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; rr_now?: number | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
 type Resp = {
@@ -97,8 +96,8 @@ function Ideas() {
       <div className="mx-auto max-w-[1680px] p-3 sm:p-6">
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div>
-            <h1 className="flex items-center gap-2 text-xl font-semibold">Trade ideas <SimBadge /></h1>
-            <p className="text-sm text-muted">Generated every trading day after the close from daily, weekly and monthly trends and historical support/resistance.</p>
+            <h1 className="flex items-center gap-2 text-xl font-semibold">Trade ideas</h1>
+            <p className="text-sm text-muted">Generated every trading day after the close from daily, weekly and monthly trends and historical support/resistance. An idea leaves this list once the reward left is under 1.5× the risk.</p>
             {user && !user.limits.ai_picks && (
               <p className="mt-1 text-xs text-amber-300">
                 Your plan shows the top {user.limits.ideas_limit} long ideas a day. <Link href="/billing" className="underline">Premium</Link> shows all 50, shorts and vnicornAI picks.
@@ -189,7 +188,9 @@ function Ideas() {
                           <td className="tabular whitespace-nowrap px-2 py-2 text-right text-amber-300/90">{i.trim ? `$${fmt(i.trim)}` : "—"}</td>
                           <td className="tabular whitespace-nowrap px-2 py-2 text-right text-up/90">${fmt(i.target)}</td>
                           <td className="px-2 py-2 text-center">
-                            <span className={`tabular rounded px-1.5 py-1 text-xs font-semibold ${i.rr >= 3 ? "bg-up/80 text-white" : i.rr >= 2 ? "bg-up/40 text-white" : "bg-amber-500/60 text-black"}`}>{i.rr}</span>
+                            <span title={i.rr_now !== null && i.rr_now !== undefined && i.rr_now !== i.rr ? `Planned R/R ${i.rr} · R/R from the current price ${i.rr_now}` : `R/R ${i.rr}`}
+                              className={`tabular rounded px-1.5 py-1 text-xs font-semibold ${i.rr >= 3 ? "bg-up/80 text-white" : i.rr >= 2 ? "bg-up/40 text-white" : "bg-amber-500/60 text-black"}`}>{i.rr}</span>
+                            {i.rr_now !== null && i.rr_now !== undefined && i.rr_now !== i.rr && <div className="tabular mt-0.5 text-[10px] text-muted">now {i.rr_now}</div>}
                           </td>
                           <td className="px-2 py-2">
                             {i.ai ? (

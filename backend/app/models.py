@@ -450,7 +450,7 @@ class CommunityProfile(Base):
 
 
 class CopyFollow(Base):
-    """Simulated copy trading: the follower's account mirrors the leader's new chart trades."""
+    """Copy trading: the follower's account mirrors the leader's new chart trades."""
 
     __tablename__ = "copy_follows"
     __table_args__ = (UniqueConstraint("follower_id", "leader_id"),)
@@ -462,7 +462,7 @@ class CopyFollow(Base):
 
 
 class CopiedTrade(Base):
-    """Links a follower's simulated trade to the leader's trade it copies (closed together)."""
+    """Links a follower's paper trade to the leader's trade it copies (closed together)."""
 
     __tablename__ = "copied_trades"
 

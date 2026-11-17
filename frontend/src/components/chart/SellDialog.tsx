@@ -9,7 +9,7 @@ import { num, tone, usd } from "@/lib/format";
 type Pos = { portfolio_id: number; portfolio: string; shares: number; avg_cost: number; price: number | null; pnl: number | null };
 type Paper = { id: number; symbol: string; side: string; entry: number; open: boolean };
 
-/** Sell from the chart: every place you hold the symbol — your portfolios (real sale at market) and open simulated chart trades. */
+/** Sell from the chart: every place you hold the symbol — your portfolios (real sale at market) and open chart trades. */
 export default function SellDialog({ symbol, onClose, onShort }: { symbol: string; onClose: () => void; onShort: () => void }) {
   const [pos, setPos] = useState<Pos[] | null>(null);
   const [paper, setPaper] = useState<Paper[] | null>(null);
@@ -27,7 +27,7 @@ export default function SellDialog({ symbol, onClose, onShort }: { symbol: strin
   const closeSim = async () => {
     try {
       await post("/api/paper-trades/chart/sell", { symbol });
-      setMsg(`Your simulated ${symbol} trade is closed at the market (Backtest → Chart trades).`);
+      setMsg(`Your ${symbol} chart trade is closed at the market (Backtest → Chart trades).`);
       load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
@@ -73,7 +73,7 @@ export default function SellDialog({ symbol, onClose, onShort }: { symbol: strin
           )}
           {!loading && paper!.length > 0 && (
             <div>
-              <div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">Simulated (Backtest → Chart trades)</div>
+              <div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">Chart trades (Backtest)</div>
               <div className="flex items-center gap-3 rounded-lg border border-line px-3 py-2">
                 <div className="min-w-0 flex-1 text-xs text-muted">
                   {paper!.length} open {paper!.length === 1 ? "trade" : "trades"} · entry {paper!.map((t) => usd(t.entry)).join(", ")}

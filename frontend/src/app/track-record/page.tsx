@@ -33,7 +33,7 @@ function Card({ label, s }: { label: string; s: S }) {
   );
 }
 
-/** Public track record of the daily (simulated) trade ideas: every closed idea, counted as a 1R risk. */
+/** Public track record of the daily trade ideas: every closed idea, counted as a 1R risk. */
 export default function TrackRecordPage() {
   const [d, setD] = useState<TR | null>(null);
   const [err, setErr] = useState("");
@@ -48,7 +48,7 @@ export default function TrackRecordPage() {
             <h1 className="text-2xl font-semibold">Track record</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted">
               Every trade idea Vnicorn published after the close, followed to its stop or target automatically. Each idea counts as risking 1R (the distance to its stop), so
-              +3R means three times the risk was won. <b>Simulated results</b>: no slippage, fees or taxes. Past results do not guarantee future results.
+              +3R means three times the risk was won. Results at the published prices, before fees and taxes. Past results do not guarantee future results.
             </p>
           </div>
           {err && <p className="text-sm text-down">{err}</p>}

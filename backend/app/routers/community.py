@@ -1,4 +1,4 @@
-"""Public track record, leaderboard, shared watchlists, simulated copy trading and academy progress."""
+"""Public track record, leaderboard, shared watchlists, copy trading and academy progress."""
 
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ def set_profile(body: ProfileIn, user: User = Depends(current_user), db: Session
 
 
 def _closed_r(db: Session, since: date | None) -> dict[int, list[tuple[float, date]]]:
-    """Closed simulated trades (chart + ideas + Move Detector, not copies) in R per user."""
+    """Closed paper trades (chart + ideas + Move Detector, not copies) in R per user."""
     from .ideas import _paper_out
 
     q = select(PaperTrade).where(PaperTrade.timeframe != "CP")
@@ -171,7 +171,7 @@ def public_leaderboard(period: str = Query("month", pattern="^(month|90d|all)$")
     return market_data._fast(f"public:leaderboard:{period}", 600, build)
 
 
-# ------------------------------------------------------------------ simulated copy trading
+# ------------------------------------------------------------------ copy trading
 
 @router.post("/community/follow/{leader_id}")
 def follow(leader_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -199,7 +199,7 @@ def unfollow(leader_id: int, user: User = Depends(current_user), db: Session = D
 
 
 def copy_new_trade(db: Session, leader_trade: PaperTrade) -> int:
-    """Mirror a leader's new simulated chart trade into every follower's account (source "Copied")."""
+    """Mirror a leader's new chart trade into every follower's account (source "Copied")."""
     n = 0
     for f in db.scalars(select(CopyFollow).where(CopyFollow.leader_id == leader_trade.user_id)).all():
         c = PaperTrade(user_id=f.follower_id, idea_id=None, symbol=leader_trade.symbol, timeframe="CP", side=leader_trade.side,

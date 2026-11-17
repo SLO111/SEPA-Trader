@@ -206,7 +206,7 @@ export default function RulesBuilder({ allowed }: { allowed: boolean }) {
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-[11px] text-muted">Simulated, long only, fees 0.05% per side. Past results do not guarantee future returns.</p>
+            <p className="mt-2 text-[11px] text-muted">Long only, fees 0.05% per side. Past results do not guarantee future returns.</p>
           </section>
         </>
       ))}

@@ -18,7 +18,7 @@ const ACCOUNT_KEY = "vn_ticket_account";
 
 /**
  * Order ticket from the chart.
- * Destination: a simulated trade (followed in Backtest → Chart trades) or a real buy in one of your portfolios, at the market price.
+ * Destination: a chart trade (followed in Backtest → Chart trades) or a real buy in one of your portfolios, at the market price.
  * Free: Buy, quantity, Stop loss, Take profit. Pro / Premium: entry, trim, R/R, position sizing, ATR / VCP / resistance shortcuts, vnicornAI's plan.
  */
 export default function TradeTicket({ symbol, price, side, pro, onClose, snapshot }: { symbol: string; price: number; side: "long" | "short"; pro: boolean; onClose: () => void; snapshot?: () => string | null }) {
@@ -129,7 +129,7 @@ export default function TradeTicket({ symbol, price, side, pro, onClose, snapsho
               <label className="block text-xs text-muted">
                 Where
                 <select value={String(dest)} onChange={(ev) => setDest(ev.target.value === "sim" ? "sim" : Number(ev.target.value))} className={`${field} mt-1`}>
-                  <option value="sim">Backtest: simulated trade</option>
+                  <option value="sim">Backtest (chart trade)</option>
                   {portfolios.map((p) => <option key={p.id} value={p.id}>Portfolio: {p.name} (real buy at market)</option>)}
                 </select>
               </label>
@@ -253,7 +253,7 @@ export default function TradeTicket({ symbol, price, side, pro, onClose, snapsho
             <p className="text-[11px] text-muted">
               {toPortfolio
                 ? "Recorded in your portfolio at the latest price, dated the latest trading day."
-                : "A simulated trade, followed in Backtest → Chart trades and graded in TradeGrader."}
+                : "Followed in Backtest → Chart trades and graded in TradeGrader."}
               {!pro && <> <Link href="/billing" className="text-amber-300 hover:underline">Pro</Link> adds trim, position sizing, ATR / VCP stops and vnicornAI&apos;s plan.</>}
             </p>
           </div>

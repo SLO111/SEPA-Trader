@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from app.db import SessionLocal
-from app.models import User
+from app.models import TradeIdea, User
 from engine import feed
 from engine.data.providers import SyntheticProvider
 from engine.data.universe import stock_symbols
@@ -120,3 +120,34 @@ def test_daily_summary_feed_and_email_digest(client, register, monkeypatch):
     s = client.get("/api/feed/summary", headers=h).json()
     assert s["title"].startswith("Daily summary") and "breadth" in s and "indices" in s
     assert all(x["kind"] != "summary" for x in client.get("/api/feed", headers=h).json())
+
+
+def test_ideas_with_poor_rr_leave_signals(client, register):
+    """A running idea whose reward left is under 1.5x the risk leaves the open list, but is still tracked."""
+    from datetime import date
+
+    from engine.ideas import rr_now
+
+    assert rr_now({"side": "long", "stop": 90, "target": 130, "rr": 3}, 125, "BUY") == round(5 / 35, 2)
+    assert rr_now({"side": "long", "stop": 90, "target": 130, "rr": 3}, 125, "WAIT") == 3  # waiting: planned R/R
+    assert rr_now({"side": "short", "stop": 110, "target": 70, "rr": 3}, 100, "BUY") == 3.0
+    h, _ = register("rr-filter@test.ro")
+    _plan("rr-filter@test.ro", "premium")
+    with SessionLocal() as db:
+        d = date(2026, 11, 13)
+        late = TradeIdea(batch_date=d, symbol="AAPL", timeframe="SWING", side="long", entry=100, stop=90, target=130, rr=3, weight=5,
+                         score=999, status="BUY", current=127)  # 3 left vs 37 risk
+        fresh = TradeIdea(batch_date=d, symbol="MSFT", timeframe="SWING", side="long", entry=100, stop=90, target=130, rr=3, weight=5,
+                          score=998, status="BUY", current=101)  # 29 left vs 11 risk
+        db.add_all([late, fresh])
+        db.commit()
+        ids = (late.id, fresh.id)
+    try:
+        open_ids = {i["id"] for i in client.get("/api/ideas?view=open", headers=h).json()["ideas"]}
+        assert ids[0] not in open_ids and ids[1] in open_ids
+        all_ids = {i["id"] for i in client.get("/api/ideas?view=all", headers=h).json()["ideas"]}
+        assert ids[0] in all_ids  # still tracked
+    finally:
+        with SessionLocal() as db:
+            db.query(TradeIdea).filter(TradeIdea.id.in_(ids)).delete(synchronize_session=False)
+            db.commit()

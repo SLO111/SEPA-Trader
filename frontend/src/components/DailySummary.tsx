@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { useT } from "@/lib/i18n";
 import Locked from "@/components/Locked";
 
 type Mover = { symbol: string; name: string; price: number; change_pct: number };
@@ -47,8 +46,6 @@ const tone = (x: number) => (x >= 0 ? "text-up" : "text-down");
 const STAGE = ["", "text-slate-300", "text-up", "text-amber-300", "text-down"];
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const t = useT();
-  title = t(title);
   return (
     <div>
       <div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">{title}</div>
@@ -72,7 +69,6 @@ export default function DailySummary({ compact = false }: { compact?: boolean })
   const [s, setS] = useState<Summary | null>(null);
   const [digest, setDigest] = useState<Digest | null>(null);
   const [open, setOpen] = useState(!compact);
-  const t = useT();
 
   useEffect(() => {
     api<Summary | null>("/api/feed/summary").then(setS).catch(() => {});
@@ -88,7 +84,7 @@ export default function DailySummary({ compact = false }: { compact?: boolean })
   const optIn = digest && (
     <label className="flex cursor-pointer items-center gap-2 text-xs text-muted" title={digest.email_configured ? "" : "Email sending is not configured on the server yet"}>
       <input type="checkbox" checked={digest.enabled} onChange={toggle} className="accent-[var(--color-accent,#3b82f6)]" />
-      {t("Email me the daily summary")}{digest.enabled ? ` (${digest.email})` : ""}
+      {("Email me the daily summary")}{digest.enabled ? ` (${digest.email})` : ""}
     </label>
   );
 
@@ -107,12 +103,12 @@ export default function DailySummary({ compact = false }: { compact?: boolean })
         <span className="text-xl leading-none">📋</span>
         <span className="min-w-0 flex-1">
           <span className="mb-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
-            <span className="rounded bg-accent/25 px-1.5 py-0.5 font-semibold text-blue-200">📌 {t("PINNED")}</span>
+            <span className="rounded bg-accent/25 px-1.5 py-0.5 font-semibold text-blue-200">📌 {("PINNED")}</span>
             <span>{s.day ? coverage(s.day) : ""}</span>
           </span>
           <span className="block font-medium leading-snug">{s.title}</span>
         </span>
-        <span className="text-xs text-muted">{t(open ? "Hide ▲" : "Show ▼")}</span>
+        <span className="text-xs text-muted">{(open ? "Hide ▲" : "Show ▼")}</span>
       </button>
       {open && (
         <div className="space-y-4 border-t border-line px-4 pb-4 pt-3 text-sm">

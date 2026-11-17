@@ -206,6 +206,21 @@ def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long
     return longs[:max_long] + shorts[:max_short]
 
 
+MIN_RR_SIGNALS = 1.5  # below this remaining reward/risk an idea is no longer offered in Signals
+
+
+def rr_now(idea: dict, price: float | None, status: str = "WAIT") -> float | None:
+    """Reward / risk left from the current price. A waiting idea keeps its planned R/R (entry, stop and target don't move)."""
+    if status == "WAIT" or price is None:
+        return idea.get("rr")
+    long = idea["side"] != "short"
+    risk = (price - idea["stop"]) if long else (idea["stop"] - price)
+    reward = (idea["target"] - price) if long else (price - idea["target"])
+    if risk <= 0:
+        return 0.0
+    return round(max(reward, 0.0) / risk, 2)
+
+
 def update_status(idea: dict, df: pd.DataFrame, created: pd.Timestamp, max_wait_days: int = 10) -> dict:
     """Follow an idea after it was published: WAIT -> BUY -> TRIM -> TARGET, or STOPPED / CANCEL."""
     after = df[df.index > created]

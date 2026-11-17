@@ -69,6 +69,15 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     rows = db.scalars(q.order_by(TradeIdea.batch_date.desc(), TradeIdea.score.desc()).limit(400)).all()
     lim = limits_for(user)
     rows = _plan_cut(rows, lim)[:200]
+    from engine.ideas import MIN_RR_SIGNALS, rr_now
+
+    def _rr(r):
+        return rr_now({"side": r.side, "stop": r.stop, "target": r.target, "rr": r.rr}, r.current, r.status)
+
+    if view == "open":
+        # a running idea whose reward left is under 1.5× the risk is no longer a good entry: it leaves Signals
+        # (it is still followed in the background for the track record, and in Backtest for those who took it)
+        rows = [r for r in rows if r.status == "WAIT" or (_rr(r) or 0) >= MIN_RR_SIGNALS]
     allrows = db.scalars(select(TradeIdea)).all()
     from ..models import PaperTrade
 
@@ -77,14 +86,15 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
 
     ai_of = {a.idea_id: {"prob": a.prob, "ev": a.ev, "stop": a.stop, "trim": a.trim, "target": a.target, "rr": a.rr, "pick": a.pick}
              for a in db.scalars(select(AIPick).where(AIPick.idea_id.in_([r.id for r in rows]))).all()} if rows and lim["ai_picks"] else {}
-    open_rows = [r for r in allrows if r.status in OPEN]
+    open_rows = [r for r in allrows if r.status in OPEN and (r.status == "WAIT" or (_rr(r) or 0) >= MIN_RR_SIGNALS)]
     done = [r for r in allrows if r.status in ("TARGET", "STOPPED") or (r.status not in OPEN and r.r_multiple is not None)]
     entered_open = [r for r in open_rows if r.pnl_pct is not None]
     wins = [r for r in done if (r.r_multiple or 0) > 0]
     return {
         "updated": latest_batch(db).isoformat() if latest_batch(db) else None,
-        "plan": {"ideas_limit": lim["ideas_limit"], "shorts": lim["ideas_shorts"], "ai_picks": lim["ai_picks"]},
+        "plan": {"ideas_limit": lim["ideas_limit"], "shorts": lim["ideas_shorts"], "ai_picks": lim["ai_picks"], "min_rr": MIN_RR_SIGNALS},
         "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken, "ai": ai_of.get(r.id),
+                   "rr_now": _rr(r) if r.status in OPEN else None,
                    "earnings_in": market_data.earnings_in_days(r.symbol) if r.status in OPEN else None} for r in rows],
         "summary": {
             "open": len(open_rows),
@@ -300,7 +310,7 @@ def take_chart(body: ChartTradeIn, user: User = Depends(current_user), db: Sessi
     db.commit()
     from .community import copy_new_trade
 
-    copy_new_trade(db, t)  # simulated copy trading: followers get the same trade
+    copy_new_trade(db, t)  # copy trading: followers get the same trade
     return _paper_out(t, df)
 
 

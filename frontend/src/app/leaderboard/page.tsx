@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth";
 type Row = { rank: number; user_id: number; display_name: string; allow_copy: boolean; followers: number; trades: number; win_rate: number; avg_r: number; total_r: number };
 type Me = { profile: { display_name: string; public: boolean; allow_copy: boolean } | null; following: { user_id: number; display_name: string }[]; followers: number; max_follows: number };
 
-/** Monthly ranking of simulated trades, with simulated copy trading. */
+/** Monthly ranking of members' trades, with copy trading. */
 export default function LeaderboardPage() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<"month" | "90d" | "all">("month");
@@ -45,8 +45,8 @@ export default function LeaderboardPage() {
           <div>
             <h1 className="text-2xl font-semibold">Leaderboard</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted">
-              Members ranked by the result of their <b>simulated</b> trades (from charts, trade ideas and the Move Detector), in R: multiples of the risk taken. At least 5 closed trades.
-              Press <b>Copy</b> to mirror a trader&apos;s new chart trades in your own simulated account: they open and close together. Educational simulation, not investment advice.
+              Members ranked by the result of their trades (from charts, trade ideas and the Move Detector), in R: multiples of the risk taken. At least 5 closed trades.
+              Press <b>Copy</b> to mirror a trader&apos;s new chart trades in your account: they open and close together.
             </p>
           </div>
 
@@ -91,7 +91,7 @@ export default function LeaderboardPage() {
               </thead>
               <tbody>
                 {rows === null && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted">Loading…</td></tr>}
-                {rows?.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted">Nobody has 5 closed simulated trades in this period yet. Be the first!</td></tr>}
+                {rows?.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted">Nobody has 5 closed trades in this period yet. Be the first!</td></tr>}
                 {rows?.map((r) => (
                   <tr key={r.user_id} className="border-t border-line">
                     <td className={`tabular px-3 py-2 font-semibold ${r.rank <= 3 ? "text-amber-300" : "text-muted"}`}>{r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank}</td>

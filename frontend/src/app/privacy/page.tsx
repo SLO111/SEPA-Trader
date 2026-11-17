@@ -1,13 +1,10 @@
-import LegalPage, { Bilingual } from "@/components/legal/LegalPage";
+import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata = { title: "Privacy Policy · Vnicorn Investments" };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" titleRo="Politica de confidențialitate">
-      <Bilingual
-        en={
-          <>
+    <LegalPage title="Privacy Policy">
       <p>This policy explains what personal data Vnicorn collects, why, and your rights under the EU General Data Protection Regulation (GDPR).</p>
       <h2>Data we collect</h2>
       <ul>
@@ -30,35 +27,6 @@ export default function PrivacyPage() {
       <p>You can access, correct, export or delete your data, object to or restrict processing, and complain to your data protection authority (in Romania: ANSPDCP). Most of it you can do directly in Settings; for the rest, contact us.</p>
       <h2>Cookies</h2>
       <p>Vnicorn uses only the browser storage needed to keep you logged in and remember preferences (theme, chart settings). No advertising trackers.</p>
-          </>
-        }
-        ro={
-          <>
-      <p>Această politică explică ce date personale colectează Vnicorn, de ce și care sunt drepturile tale conform Regulamentului General privind Protecția Datelor (GDPR).</p>
-      <h2>Ce date colectăm</h2>
-      <ul>
-        <li><b>Cont</b>: email, nume, parolă (păstrată doar ca hash securizat), planul și starea abonamentului.</li>
-        <li><b>Conținutul tău</b>: watchlist-uri, portofolii și tranzacții introduse sau importate, tranzacții simulate, note de jurnal și capturi, alerte și preferințe.</li>
-        <li><b>Plăți</b>: gestionate de Stripe; primim starea abonamentului și facturile, niciodată numărul cardului.</li>
-        <li><b>Tehnice</b>: jurnale de server de bază (adresă IP, oră, erori) pentru securitate și depanare.</li>
-      </ul>
-      <h2>De ce le folosim (temei legal)</h2>
-      <ul>
-        <li>Pentru a furniza serviciul la care te-ai înscris (contract).</li>
-        <li>Pentru a trimite emailurile pe care le-ai activat: alerte, rezumatul zilnic, scrisoarea săptămânală (consimțământ, pe care îl poți retrage din Setări).</li>
-        <li>Pentru securitatea serviciului și obligațiile legale (interes legitim / obligație legală).</li>
-      </ul>
-      <h2>Partajare</h2>
-      <p>Nu vindem date personale. Folosim împuterniciți doar pentru funcționarea serviciului: găzduire și bază de date (Render), plăți (Stripe), trimiterea emailurilor (furnizorul SMTP) și furnizori de date de piață (care primesc simboluri, nu identitatea ta). Funcțiile publice (watchlist-uri partajate, clasament) arată doar ce alegi să faci public.</p>
-      <h2>Păstrare</h2>
-      <p>Păstrăm datele cât timp contul există. Ștergerea contului din Setări îți elimină datele, cu excepția facturilor pe care legea ne obligă să le păstrăm.</p>
-      <h2>Drepturile tale</h2>
-      <p>Poți accesa, corecta, exporta sau șterge datele, te poți opune prelucrării sau o poți restricționa și poți depune plângere la autoritatea de protecție a datelor (în România: ANSPDCP). Majoritatea le poți face direct din Setări; pentru rest, contactează-ne.</p>
-      <h2>Cookie-uri</h2>
-      <p>Vnicorn folosește doar stocarea din browser necesară pentru a te menține autentificat și pentru preferințe (temă, setări grafic). Fără trackere publicitare.</p>
-          </>
-        }
-      />
     </LegalPage>
   );
 }

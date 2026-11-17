@@ -1,13 +1,10 @@
-import LegalPage, { Bilingual } from "@/components/legal/LegalPage";
+import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata = { title: "Terms of Service · Vnicorn Investments" };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" titleRo="Termeni și condiții">
-      <Bilingual
-        en={
-          <>
+    <LegalPage title="Terms of Service">
       <p>These terms govern your use of Vnicorn Investments (&quot;Vnicorn&quot;, &quot;we&quot;), a website and application for learning about stock market analysis. By creating an account or using the service you agree to them.</p>
       <h2>1. What Vnicorn is</h2>
       <ul>
@@ -41,46 +38,6 @@ export default function TermsPage() {
       <p>To the maximum extent permitted by law, Vnicorn is not liable for any trading or investment losses, lost profits, or indirect damages arising from the use of the service. Our total liability is limited to the amount you paid us in the last 12 months. Nothing in these terms limits liability that cannot be limited by law.</p>
       <h2>7. Changes and contact</h2>
       <p>We may update these terms; we will tell you about material changes in the app. Continued use means you accept the new terms. Questions: use the contact address shown on the website.</p>
-          </>
-        }
-        ro={
-          <>
-      <p>Acești termeni reglementează folosirea Vnicorn Investments („Vnicorn”, „noi”), un site și o aplicație pentru învățarea analizei pieței de acțiuni. Prin crearea unui cont sau folosirea serviciului îi accepți.</p>
-      <h2>1. Ce este Vnicorn</h2>
-      <ul>
-        <li>Vnicorn este o <b>platformă educațională și de simulare</b>. Afișează grafice, statistici, filtre, analize bazate pe reguli și pe învățare automată și îți permite să înregistrezi tranzacții <b>simulate</b> și propriile evidențe de portofoliu.</li>
-        <li>Vnicorn <b>nu este broker</b>, nu păstrează bani sau titluri, nu se conectează la conturi de brokeraj și <b>nu plasează niciodată ordine</b>. Butoanele Buy / Sell / Short doar creează înregistrări în aplicație.</li>
-        <li>Vnicorn <b>nu este consultant de investiții</b>. Nimic de pe platformă, inclusiv ideile de tranzacționare, vnicornAI picks, scorurile, alertele, scrisorile sau academia, nu este o recomandare personală sau o ofertă de a cumpăra ori vinde vreun titlu.</li>
-      </ul>
-      <h2>2. Responsabilitatea ta</h2>
-      <ul>
-        <li>Tu decizi asupra propriilor investiții. Înainte să acționezi pe baza a ceea ce citești aici, fă-ți propria analiză și, la nevoie, discută cu un consultant financiar autorizat.</li>
-        <li>Răspunzi de corectitudinea datelor pe care le introduci sau importi și de păstrarea parolei în siguranță.</li>
-        <li>Trebuie să ai cel puțin 18 ani.</li>
-      </ul>
-      <h2>3. Date și disponibilitate</h2>
-      <ul>
-        <li>Datele de piață provin de la terți, pot fi întârziate, incomplete sau greșite și sunt oferite „ca atare”. Rezultatele simulate și performanțele trecute nu prezic rezultatele viitoare.</li>
-        <li>Putem modifica, suspenda sau întrerupe funcții și nu garantăm funcționarea neîntreruptă.</li>
-      </ul>
-      <h2>4. Abonamente</h2>
-      <ul>
-        <li>Planurile plătite se reînnoiesc automat lunar sau anual până la anulare. Poți anula oricând din Setări; accesul continuă până la finalul perioadei plătite.</li>
-        <li>Conturile noi pot primi o perioadă gratuită de Premium. La final, contul revine la Free dacă nu te abonezi. Prețurile se pot schimba cu notificare înainte de următoarea reînnoire.</li>
-        <li>Plățile sunt procesate de Stripe. Consumatorii din UE au dreptul legal de retragere în 14 zile, care încetează odată ce serviciul digital a început cu acordul tău.</li>
-      </ul>
-      <h2>5. Utilizare acceptabilă</h2>
-      <ul>
-        <li>Nu copia, revinde sau redistribui datele ori conținutul, nu extrage automat date din serviciu, nu împărți conturi și nu încerca să-i compromiți securitatea.</li>
-        <li>Conținutul pe care îl faci public (watchlist-uri partajate, numele din clasament) trebuie să fie legal și să nu inducă în eroare; îl putem elimina.</li>
-      </ul>
-      <h2>6. Răspundere</h2>
-      <p>În limita maximă permisă de lege, Vnicorn nu răspunde pentru pierderi din tranzacționare sau investiții, profituri nerealizate ori daune indirecte rezultate din folosirea serviciului. Răspunderea noastră totală este limitată la suma plătită nouă în ultimele 12 luni. Nimic din acești termeni nu limitează răspunderea care nu poate fi limitată prin lege.</p>
-      <h2>7. Modificări și contact</h2>
-      <p>Putem actualiza acești termeni; te vom anunța în aplicație despre schimbările importante. Folosirea în continuare înseamnă acceptarea noilor termeni. Întrebări: folosește adresa de contact de pe site.</p>
-          </>
-        }
-      />
     </LegalPage>
   );
 }

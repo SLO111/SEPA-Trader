@@ -145,8 +145,8 @@ class DeleteIn(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
-PREF_DEFAULTS = {"theme": "dark", "default_interval": "1d", "start_page": "/chart", "compact_tables": False, "lang": "en"}
-PREF_CHOICES = {"theme": {"dark", "light", "system"}, "default_interval": {"5m", "15m", "1h", "1d", "1wk", "1mo"}, "lang": {"en", "ro"},
+PREF_DEFAULTS = {"theme": "dark", "default_interval": "1d", "start_page": "/chart", "compact_tables": False}
+PREF_CHOICES = {"theme": {"dark", "light", "system"}, "default_interval": {"5m", "15m", "1h", "1d", "1wk", "1mo"},
                 "start_page": {"/chart", "/markets", "/ideas", "/portfolios", "/feed"}}
 
 

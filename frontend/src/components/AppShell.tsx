@@ -8,7 +8,6 @@ import { api } from "@/lib/api";
 import Logo from "./Logo";
 import SymbolSearch from "./SymbolSearch";
 import { useAuth } from "@/lib/auth";
-import { useT } from "@/lib/i18n";
 
 // Compact navigation: related pages share one top-level hub with sub-tabs.
 const NAV: { label: string; tabs: { href: string; label: string; hidden?: boolean }[] }[] = [
@@ -46,7 +45,6 @@ export { Logo };
 
 export default function AppShell({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { user, loading, logout } = useAuth();
-  const t_ = useT();
   const router = useRouter();
   const pathname = usePathname();
   const [unread, setUnread] = useState(0);
@@ -135,7 +133,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
                 href={n.tabs[0].href}
                 className={`whitespace-nowrap rounded px-3 py-1.5 ${on ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
               >
-                {t_(n.label)}
+                {(n.label)}
                 {n.label === "Signals" && !user.limits.move_detector && <span className="ml-1 text-[10px]">🔒</span>}
                 {n.label === "Alerts" && unread > 0 && (
                   <span className="tabular ml-1.5 rounded-full bg-down px-1.5 py-0.5 text-[10px] font-semibold text-white">{unread > 99 ? "99+" : unread}</span>
@@ -164,7 +162,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
             }}
             className="hidden whitespace-nowrap rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text lg:block"
           >
-            {t_("Log out")}
+            {("Log out")}
           </button>
         </div>
         {menu && (
@@ -176,7 +174,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
                   href={t.href}
                   className={`flex items-center justify-between rounded-lg px-3 py-2.5 ${pathname.startsWith(t.href) ? "bg-panel-2 text-text" : "text-muted"}`}
                 >
-                  <span>{t_(t.label)}</span>
+                  <span>{(t.label)}</span>
                   {t.href === "/alerts" && unread > 0 && <span className="rounded-full bg-down px-2 text-xs text-white">{unread}</span>}
                   {t.label !== t.group && <span className="text-xs text-muted/70">{t.group}</span>}
                 </Link>
@@ -193,7 +191,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
                   }}
                   className="rounded border border-line px-3 py-1 text-muted"
                 >
-                  {t_("Log out")}
+                  {("Log out")}
                 </button>
               </span>
             </div>
@@ -208,7 +206,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
               href={t.href}
               className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 ${pathname.startsWith(t.href) ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}
             >
-              {t_(t.label)}
+              {(t.label)}
             </Link>
           ))}
         </div>

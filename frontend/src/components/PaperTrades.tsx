@@ -109,7 +109,7 @@ export default function PaperTrades({ source = "ideas" }: { source?: "ideas" | "
           {source === "copy" ? (
             <>
               Copy a trader on the <Link href="/leaderboard" className="text-accent hover:underline">Leaderboard</Link>: their new chart trades are mirrored here and close
-              together with theirs. Simulated, for learning.
+              together with theirs.
             </>
           ) : source === "chart" ? (
             <>
@@ -166,7 +166,7 @@ export default function PaperTrades({ source = "ideas" }: { source?: "ideas" | "
           </>
         );
       })()}
-      <p className="text-xs text-muted">Simulated with the idea&apos;s plan, from daily prices: half at the trim with the stop moved to break-even, the rest at the target or the stop.</p>
+      <p className="text-xs text-muted">Followed with the idea&apos;s plan, from daily prices: half at the trim with the stop moved to break-even, the rest at the target or the stop.</p>
     </div>
   );
 }
