@@ -637,3 +637,37 @@ def test_training_rows_stay_within_budget():
     d = ai.build_dataset(few, bench, budget=800)
     assert set(ai.MARKET_FEATURES) <= set(d["long"].columns) and {"stop_atr", "target_r", "y", "symbol", "date"} <= set(d["long"].columns)
     assert d["long"]["y"].isin([0, 1]).all() and np.isfinite(d["long"]["stop_atr"]).all()
+
+
+def test_setup_quotas_keep_trade_and_invest():
+    from types import SimpleNamespace as N
+
+    from engine.ideas import _with_quotas
+
+    longs = [N(symbol=f"S{i}", timeframe="SWING") for i in range(80)] + [N(symbol=f"T{i}", timeframe="TRADE") for i in range(5)] \
+        + [N(symbol=f"I{i}", timeframe="INVEST") for i in range(5)]
+    out = _with_quotas(longs, 60)
+    kinds = [i.timeframe for i in out]
+    assert len(out) == 60 and kinds.count("TRADE") == 5 and kinds.count("INVEST") == 5 and kinds.count("SWING") == 50
+
+
+def test_scan_and_alerts_pages(client, register):
+    from app.models import Alert, User
+
+    h, _ = register("pages-user@test.ro")
+    with SessionLocal() as db:
+        u = db.query(User).filter_by(email="pages-user@test.ro").one()
+        u.plan = "premium"
+        for i in range(60):
+            db.add(Alert(user_id=u.id, symbol=f"Z{i:03d}", type="price_above", severity="info", title=f"A{i}", message="m", bar_date="2026-11-17"))
+        db.commit()
+    first = client.get("/api/sepa/scan?limit=10", headers=h).json()
+    assert len(first["results"]) == min(10, first["count"]) and "has_more" in first
+    if first["count"] > 10:
+        second = client.get("/api/sepa/scan?limit=10&offset=10", headers=h).json()
+        assert {r["symbol"] for r in first["results"]}.isdisjoint({r["symbol"] for r in second["results"]})
+    a1 = client.get("/api/alerts?offset=0&limit=50", headers=h).json()
+    assert a1["count"] == 60 and len(a1["results"]) == 50 and a1["has_more"]
+    a2 = client.get("/api/alerts?offset=50&limit=50", headers=h).json()
+    assert len(a2["results"]) == 10 and not a2["has_more"]
+    assert isinstance(client.get("/api/alerts", headers=h).json(), list)  # without offset: the plain list, as before

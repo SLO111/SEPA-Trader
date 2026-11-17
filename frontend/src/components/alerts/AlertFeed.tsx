@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LoadMoreBlock, ShowingCount, useShowMore } from "@/lib/useInfinite";
 import type { AlertItem, Severity } from "@/lib/types";
 
 const DOT: Record<Severity, string> = { bull: "bg-up", bear: "bg-down", info: "bg-accent" };
@@ -31,6 +32,7 @@ type Props = {
 };
 
 export default function AlertFeed({ alerts, filter, onFilter, onRead, onDelete, loading }: Props) {
+  const page = useShowMore(alerts, filter); // 50 at a time, the next 50 on scroll
   return (
     <section className="flex min-h-0 flex-col rounded-xl border border-line bg-panel">
       <div className="flex flex-wrap gap-1 border-b border-line p-2">
@@ -49,7 +51,7 @@ export default function AlertFeed({ alerts, filter, onFilter, onRead, onDelete, 
         {!loading && alerts.length === 0 && (
           <li className="p-8 text-center text-sm text-muted">No alerts yet. Create a rule and alerts will show up here when it triggers.</li>
         )}
-        {alerts.map((a) => (
+        {page.visible.map((a) => (
           <li
             key={a.id}
             onClick={() => !a.read && onRead(a)}
@@ -83,7 +85,13 @@ export default function AlertFeed({ alerts, filter, onFilter, onRead, onDelete, 
             </div>
           </li>
         ))}
+        {page.hasMore && (
+          <li>
+            <LoadMoreBlock sentinel={page.sentinel} onClick={page.more} />
+          </li>
+        )}
       </ul>
+      {!loading && alerts.length > 50 && <div className="px-4 pb-3"><ShowingCount shown={page.visible.length} total={page.total} /></div>}
     </section>
   );
 }

@@ -118,8 +118,11 @@ def scan(
     min_score: float = Query(0, ge=0, le=100),
     template_only: bool = False,
     vcp_only: bool = False,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(current_user),
 ):
+    """One page of the scan (50 by default), best first for the chosen tab."""
     if not limits_for(user)["move_detector"]:
         raise HTTPException(403, "Move Detector and the scanner are available on Pro and Premium plans.")
     from .. import vnicorn_service
@@ -129,10 +132,9 @@ def scan(
         vnicorn_service.load(db)  # makes the stored major-move probabilities available after a restart
     pm = pulse_map() if limits_for(user)["pulse"] else {}
     ai = limits_for(user)["ai_picks"]
-    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"]) if ai else None, "pulse": pm.get(r["symbol"]),
-             "earnings_in": market_data.earnings_in_days(r["symbol"])} for r in cached_scan()]
     if sort == "ai" and not ai:
         raise HTTPException(403, "vnicornAI move probabilities are part of Premium.")
+    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"]) if ai else None} for r in cached_scan()]
     key = {"bull": "bull_score", "bear": "bear_score", "rs": "rs_rating", "ai": "ai_prob"}[sort]
     out = [
         r
@@ -142,7 +144,10 @@ def scan(
         and (not vcp_only or r["vcp"])
     ]
     out.sort(key=lambda r: -(r[key] or 0))
-    return {"provider": settings.data_provider, "count": len(out), "results": out}
+    # Pulse and the earnings badge only for the rows on this page
+    page = [{**r, "pulse": pm.get(r["symbol"]), "earnings_in": market_data.earnings_in_days(r["symbol"])} for r in out[offset:offset + limit]]
+    return {"provider": settings.data_provider, "count": len(out), "offset": offset, "has_more": offset + limit < len(out),
+            "results": page, "loading": market_data.loading()}
 
 
 @router.get("/pulse/leaders")

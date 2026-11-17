@@ -35,7 +35,7 @@ function AlertsWorkspace() {
   const [status, setStatus] = useState("");
 
   const loadAlerts = useCallback(() => {
-    api<AlertItem[]>(`/api/alerts?filter=${filter}`)
+    api<AlertItem[]>(`/api/alerts?filter=${filter}&limit=500`)
       .then(setAlerts)
       .finally(() => setLoading(false));
   }, [filter]);

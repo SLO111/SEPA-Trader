@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LoadMoreRow, useShowMore } from "@/lib/useInfinite";
 import { api, del, post } from "@/lib/api";
 import { num, usd } from "@/lib/format";
 import type { PortfolioDetail, PortfolioTxn } from "@/lib/types";
@@ -9,6 +10,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const field = "w-full rounded border border-line bg-bg px-2 py-1.5 text-sm outline-none focus:border-accent";
 
 export default function Transactions({ portfolioId, txns, onChange }: { portfolioId: number; txns: PortfolioTxn[]; onChange: (p: PortfolioDetail) => void }) {
+  const page = useShowMore(txns, String(portfolioId)); // 50 transactions at a time, the next 50 on scroll
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [symbol, setSymbol] = useState("");
   const [shares, setShares] = useState("");
@@ -107,7 +109,7 @@ export default function Transactions({ portfolioId, txns, onChange }: { portfoli
               </tr>
             </thead>
             <tbody>
-              {txns.map((t) => (
+              {page.visible.map((t) => (
                 <tr key={t.id} className="group border-t border-line">
                   <td className="tabular py-1.5 text-muted">{t.date}</td>
                   <td className={`py-1.5 capitalize ${t.side === "buy" ? "text-up" : "text-down"}`}>{t.side}</td>
@@ -122,6 +124,7 @@ export default function Transactions({ portfolioId, txns, onChange }: { portfoli
                   </td>
                 </tr>
               ))}
+              {page.hasMore && <LoadMoreRow sentinel={page.sentinel} colSpan={7} onClick={page.more} />}
             </tbody>
           </table>
         </div>

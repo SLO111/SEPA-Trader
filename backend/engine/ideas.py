@@ -223,7 +223,24 @@ def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long
 
     longs.sort(key=lambda i: -(i.score + i.rr * 5))
     shorts.sort(key=lambda i: -(i.score + i.rr * 5))
-    return diversify(longs, industry_of)[:max_long] + diversify(shorts, industry_of)[:max_short]
+    return _with_quotas(diversify(longs, industry_of), max_long) + diversify(shorts, industry_of)[:max_short]
+
+
+SETUP_SHARE = {"SWING": 0.5, "TRADE": 0.25, "INVEST": 0.25}  # of the daily long slots
+
+
+def _with_quotas(longs: list, max_long: int) -> list:
+    """Each setup gets its share of the slots first (SWING scores run higher, so with a large universe it would take
+    every slot and TRADE / INVEST ideas would never show); unused slots go to the best remaining ideas."""
+    quota = {k: max(1, int(max_long * v)) for k, v in SETUP_SHARE.items()}
+    first, rest, used = [], [], {}
+    for i in longs:
+        if used.get(i.timeframe, 0) < quota.get(i.timeframe, max_long):
+            used[i.timeframe] = used.get(i.timeframe, 0) + 1
+            first.append(i)
+        else:
+            rest.append(i)
+    return (first + rest)[:max_long]
 
 
 MIN_RR_SIGNALS = 1.5  # below this remaining reward/risk an idea is no longer offered in Signals

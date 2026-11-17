@@ -5,11 +5,14 @@ import EarningsBadge from "@/components/EarningsBadge";
 
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
+import { LoadMoreRow, ShowingCount, useShowMore } from "@/lib/useInfinite";
 import AppShell from "@/components/AppShell";
 import VnicornAICard from "@/components/VnicornAICard";
 import { ApiError, api, clearApiCache, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmt, pct, tone } from "@/lib/format";
+
+const SORTABLE: Record<string, "ai" | "rr" | "status"> = { "R/R": "rr", vnicornAI: "ai", Status: "status" };
 
 type Idea = {
   id: number; date: string; symbol: string; sector?: string; industry?: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
@@ -81,6 +84,8 @@ function Ideas() {
   const [open, setOpen] = useState<number | null>(null);
   const [tf, setTf] = useState<"ALL" | "AIPICKS" | "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI">("ALL");
   const [sector, setSector] = useState("");
+  // default: vnicornAI's expected value (best first); the R/R, vnicornAI and Status headers sort manually
+  const [sort, setSort] = useState<{ key: "ai" | "rr" | "status"; dir: 1 | -1 }>({ key: "ai", dir: -1 });
 
   const load = () =>
     api<Resp>(`/api/ideas?view=${view}`)
@@ -103,6 +108,25 @@ function Ideas() {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
+
+  const STATUS_ORDER: Record<string, number> = { BUY: 0, TRIM: 1, WAIT: 2, TARGET: 3, STOPPED: 4, CANCEL: 5 };
+  const rrOf = (i: Idea) => (i.rr_now ?? i.rr ?? 0);
+  const listed = (data?.ideas ?? [])
+    .filter((i) => match(i, tf) && (!sector || i.sector === sector))
+    .sort((a, b) => {
+      let d = 0;
+      if (sort.key === "ai") {
+        const x = a.ai?.ev ?? null, y = b.ai?.ev ?? null;
+        if (x === null && y !== null) return 1; // ideas vnicornAI didn't rate always last
+        if (y === null && x !== null) return -1;
+        d = ((x ?? 0) - (y ?? 0)) * sort.dir || (rrOf(a) - rrOf(b)) * -1;
+      } else if (sort.key === "rr") d = (rrOf(a) - rrOf(b)) * sort.dir;
+      else d = ((STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)) * sort.dir || rrOf(b) - rrOf(a);
+      return d;
+    });
+  const page = useShowMore(listed, `${tf}|${sector}|${view}|${sort.key}|${sort.dir}`);
+  const clickSort = (key: "ai" | "rr" | "status") =>
+    setSort((s0) => (s0.key === key ? { key, dir: (s0.dir * -1) as 1 | -1 } : { key, dir: key === "status" ? 1 : -1 }));
 
   if (locked) {
     return (
@@ -185,14 +209,21 @@ function Ideas() {
                       ["Ticker", ""], ["Entry / now", "text-right"], ["Stop", "text-right"], ["Trim", "text-right"], ["Target", "text-right"],
                       ["R/R", "text-center"], ["vnicornAI", ""], ["Setup", ""], ["Range", ""], ["Status", ""], ["", "sticky right-0 z-[1] bg-panel"],
                     ].map(([h, cls]) => (
-                      <th key={h || "action"} className={`whitespace-nowrap px-2 py-2.5 ${cls} ${h === "Ticker" ? "sticky left-0 z-[1] bg-panel pl-3" : ""}`}>{h}</th>
+                      <th key={h || "action"} className={`whitespace-nowrap px-2 py-2.5 ${cls} ${h === "Ticker" ? "sticky left-0 z-[1] bg-panel pl-3" : ""}`}>
+                        {SORTABLE[h] ? (
+                          <button onClick={() => clickSort(SORTABLE[h])} className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-text ${sort.key === SORTABLE[h] ? "text-text" : ""}`}>
+                            {h}
+                            <span className="w-2 text-[9px]">{sort.key === SORTABLE[h] ? (sort.dir === 1 ? "▲" : "▼") : ""}</span>
+                          </button>
+                        ) : h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {!data && <tr><td colSpan={11} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
                   {data?.ideas.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
-                  {data?.ideas.filter((i) => match(i, tf) && (!sector || i.sector === sector)).sort((a, b) => (tf === "AIPICKS" ? (b.ai?.ev ?? -9) - (a.ai?.ev ?? -9) : 0)).map((i) => {
+                  {page.visible.map((i) => {
                     const move = i.current !== null ? ((i.current / i.entry - 1) * 100 * (i.side === "short" ? -1 : 1)) : null;
                     return (
                       <Fragment key={i.id}>
@@ -300,9 +331,11 @@ function Ideas() {
                       </Fragment>
                     );
                   })}
+                  {page.hasMore && <LoadMoreRow sentinel={page.sentinel} colSpan={11} onClick={page.more} />}
                 </tbody>
               </table>
             </div>
+            {page.total > 50 && <div className="px-3 pb-3"><ShowingCount shown={page.visible.length} total={page.total} /></div>}
           </section>
 
           <aside className="grid content-start gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-1">

@@ -1,6 +1,7 @@
 "use client";
 
 import ExportButton from "@/components/ExportButton";
+import { LoadMoreRow, ShowingCount, useShowMore } from "@/lib/useInfinite";
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -70,6 +71,7 @@ function TradeChart({ t }: { t: Graded }) {
 function GradeTable({ rows, open, setOpen, noted, onNote, stickyTop }: {
   rows: Graded[]; open: string | null; setOpen: (v: string | null) => void; noted?: Set<string>; onNote?: () => void; stickyTop: string;
 }) {
+  const page = useShowMore(rows, String(rows.length > 0 ? rows[0].ref : "")); // 50 trades at a time
   return (
           <div className="overflow-x-auto rounded-xl border border-line lg:overflow-visible">
             <table className="w-full min-w-[820px] text-sm">
@@ -81,7 +83,7 @@ function GradeTable({ rows, open, setOpen, noted, onNote, stickyTop }: {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((t) => (
+                {page.visible.map((t) => (
                   <Fragment key={t.ref}>
                     <tr onClick={() => setOpen(open === t.ref ? null : t.ref)} className="cursor-pointer border-t border-line hover:bg-panel-2/40">
                       <td className="px-3 py-2">
@@ -125,8 +127,10 @@ function GradeTable({ rows, open, setOpen, noted, onNote, stickyTop }: {
                     )}
                   </Fragment>
                 ))}
+                {page.hasMore && <LoadMoreRow sentinel={page.sentinel} colSpan={9} onClick={page.more} />}
               </tbody>
             </table>
+            {page.total > 50 && <div className="px-3 pb-2"><ShowingCount shown={page.visible.length} total={page.total} /></div>}
           </div>
   );
 }

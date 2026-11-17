@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LoadMoreRow, ShowingCount, useInfiniteServer } from "@/lib/useInfinite";
 import AddToWatchlist from "@/components/AddToWatchlist";
 import AppShell from "@/components/AppShell";
 import { ScoreBar } from "@/components/ScoreBadge";
@@ -28,10 +29,19 @@ function Scanner() {
   const [minScore, setMinScore] = useState(0);
   const [templateOnly, setTemplateOnly] = useState(false);
   const [vcpOnly, setVcpOnly] = useState(false);
-  const [rows, setRows] = useState<ScanRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState("");
-  const [error, setError] = useState("");
+  const qs = new URLSearchParams({ sort: tab, min_score: String(minScore), template_only: String(templateOnly), vcp_only: String(vcpOnly), limit: "50" }).toString();
+  const scan = useInfiniteServer<ScanRow>(
+    (offset) => api<{ results: ScanRow[]; count: number; has_more: boolean }>(`/api/sepa/scan?${qs}&offset=${offset}`),
+    qs,
+    (r) => r.symbol,
+  );
+  const rows = scan.rows ?? [];
+  const loading = scan.rows === null && !scan.error;
+  const error = scan.error && !(scan.error instanceof ApiError && scan.error.status === 403) ? (scan.error as Error).message : "";
+  useEffect(() => {
+    if (scan.error instanceof ApiError && scan.error.status === 403) setLocked(scan.error.message);
+  }, [scan.error]);
 
   // Move Detector trades already open (Buy / Short here goes to Backtest → Move Detector trades)
   const [taken, setTaken] = useState<Set<string>>(new Set());
@@ -51,16 +61,6 @@ function Scanner() {
       alert(e instanceof Error ? e.message : String(e));
     }
   };
-
-  useEffect(() => {
-    setLoading(true);
-    setError("");
-    const qs = new URLSearchParams({ sort: tab, min_score: String(minScore), template_only: String(templateOnly), vcp_only: String(vcpOnly) });
-    api<{ results: ScanRow[] }>(`/api/sepa/scan?${qs}`)
-      .then((r) => setRows(r.results))
-      .catch((e) => (e instanceof ApiError && e.status === 403 ? setLocked(e.message) : setError(e.message)))
-      .finally(() => setLoading(false));
-  }, [tab, minScore, templateOnly, vcpOnly]);
 
   if (locked) {
     return (
@@ -119,6 +119,11 @@ function Scanner() {
 
         {error && <p className="mb-4 rounded-md bg-down/10 px-3 py-2 text-sm text-down">{error}</p>}
 
+        {scan.warming && (
+          <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+            Market data is still loading after a restart: {scan.warming.ready} of {scan.warming.total} stocks ready. The list fills in within a few minutes.
+          </p>
+        )}
         <div className="overflow-x-auto rounded-xl border border-line">
           <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">
@@ -221,9 +226,11 @@ function Scanner() {
                     </td>
                   </tr>
                 ))}
+              {!loading && scan.hasMore && <LoadMoreRow sentinel={scan.sentinel} colSpan={12} loading={scan.loadingMore} onClick={scan.loadMore} />}
             </tbody>
           </table>
         </div>
+        {!loading && <ShowingCount shown={rows.length} total={scan.total} />}
         <p className="mt-4 text-xs text-muted">
           Scores are probability estimates based on technical patterns, not certainties. For educational purposes only. Not financial advice.
         </p>

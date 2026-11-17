@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { LoadMoreRow, ShowingCount, useShowMore } from "@/lib/useInfinite";
 import PublicShell from "@/components/PublicShell";
 import { api, del, post, put } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -14,6 +15,7 @@ export default function LeaderboardPage() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<"month" | "90d" | "all">("month");
   const [rows, setRows] = useState<Row[] | null>(null);
+  const page = useShowMore(rows, period); // 50 traders at a time, the next 50 on scroll
   const [me, setMe] = useState<Me | null>(null);
   const [name, setName] = useState("");
   const [msg, setMsg] = useState("");
@@ -94,7 +96,7 @@ export default function LeaderboardPage() {
               <tbody>
                 {rows === null && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted">Loading…</td></tr>}
                 {rows?.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted">Nobody has 5 closed trades in this period yet. Be the first!</td></tr>}
-                {rows?.map((r) => (
+                {page.visible.map((r) => (
                   <tr key={r.user_id} className="border-t border-line">
                     <td className={`tabular px-3 py-2 font-semibold ${r.rank <= 3 ? "text-amber-300" : "text-muted"}`}>{r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank}</td>
                     <td className="px-3 py-2 font-medium">{r.display_name}{r.user_id === myId && <span className="ml-1 text-xs text-muted">(you)</span>}</td>
@@ -114,9 +116,11 @@ export default function LeaderboardPage() {
                     </td>
                   </tr>
                 ))}
+                {page.hasMore && <LoadMoreRow sentinel={page.sentinel} colSpan={8} onClick={page.more} />}
               </tbody>
             </table>
           </div>
+          {(rows?.length ?? 0) > 50 && <ShowingCount shown={page.visible.length} total={page.total} />}
           {user && <p className="text-xs text-muted">Copied trades are followed in <Link href="/backtest?tab=copy" className="text-accent hover:underline">Backtest → Copied trades</Link>.</p>}
         </div>
       </div>

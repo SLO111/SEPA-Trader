@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LoadMoreBlock, useSentinel } from "@/lib/useInfinite";
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import DailySummary from "@/components/DailySummary";
@@ -84,12 +85,22 @@ function Feed() {
     return () => clearInterval(id);
   }, [load]);
 
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const older = async () => {
-    if (!items?.length) return;
-    const r = await api<Item[]>(`/api/feed?kind=${kind}&limit=50&before_id=${items[items.length - 1].id}`);
-    setItems([...items, ...r]);
-    setMore(r.length === 50);
+    if (!items?.length || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const r = await api<Item[]>(`/api/feed?kind=${kind}&limit=50&before_id=${items[items.length - 1].id}`);
+      setItems((cur) => {
+        const have = new Set((cur ?? []).map((x) => x.id));
+        return [...(cur ?? []), ...r.filter((x) => !have.has(x.id))];
+      });
+      setMore(r.length === 50);
+    } finally {
+      setLoadingOlder(false);
+    }
   };
+  const sentinel = useSentinel(older, more); // the next 50 load when the end of the feed scrolls into view
 
   return (
     <div className="h-full overflow-y-auto">
@@ -139,11 +150,7 @@ function Feed() {
             </li>
           ))}
         </ul>
-        {more && items && items.length > 0 && (
-          <button onClick={older} className="mt-4 w-full rounded-md border border-line py-2 text-sm text-muted hover:text-text">
-            Load older
-          </button>
-        )}
+        {more && items && items.length > 0 && <LoadMoreBlock sentinel={sentinel} loading={loadingOlder} onClick={older} />}
         <p className="mt-6 text-center text-xs text-muted">For educational purposes only. Not financial advice.</p>
       </div>
     </div>

@@ -77,16 +77,22 @@ def event_types(user: User = Depends(current_user)):
 def list_alerts(
     filter: Literal["all", "unread", "bull", "bear", "info"] = "all",
     limit: int = Query(100, ge=1, le=500),
+    offset: int | None = Query(None, ge=0),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    """Your alerts, newest first. With `offset`: one page {count, has_more, results} for loading 50 at a time."""
     q = select(Alert).where(Alert.user_id == user.id)
     if filter == "unread":
         q = q.where(Alert.read.is_(False))
     elif filter in ("bull", "bear", "info"):
         q = q.where(Alert.severity == filter)
-    rows = db.scalars(q.order_by(Alert.created_at.desc(), Alert.id.desc()).limit(limit)).all()
-    return [alert_out(a) for a in rows]
+    if offset is None:
+        rows = db.scalars(q.order_by(Alert.created_at.desc(), Alert.id.desc()).limit(limit)).all()
+        return [alert_out(a) for a in rows]
+    total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+    rows = db.scalars(q.order_by(Alert.created_at.desc(), Alert.id.desc()).offset(offset).limit(limit)).all()
+    return {"count": total, "has_more": offset + len(rows) < total, "results": [alert_out(a) for a in rows]}
 
 
 @router.get("/alerts/unread-count")
