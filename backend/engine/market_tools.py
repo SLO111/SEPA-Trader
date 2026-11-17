@@ -95,25 +95,34 @@ def mover_rows(histories: dict[str, pd.DataFrame], meta: dict[str, dict]) -> lis
     for s, d in histories.items():
         if len(d) < 60:
             continue
-        c, v = d["close"], d["volume"]
-        last, prev = float(c.iloc[-1]), float(c.iloc[-2])
-        avg_vol = float(v.iloc[-51:-1].mean())
-        hi52, lo52 = float(d["high"].iloc[-252:].max()), float(d["low"].iloc[-252:].min())
-        rows.append({
-            "symbol": s, "name": meta.get(s, {}).get("name", s), "sector": meta.get(s, {}).get("sector", ""),
-            "price": round(last, 2), "change": round(last - prev, 2), "change_pct": round((last / prev - 1) * 100, 2),
-            "volume": int(v.iloc[-1]), "rel_volume": round(float(v.iloc[-1]) / avg_vol, 2) if avg_vol else None,
-            "dollar_volume": float(v.iloc[-1]) * last,
-            "week52_high": round(hi52, 2), "week52_low": round(lo52, 2),
-            "from_high_pct": round((last / hi52 - 1) * 100, 2), "from_low_pct": round((last / lo52 - 1) * 100, 2),
-            "new_high": bool(float(d["high"].iloc[-1]) >= hi52), "new_low": bool(float(d["low"].iloc[-1]) <= lo52),
-            "rsi14": round(float(rsi(c, 14).iloc[-1]), 1),
-            "above_ma50": bool(last > float(sma(c, 50).iloc[-1])),
-            "return_1w": round((last / float(c.iloc[-6]) - 1) * 100, 2),
-            "return_1m": round((last / float(c.iloc[-22]) - 1) * 100, 2),
-            "return_3m": round((last / float(c.iloc[-64]) - 1) * 100, 2) if len(c) > 64 else None,
-        })
+        try:  # one stock with broken data (a zero close, missing bars) must not empty the whole table
+            rows.append(_mover_row(s, d, meta))
+        except (ArithmeticError, ValueError, KeyError, IndexError, TypeError):
+            continue
     return rows
+
+
+def _mover_row(s: str, d: pd.DataFrame, meta: dict[str, dict]) -> dict:
+    c, v = d["close"], d["volume"]
+    last, prev = float(c.iloc[-1]), float(c.iloc[-2])
+    if not (last > 0 and prev > 0) or last != last:
+        raise ValueError("bad price")
+    avg_vol = float(v.iloc[-51:-1].mean())
+    hi52, lo52 = float(d["high"].iloc[-252:].max()), float(d["low"].iloc[-252:].min())
+    return {
+        "symbol": s, "name": meta.get(s, {}).get("name", s), "sector": meta.get(s, {}).get("sector", ""),
+        "price": round(last, 2), "change": round(last - prev, 2), "change_pct": round((last / prev - 1) * 100, 2),
+        "volume": int(v.iloc[-1]), "rel_volume": round(float(v.iloc[-1]) / avg_vol, 2) if avg_vol else None,
+        "dollar_volume": float(v.iloc[-1]) * last,
+        "week52_high": round(hi52, 2), "week52_low": round(lo52, 2),
+        "from_high_pct": round((last / hi52 - 1) * 100, 2), "from_low_pct": round((last / lo52 - 1) * 100, 2),
+        "new_high": bool(float(d["high"].iloc[-1]) >= hi52), "new_low": bool(float(d["low"].iloc[-1]) <= lo52),
+        "rsi14": round(float(rsi(c, 14).iloc[-1]), 1),
+        "above_ma50": bool(last > float(sma(c, 50).iloc[-1])),
+        "return_1w": round((last / float(c.iloc[-6]) - 1) * 100, 2),
+        "return_1m": round((last / float(c.iloc[-22]) - 1) * 100, 2),
+        "return_3m": round((last / float(c.iloc[-64]) - 1) * 100, 2) if len(c) > 64 else None,
+    }
 
 
 def movers(rows: list[dict], kind: str, limit: int = 10) -> list[dict]:
@@ -204,26 +213,33 @@ def screen_rows(movers_: list[dict], scan: list[dict], fundamentals: dict[str, d
     medians = {k: float(np.median(v)) for k, v in by_sector.items()}
     out = []
     for m in movers_:
-        f = fundamentals.get(m["symbol"], {})
-        s = sc.get(m["symbol"], {})
-        pe, g = f.get("pe"), f.get("eps_growth")
-        out.append({
-            **{k: m[k] for k in ("symbol", "name", "sector", "price", "change_pct", "from_high_pct", "rsi14", "above_ma50", "return_1m", "return_3m")},
-            "market_cap_b": f.get("market_cap_b"), "pe": pe, "eps_growth": g,
-            "peg": round(pe / g, 2) if pe and g and g > 0 else None,
-            "sector_pe": round(medians[m["sector"]], 1) if m["sector"] in medians else None,
-            "pe_vs_sector_pct": round((pe / medians[m["sector"]] - 1) * 100, 1) if pe and pe > 0 and m["sector"] in medians else None,
-            "dividend_yield": f.get("dividend_yield"), "beta": f.get("beta"),
-            "rs_rating": s.get("rs_rating"), "template_passed": s.get("template_passed"),
-            "bull_score": s.get("bull_score"), "bear_score": s.get("bear_score"), "vcp": s.get("vcp"),
-            **_ath(m, (aths or {}).get(m["symbol"])),
-        })
+        try:
+            out.append(_screen_row(m, fundamentals, sc, medians, aths))
+        except (ArithmeticError, ValueError, KeyError, TypeError):
+            continue
     return out
+
+
+def _screen_row(m: dict, fundamentals: dict, sc: dict, medians: dict, aths: dict | None) -> dict:
+    f = fundamentals.get(m["symbol"]) or {}
+    s = sc.get(m["symbol"], {})
+    pe, g = f.get("pe"), f.get("eps_growth")
+    return {
+        **{k: m[k] for k in ("symbol", "name", "sector", "price", "change_pct", "from_high_pct", "rsi14", "above_ma50", "return_1m", "return_3m")},
+        "market_cap_b": f.get("market_cap_b"), "pe": pe, "eps_growth": g,
+        "peg": round(pe / g, 2) if pe and g and g > 0 else None,
+        "sector_pe": round(medians[m["sector"]], 1) if m["sector"] in medians else None,
+        "pe_vs_sector_pct": round((pe / medians[m["sector"]] - 1) * 100, 1) if pe and pe > 0 and m["sector"] in medians else None,
+        "dividend_yield": f.get("dividend_yield"), "beta": f.get("beta"),
+        "rs_rating": s.get("rs_rating"), "template_passed": s.get("template_passed"),
+        "bull_score": s.get("bull_score"), "bear_score": s.get("bear_score"), "vcp": s.get("vcp"),
+        **_ath(m, (aths or {}).get(m["symbol"])),
+    }
 
 
 def _ath(m: dict, stored: dict | None) -> dict:
     """Distance to the all-time high; within 1% (or a new high) counts as at the ATH."""
-    ath = max(x for x in ((stored or {}).get("ath"), m.get("week52_high")) if x)
+    ath = max((x for x in ((stored or {}).get("ath"), m.get("week52_high")) if x), default=None)
     pct = round((m["price"] / ath - 1) * 100, 2) if ath else None
     return {"ath": round(ath, 2) if ath else None, "from_ath_pct": pct, "at_ath": pct is not None and pct >= -1}
 

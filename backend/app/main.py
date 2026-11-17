@@ -154,7 +154,8 @@ def health():
                 "prices_refreshed_at": st["prices_refreshed_at"], "live_updated_at": st.get("live_updated_at"),
                 "fundamentals_loaded": f"{st['slow_done']}/{st['slow_total']}",
                 "fundamentals_paused_until": store.slow_paused_until,
-                "universe_source": st.get("universe_source"), "last_error": st.get("last_error"), "last_error_at": st.get("last_error_at")}
+                "universe_source": st.get("universe_source"), "last_error": st.get("last_error"), "last_error_at": st.get("last_error_at"),
+                "screens_error": __import__("app.market_data", fromlist=["cache_error"]).cache_error}
     config = {
         # Booleans only: never expose secrets or emails on a public endpoint.
         "data_provider": settings.data_provider,

@@ -231,6 +231,7 @@ _fast_cache: dict[str, tuple[float, object]] = {}
 
 
 _key_locks: dict[str, threading.Lock] = {}
+cache_error: str | None = None  # last failed background refresh (shown in /api/health)
 _refreshing: set[str] = set()
 
 
@@ -296,7 +297,9 @@ def _refresh(key: str, loader) -> None:
         value = loader()
         with _lock:
             _fast_cache[key] = (time.monotonic(), value)
-    except Exception:
+    except Exception as e:
+        global cache_error
+        cache_error = f"{key}: {type(e).__name__}: {str(e)[:120]}"
         log.warning("Background refresh of %s failed; serving the previous value", key, exc_info=True)
     finally:
         with _lock:

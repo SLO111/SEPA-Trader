@@ -484,3 +484,25 @@ def test_final_close_bars_refreshed_before_a_batch(monkeypatch):
     calls.clear()
     ideas_service.run_ideas(None, force=True)  # the Regenerate button doesn't re-download
     assert not calls
+
+
+def test_one_broken_stock_does_not_empty_the_screens():
+    import numpy as np
+    import pandas as pd
+
+    from engine import market_tools as mt
+    from engine.scanner import scan_universe
+
+    p = SyntheticProvider()
+    hist = {s: p.history(s) for s in ("AAPL", "MSFT", "NVDA")}
+    bad = hist["AAPL"].copy()
+    bad.iloc[-2:, bad.columns.get_loc("close")] = 0.0  # a zero close
+    nan = hist["MSFT"].copy()
+    nan["close"] = np.nan
+    hist2 = {**hist, "ZBAD": bad, "ZNAN": nan}
+    rows = mt.mover_rows(hist2, universe.SYMBOLS)
+    assert {r["symbol"] for r in rows} == {"AAPL", "MSFT", "NVDA"}
+    screen = mt.screen_rows(rows + [{"symbol": "ZODD", "name": "x", "sector": "y"}], [], {}, {})
+    assert len(screen) == 3  # the malformed row is skipped
+    scan = scan_universe(lambda s: hist2[s] if s in hist2 else p.history(s), list(hist2))
+    assert {"AAPL", "MSFT", "NVDA"} <= {r["symbol"] for r in scan} and "ZNAN" not in {r["symbol"] for r in scan}
