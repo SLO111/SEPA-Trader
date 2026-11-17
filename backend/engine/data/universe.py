@@ -171,11 +171,11 @@ def parse_ishares_holdings(text: str) -> dict[str, dict]:
 
 # Stocks from the ready-made theme lists that may sit outside the indexes (always scanned with the sp500 universes).
 THEME_META: dict[str, dict] = {
-    "TSM": {"name": "Taiwan Semiconductor", "sector": "Technology", "exchange": "NYSE"},
+    "TSM": {"name": "Taiwan Semiconductor", "sector": "Technology", "exchange": "NYSE", "country": "Taiwan"},
     "SNDK": {"name": "Sandisk", "sector": "Technology", "exchange": "NASDAQ"},
     "PSTG": {"name": "Pure Storage", "sector": "Technology", "exchange": "NYSE"},
     "CRWV": {"name": "CoreWeave", "sector": "Technology", "exchange": "NASDAQ"},
-    "NBIS": {"name": "Nebius Group", "sector": "Technology", "exchange": "NASDAQ"},
+    "NBIS": {"name": "Nebius Group", "sector": "Technology", "exchange": "NASDAQ", "country": "Netherlands"},
     "VRT": {"name": "Vertiv Holdings", "sector": "Industrials", "exchange": "NYSE"},
     "SNOW": {"name": "Snowflake", "sector": "Technology", "exchange": "NYSE"},
     "NET": {"name": "Cloudflare", "sector": "Technology", "exchange": "NYSE"},
@@ -186,7 +186,7 @@ THEME_META: dict[str, dict] = {
     "RGTI": {"name": "Rigetti Computing", "sector": "Technology", "exchange": "NASDAQ"},
     "QBTS": {"name": "D-Wave Quantum", "sector": "Technology", "exchange": "NYSE"},
     "QUBT": {"name": "Quantum Computing Inc.", "sector": "Technology", "exchange": "NASDAQ"},
-    "CCJ": {"name": "Cameco", "sector": "Energy", "exchange": "NYSE"},
+    "CCJ": {"name": "Cameco", "sector": "Energy", "exchange": "NYSE", "country": "Canada"},
     "OKLO": {"name": "Oklo", "sector": "Utilities", "exchange": "NYSE"},
     "SMR": {"name": "NuScale Power", "sector": "Industrials", "exchange": "NYSE"},
     "NNE": {"name": "Nano Nuclear Energy", "sector": "Industrials", "exchange": "NASDAQ"},
@@ -196,8 +196,8 @@ THEME_META: dict[str, dict] = {
     "RIOT": {"name": "Riot Platforms", "sector": "Technology", "exchange": "NASDAQ"},
     "RIVN": {"name": "Rivian Automotive", "sector": "Consumer Discretionary", "exchange": "NASDAQ"},
     "LCID": {"name": "Lucid Group", "sector": "Consumer Discretionary", "exchange": "NASDAQ"},
-    "TM": {"name": "Toyota Motor", "sector": "Consumer Discretionary", "exchange": "NYSE"},
-    "NVO": {"name": "Novo Nordisk", "sector": "Health Care", "exchange": "NYSE"},
+    "TM": {"name": "Toyota Motor", "sector": "Consumer Discretionary", "exchange": "NYSE", "country": "Japan"},
+    "NVO": {"name": "Novo Nordisk", "sector": "Health Care", "exchange": "NYSE", "country": "Denmark"},
 }
 ETF_PRESETS = {"index-etfs", "sector-etfs"}
 NON_STOCK_THEME = {"IBIT"}
@@ -268,6 +268,12 @@ def parse_nasdaq_screener(payload: dict, min_price: float = 5.0) -> dict[str, di
                 break
         sector = (r.get("sector") or "").strip() or "Other"
         out.append((cap, sym, {"name": name.strip() or sym, "sector": NASDAQ_SECTORS.get(sector, sector), "exchange": "",
-                               "industry": (r.get("industry") or "").strip()}))
+                               "industry": (r.get("industry") or "").strip(), "country": (r.get("country") or "").strip()}))
     out.sort(key=lambda x: -x[0])
     return {s: m for _, s, m in out}
+
+
+def is_foreign(symbol: str) -> bool:
+    """A company based outside the US (its Finnhub figures may be in its own currency)."""
+    c = (SYMBOLS.get(symbol.upper(), {}).get("country") or "").strip()
+    return bool(c) and c not in ("United States", "USA", "US")

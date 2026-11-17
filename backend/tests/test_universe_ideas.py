@@ -92,7 +92,7 @@ def _wide_row(delete=False):
     from app.models import MarketCache
 
     with SessionLocal() as db:
-        row = db.scalar(select(MarketCache).where(MarketCache.key == "universe:wide"))
+        row = db.scalar(select(MarketCache).where(MarketCache.key == "universe:wide2"))
         payload = ds._unpack(row.payload) if row else None
         if row and delete:
             db.delete(row)
@@ -129,7 +129,7 @@ def test_refresh_universe_falls_back_to_nasdaq(monkeypatch, saved_universe):
     s.refresh_universe()
     fake = [x for x in universe.SYMBOLS if x.startswith("ZN")]
     assert len(fake) == 40 and "ZNAAA" in fake
-    assert universe.SYMBOLS["ZNAAA"] == {"name": "Fake 0", "sector": "Financials", "exchange": "", "industry": "Banks"}
+    assert universe.SYMBOLS["ZNAAA"] == {"name": "Fake 0", "sector": "Financials", "exchange": "", "industry": "Banks", "country": ""}
     assert s.status["universe_source"] == "nasdaq (40 mid caps)"
     _wide_row(delete=True)
 
@@ -148,7 +148,7 @@ def test_failed_midcaps_keep_universe_and_retry(monkeypatch, saved_universe):
     assert "ZKEEP" in universe.SYMBOLS and len(universe.stock_symbols()) >= n
     assert "ishares ConnectError" in s.status["universe_source"] and "nasdaq ReadTimeout" in s.status["universe_source"]
     assert _wide_row() is None  # nothing saved ...
-    assert s.stale("universe:wide", ds.UNIVERSE_TTL)  # ... so the next pass tries again
+    assert s.stale("universe:wide2", ds.UNIVERSE_TTL)  # ... so the next pass tries again
 
 
 def test_parse_nasdaq_screener_filters():
@@ -345,3 +345,36 @@ def test_foreign_company_amounts_in_usd(monkeypatch):
     monkeypatch.setitem(finnhub._fx, "XYZ", (1e18, None))
     assert finnhub.Finnhub.cap_usd_b({"currency": "XYZ", "marketCapitalization": 5}) is None
     assert finnhub.Finnhub.cap_usd_b({"currency": "USD", "marketCapitalization": 3_000_000}) == 3000.0
+
+
+def test_old_local_currency_caps_hidden_and_refetched_first(monkeypatch, saved_universe):
+    from app import market_data
+
+    universe.SYMBOLS["ZJPN"] = {"name": "Japan Co", "sector": "Health Care", "exchange": "", "country": "Japan"}
+    universe.SYMBOLS["ZUSA"] = {"name": "US Co", "sector": "Health Care", "exchange": "", "country": "United States"}
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    old = {"market_cap_b": 11070.0, "pe": 27.0, "source": "finnhub"}  # stored before the USD conversion
+    s.slow["fundamentals"]["ZJPN"] = dict(old)
+    s.slow["fundamentals"]["ZUSA"] = dict(old)
+    monkeypatch.setattr(ds, "get_store", lambda: s)
+    monkeypatch.setattr(market_data, "get_store", lambda: s)
+    assert market_data.cached("fundamentals", "ZJPN")["market_cap_b"] is None  # hidden until refreshed
+    assert market_data.cached("fundamentals", "ZJPN")["pe"] == 27.0  # ratios stay
+    assert market_data.cached("fundamentals", "ZUSA")["market_cap_b"] == 11070.0
+    assert universe.is_foreign("ZJPN") and not universe.is_foreign("ZUSA") and not universe.is_foreign("AAPL")
+
+    # the refresh fetches the foreign one first
+    order = []
+    monkeypatch.setattr(SyntheticProvider, "fundamentals", lambda self, sym: order.append(sym) or {"market_cap_b": 70.0, "ccy": "USD"})
+    monkeypatch.setattr(SyntheticProvider, "earnings", lambda self, sym: {"next_date": "2026-12-01", "history": []})
+    monkeypatch.setattr(ds, "SLOW_PAUSE", 0)
+    s.refresh_slow(["ZUSA", "ZJPN"])
+    assert order[0] == "ZJPN"
+    assert market_data.cached("fundamentals", "ZJPN")["market_cap_b"] == 70.0
+
+
+def test_parse_nasdaq_keeps_country():
+    out = universe.parse_nasdaq_screener({"data": {"rows": [
+        {"symbol": "IBN", "name": "ICICI Bank Limited Common Stock", "lastsale": "$30", "marketCap": "100,000,000,000",
+         "sector": "Finance", "industry": "Banks", "country": "India"}]}})
+    assert out["IBN"]["country"] == "India"

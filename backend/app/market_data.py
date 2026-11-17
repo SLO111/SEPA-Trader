@@ -138,7 +138,18 @@ def cached(kind: str, symbol: str) -> dict | None:
         return {"ath": float(d["high"].max()), "date": d["high"].idxmax().strftime("%Y-%m"), "partial": True}
     if store is None:
         return fundamentals(symbol) if kind == "fundamentals" else earnings(symbol)
-    return store.get_slow(kind, symbol.upper())
+    v = store.get_slow(kind, symbol.upper())
+    return _usd_guard(symbol, v) if kind == "fundamentals" else v
+
+
+def _usd_guard(symbol: str, f: dict | None) -> dict | None:
+    """Fundamentals stored before amounts were converted to US dollars: a foreign company's market cap may be in its
+    own currency (yen, rupees...), so it is hidden until the background refresh replaces it."""
+    if not f or f.get("ccy") == "USD" or f.get("market_cap_b") is None:
+        return f
+    from engine.data.universe import is_foreign
+
+    return {**f, "market_cap_b": None} if is_foreign(symbol) else f
 
 
 def fundamentals_fresh(symbol: str) -> dict:
@@ -149,7 +160,7 @@ def fundamentals_fresh(symbol: str) -> dict:
         return fundamentals(symbol)
     sym = symbol.upper()
     f = store.get_slow("fundamentals", sym)
-    if f and f.get("market_cap_b") is not None and not f.get("partial"):
+    if f and f.get("market_cap_b") is not None and not f.get("partial") and (f.get("ccy") == "USD" or f.get("source") != "finnhub"):
         return f
     try:
         fresh = get_provider(settings.data_provider).fundamentals(sym)
@@ -158,7 +169,7 @@ def fundamentals_fresh(symbol: str) -> dict:
             return fresh
     except Exception:
         pass
-    return f or {}
+    return _usd_guard(sym, f) or {}
 
 
 def symbol_meta(symbol: str) -> dict:
