@@ -31,7 +31,7 @@ def cached_scan() -> list[dict]:
         hit = _scan_cache.get(key)
         if hit and time.monotonic() - hit[0] < _TTL:
             return hit[1]
-        rows = scan_universe(market_data.history)
+        rows = scan_universe(market_data.stored_history)
         _scan_cache[key] = (time.monotonic(), rows)
         return rows
 
@@ -65,7 +65,7 @@ def pulse_map() -> dict[str, dict]:
         out = {}
         for s in stock_symbols():
             try:
-                p = pulse.summary(market_data.history(s), bench)
+                p = pulse.summary(market_data.stored_history(s), bench)
                 out[s] = {"conf": p["conf"], "warn": p["warn"], "tone": p["tone"]}
             except Exception:
                 continue

@@ -29,7 +29,7 @@ def _dataset():
             syms = sorted(syms, key=lambda s: -caps[s])[:150]
         for s in syms:
             try:
-                hist[s] = market_data.history(s)
+                hist[s] = market_data.stored_history(s)
             except Exception:
                 continue
         try:

@@ -35,7 +35,7 @@ def _histories() -> dict[str, pd.DataFrame]:
     out = {}
     for s in stock_symbols():
         try:
-            out[s] = market_data.history(s)
+            out[s] = market_data.stored_history(s)
         except Exception:
             continue
     return out

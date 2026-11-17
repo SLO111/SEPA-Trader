@@ -42,6 +42,19 @@ def history(symbol: str, interval: str = "1d", years: int = 3) -> pd.DataFrame:
     return df
 
 
+def stored_history(symbol: str) -> pd.DataFrame:
+    """Daily history for universe-wide screens (scan, screener, movers, ideas): only prices already downloaded by the
+    background refresh. A missing symbol is skipped (LookupError) instead of being fetched on the spot, so a screen over
+    hundreds of stocks never waits for hundreds of one-by-one downloads (e.g. right after a deploy or a wider universe)."""
+    store = get_store()
+    if store is None:
+        return history(symbol)
+    df = store.get_prices(symbol.upper().strip())
+    if df is None:
+        raise LookupError(f"No stored prices yet for {symbol}")
+    return df
+
+
 INTRADAY = {"5m", "15m", "1h"}
 
 

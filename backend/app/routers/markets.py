@@ -23,7 +23,7 @@ def _histories(symbols: list[str]) -> dict[str, pd.DataFrame]:
     out = {}
     for s in symbols:
         try:
-            out[s] = market_data.history(s)
+            out[s] = market_data.stored_history(s)
         except Exception:
             continue
     return out
