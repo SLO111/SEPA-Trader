@@ -378,3 +378,34 @@ def test_parse_nasdaq_keeps_country():
         {"symbol": "IBN", "name": "ICICI Bank Limited Common Stock", "lastsale": "$30", "marketCap": "100,000,000,000",
          "sector": "Finance", "industry": "Banks", "country": "India"}]}})
     assert out["IBN"]["country"] == "India"
+
+
+def test_screens_rebuilt_after_startup_load(monkeypatch):
+    """Screens computed while the store was half loaded are marked stale when loading ends (and short-lived meanwhile)."""
+    import threading
+
+    from app import market_data
+    from app.config import settings
+
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    key = f"{settings.data_provider}:screen-rows"
+    market_data._fast_cache[key] = (__import__("time").monotonic(), ["partial"])
+    monkeypatch.setattr(market_data, "get_store", lambda: s)
+    s.status["state"] = "loading"
+    assert market_data.screen_ttl(120) == 30 and market_data.loading()["total"] > 0
+    calls = []
+    s.on_prices_refreshed(lambda: calls.append("scan"))
+    done = threading.Event()
+    monkeypatch.setattr(s, "load_all", lambda: 0)
+    for name in ("refresh_universe", "refresh_directory", "refresh_prices", "refresh_slow"):
+        monkeypatch.setattr(s, name, lambda *a, **k: None)
+    monkeypatch.setattr(s, "refresh_ath", lambda *a, **k: done.set())
+    s.start(lambda: [], lambda: [], interval=3600)
+    try:
+        assert done.wait(5)
+        assert calls and calls[0] == "scan"
+        assert market_data._fast_cache[key][0] == float("-inf")  # rebuilt on the next request
+        assert market_data.loading() is None and market_data.screen_ttl(120) == 120
+    finally:
+        s._stop.set()
+        market_data._fast_cache.pop(key, None)

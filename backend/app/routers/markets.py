@@ -37,7 +37,7 @@ def _opt(symbol: str) -> pd.DataFrame | None:
 
 
 def _rows() -> list[dict]:
-    return market_data._fast(f"{settings.data_provider}:movers", 300, lambda: mt.mover_rows(_histories(stock_symbols()), SYMBOLS), stale_ok=True)
+    return market_data._fast(f"{settings.data_provider}:movers", market_data.screen_ttl(300), lambda: mt.mover_rows(_histories(stock_symbols()), SYMBOLS), stale_ok=True)
 
 
 def _fear_greed() -> dict:
@@ -211,7 +211,7 @@ def screener(
     if not paid:  # Free: the general information only (price, market cap, valuation, dividend)
         page = [{k: v for k, v in r.items() if k not in mt.PAID_SCREEN_FIELDS} for r in page]
     return {"count": len(out), "offset": offset, "has_more": offset + limit < len(out), "results": page, "locked": not paid,
-            "sort": key, "dir": dir}
+            "sort": key, "dir": dir, "loading": market_data.loading()}
 
 
 SCREEN_SORT_FREE = {"symbol", "price", "change_pct", "market_cap_b", "pe", "pe_vs_sector_pct", "eps_growth", "dividend_yield"}
@@ -225,7 +225,7 @@ def _screen_rows() -> list[dict]:
         aths = {s: market_data.cached("ath", s) for s in stock_symbols()}
         return mt.screen_rows(_rows(), cached_scan(), fundamentals, aths)
 
-    return market_data._fast(f"{settings.data_provider}:screen-rows", 120, build, stale_ok=True)
+    return market_data._fast(f"{settings.data_provider}:screen-rows", market_data.screen_ttl(120), build, stale_ok=True)
 
 
 

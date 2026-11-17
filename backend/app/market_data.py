@@ -262,6 +262,35 @@ def _fast(key: str, ttl: float, loader, stale_ok: bool = False):
         return value
 
 
+UNIVERSE_KEYS = ("movers", "screen-rows", "fg", "groups", "exposure", "pulse-map", "earnings", "bt-dataset", "bt-md")
+
+
+def mark_stale() -> None:
+    """New prices or a different universe: the market-wide screens are rebuilt in the background on the next request
+    (the previous result is served meanwhile)."""
+    keys = {f"{settings.data_provider}:{k}" for k in UNIVERSE_KEYS}
+    with _lock:
+        for k in list(_fast_cache):
+            if k in keys:
+                _fast_cache[k] = (float("-inf"), _fast_cache[k][1])
+
+
+def loading() -> dict | None:
+    """While the store is still reading saved prices at startup: {"ready": stocks with prices, "total": universe}."""
+    store = get_store()
+    if store is None or store.status.get("state") != "loading":
+        return None
+    from engine.data.universe import stock_symbols
+
+    syms = stock_symbols()
+    return {"ready": sum(1 for s in syms if s in store.prices), "total": len(syms)}
+
+
+def screen_ttl(normal: float) -> float:
+    """Short cache while prices are still loading, so a partial list doesn't stick."""
+    return 30 if loading() else normal
+
+
 def _refresh(key: str, loader) -> None:
     try:
         value = loader()

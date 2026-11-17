@@ -384,6 +384,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [warming, setWarming] = useState<{ ready: number; total: number } | null>(null);
   const [error, setError] = useState("");
   // sorted on the server, 50 rows at a time; default: largest market cap first
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
@@ -412,7 +413,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
     return qs.toString();
   }, [preset, filters, paid, sort]);
 
-  type Page = { results: ScreenRow[]; count: number; has_more: boolean };
+  type Page = { results: ScreenRow[]; count: number; has_more: boolean; loading?: { ready: number; total: number } | null };
   useEffect(() => {
     if (EXT_PRESETS.some((p) => p.id === preset)) return;
     const id = ++reqId.current;
@@ -425,6 +426,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
           setRows(r.results);
           setTotal(r.count);
           setHasMore(r.has_more);
+          setWarming(r.loading ?? null);
         })
         .catch((e) => setError(e.message));
     }, 250);
@@ -523,6 +525,11 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
         </div>
       )}
       {error && <Failed msg={error} />}
+      {warming && (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+          Market data is still loading after a restart: {warming.ready} of {warming.total} stocks ready. The list fills in within a few minutes.
+        </p>
+      )}
       {paid && <div className="flex justify-end"><ExportButton path={`/api/export/screener${preset ? `?preset=${preset}` : ""}`} filename={`screener-${preset || "all"}.csv`} /></div>}
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className={`w-full text-sm ${paid ? "min-w-[1100px]" : "min-w-[760px]"}`}>

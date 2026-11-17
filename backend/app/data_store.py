@@ -247,6 +247,20 @@ class DataStore:
     def on_prices_refreshed(self, fn: Callable[[], None]) -> None:
         self._listeners.append(fn)
 
+    def _notify(self) -> None:
+        """Prices or the universe changed: rebuild the shared screens (scan, movers, screener...) in the background."""
+        for fn in self._listeners:
+            try:
+                fn()
+            except Exception:
+                log.exception("Price-refresh listener failed")
+        try:
+            from . import market_data
+
+            market_data.mark_stale()
+        except Exception:
+            log.debug("Marking screens stale failed", exc_info=True)
+
     def _error(self, step: str, e: Exception) -> None:
         self.status.update(last_error=f"{step}: {_short(e)}", last_error_at=_now().isoformat())
 
@@ -289,6 +303,8 @@ class DataStore:
         added = extend(entries)
         self._save(key, entries)
         self.updated[key] = _now()
+        if added:
+            self._notify()
         if source:
             n_extra = sum(1 for s in entries if s in (mids or {}) and s not in sp500)
             self.status["universe_source"] = f"{source} ({n_extra} mid caps)"
@@ -368,11 +384,7 @@ class DataStore:
                     self._error("prices", e)
         if done:
             self.status["prices_refreshed_at"] = _now()
-            for fn in self._listeners:
-                try:
-                    fn()
-                except Exception:
-                    log.exception("Price-refresh listener failed")
+            self._notify()
         return done
 
     def refresh_slow(self, symbols: list[str], stop: threading.Event | None = None) -> int:
@@ -441,6 +453,8 @@ class DataStore:
                 self.load_all()
             except Exception:
                 log.exception("Loading the market cache failed")
+            self.status["state"] = "refreshing"
+            self._notify()  # screens computed from a half-loaded store are rebuilt now
             while not stop.is_set():
                 self.status["state"] = "refreshing"
                 errors_before = self.status.get("last_error_at")
@@ -480,8 +494,7 @@ class DataStore:
                         if time.monotonic() - last_full >= FULL_INTERVAL:
                             self.refresh_live(symbols_fn(), persist=True)
                             last_full = time.monotonic()
-                            for fn in self._listeners:
-                                fn()
+                            self._notify()
                         self.status["live_updated_at"] = _now()
                     except Exception:
                         log.exception("Live update failed")

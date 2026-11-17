@@ -57,7 +57,7 @@ def cached_scan() -> list[dict]:
     key = settings.data_provider
     with _lock:
         hit = _scan_cache.get(key)
-        if hit and time.monotonic() - hit[0] < _TTL:
+        if hit and time.monotonic() - hit[0] < market_data.screen_ttl(_TTL):
             return hit[1]
         if hit and hit[1]:
             if not _rebuilding:
@@ -69,7 +69,7 @@ def cached_scan() -> list[dict]:
     with _build_lock:  # first build: concurrent requests wait for one computation
         with _lock:
             hit = _scan_cache.get(key)
-            if hit and time.monotonic() - hit[0] < _TTL:
+            if hit and time.monotonic() - hit[0] < market_data.screen_ttl(_TTL):
                 return hit[1]
     return _build_scan(key)
 
