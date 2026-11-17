@@ -110,3 +110,30 @@ def data_check(symbol: str = "AAPL", _: User = Depends(admin_user)):
     else:
         probe("finnhub", lambda: {k: v for k, v in fh.fundamentals(sym).items() if k in ("name", "market_cap_b", "pe", "beta")})
     return out
+
+
+class SettingsPatch(BaseModel):
+    news_level: Literal["off", "low", "medium", "high"] | None = None
+
+
+def _settings_out(db: Session) -> dict:
+    from ..app_settings import NEWS_LEVELS, news_config
+
+    level, _ = news_config(db)
+    return {"news_level": level,
+            "news_levels": [{"id": k, "label": v["label"], "help": v["help"], "keep_days": v["keep_days"]} for k, v in NEWS_LEVELS.items()]}
+
+
+@router.get("/settings")
+def get_settings(_: User = Depends(admin_user), db: Session = Depends(get_db)):
+    return _settings_out(db)
+
+
+@router.patch("/settings")
+def patch_settings(body: SettingsPatch, _: User = Depends(admin_user), db: Session = Depends(get_db)):
+    from .. import app_settings, ideas_service
+
+    if body.news_level is not None:
+        app_settings.put(db, "news_level", body.news_level)
+        ideas_service.purge_news(db, app_settings.NEWS_LEVELS[body.news_level]["keep_days"])
+    return _settings_out(db)

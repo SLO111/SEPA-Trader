@@ -110,7 +110,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
   useEffect(() => {
     if (!active) return;
     loadQuotes(active.symbols).catch(() => {});
-    const id = setInterval(() => loadQuotes(active.symbols).catch(() => {}), 60_000);
+    const id = setInterval(() => { if (!document.hidden) loadQuotes(active.symbols).catch(() => {}); }, 60_000);
     return () => clearInterval(id);
   }, [active, loadQuotes]);
 

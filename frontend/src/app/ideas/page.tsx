@@ -75,7 +75,7 @@ function Ideas() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 120_000);
+    const id = setInterval(() => { if (!document.hidden) load(); }, 120_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);

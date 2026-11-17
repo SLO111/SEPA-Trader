@@ -89,7 +89,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
     if (!user) return;
     const load = () => api<{ count: number }>("/api/alerts/unread-count").then((r) => setUnread(r.count)).catch(() => {});
     load();
-    const id = setInterval(load, 60_000);
+    const id = setInterval(() => { if (!document.hidden) load(); }, 60_000);
     window.addEventListener("alerts-changed", load);
     return () => {
       clearInterval(id);

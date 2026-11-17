@@ -303,3 +303,34 @@ def test_suggestions_follow_portfolio_profile(client, register):
     for s in r["suggestions"]:
         assert label in s["reason"] and s["symbol"] not in held
         assert (market_data.fundamentals(s["symbol"]).get("beta") or 1.0) <= 1.3  # defensive names, not high-flyers
+
+
+def test_news_level_setting_limits_headlines(client, register):
+    from email.utils import format_datetime
+
+    from app import app_settings, ideas_service
+    from app.models import AppSetting, FeedItem, User
+
+    h, _ = register("news-admin@test.ro")
+    with SessionLocal() as db:
+        db.query(User).filter_by(email="news-admin@test.ro").one().role = "admin"
+        db.commit()
+    assert client.get("/api/admin/settings", headers=h).json()["news_level"] == "medium"
+    r = client.patch("/api/admin/settings", json={"news_level": "low"}, headers=h)
+    assert r.status_code == 200 and r.json()["news_level"] == "low"
+    assert client.patch("/api/admin/settings", json={"news_level": "lots"}, headers=h).status_code == 422
+    now = format_datetime(datetime.now(timezone.utc)).encode()
+    feed = b"<rss><channel>" + b"".join(
+        b"<item><title>Low level headline %d on stocks</title><link>https://example.com/l%d</link><pubDate>%s</pubDate></item>" % (i, i, now)
+        for i in range(40)) + b"</channel></rss>"
+    try:
+        with SessionLocal() as db:
+            assert ideas_service.refresh_news(db, None, fetch=lambda url: feed) == 15  # "low": 15 per pass
+            client.patch("/api/admin/settings", json={"news_level": "off"}, headers=h)
+            assert ideas_service.refresh_news(db, None, fetch=lambda url: feed) == 0
+            assert not ideas_service._news_due(db)
+    finally:
+        with SessionLocal() as db:
+            db.query(FeedItem).filter(FeedItem.title.like("Low level headline%")).delete(synchronize_session=False)
+            db.query(AppSetting).filter_by(key="news_level").delete()
+            db.commit()

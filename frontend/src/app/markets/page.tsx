@@ -60,7 +60,7 @@ function Markets() {
     if (tab !== "overview") return;
     const load = () => api<Overview>("/api/markets/overview").then(setOverview).catch((e) => setError(e.message));
     if (!overview) load();
-    const id = setInterval(load, 120_000);
+    const id = setInterval(() => { if (!document.hidden) load(); }, 120_000);
     return () => clearInterval(id);
   }, [tab, overview]);
 

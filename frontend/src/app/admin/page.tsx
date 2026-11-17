@@ -11,6 +11,46 @@ type Stats = {
   past_due: number; canceling: number; revenue_30d: number; failed_payments_30d: number; churned_30d: number;
   recent_payments: { date: string; email: string | null; amount: number; currency: string; status: string }[];
 };
+type NewsLevel = { id: string; label: string; help: string; keep_days: number };
+
+function NewsSetting() {
+  const [s, setS] = useState<{ news_level: string; news_levels: NewsLevel[] } | null>(null);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    api<{ news_level: string; news_levels: NewsLevel[] }>("/api/admin/settings").then(setS).catch(() => {});
+  }, []);
+  if (!s) return null;
+  const choose = async (id: string) => {
+    setS(await patch<typeof s>("/api/admin/settings", { news_level: id }));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+  const cur = s.news_levels.find((l) => l.id === s.news_level);
+  return (
+    <div className="mb-8 rounded-xl border border-line bg-panel p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-semibold">News in the feed</h2>
+          <p className="text-xs text-muted">Fewer headlines means less work for the server (fetching, tagging and storing).</p>
+        </div>
+        <div className="flex gap-1 rounded-lg bg-panel-2 p-1">
+          {s.news_levels.map((l) => (
+            <button key={l.id} onClick={() => choose(l.id)}
+              className={`rounded-md px-3 py-1 text-sm ${l.id === s.news_level ? "bg-accent text-white" : "text-muted hover:text-text"}`}>
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {cur && (
+        <p className="mt-2 text-xs text-muted">
+          {cur.help} Headlines older than {cur.keep_days} days are removed.{saved && <span className="ml-2 text-up">Saved.</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const money = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 function AdminPanel() {
@@ -54,6 +94,7 @@ function AdminPanel() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
         <h1 className="mb-6 text-xl font-semibold">Admin panel</h1>
+        <NewsSetting />
         <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
           {tiles.map((t) => (
             <div key={t.label} className="rounded-xl border border-line bg-panel p-4">

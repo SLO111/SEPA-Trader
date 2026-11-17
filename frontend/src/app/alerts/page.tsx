@@ -43,7 +43,7 @@ function AlertsWorkspace() {
   useEffect(() => {
     setLoading(true);
     loadAlerts();
-    const id = setInterval(loadAlerts, 60_000);
+    const id = setInterval(() => { if (!document.hidden) loadAlerts(); }, 60_000);
     return () => clearInterval(id);
   }, [loadAlerts]);
 

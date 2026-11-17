@@ -279,7 +279,7 @@ function Portfolios() {
     if (selected === null || selLocked) return setDetail(null);
     const load = () => api<PortfolioDetail>(`/api/portfolios/${selected}`).then(setDetail).catch((e) => setError(e.message));
     load();
-    const id = setInterval(load, 60_000);
+    const id = setInterval(() => { if (!document.hidden) load(); }, 60_000);
     return () => clearInterval(id);
   }, [selected, selLocked]);
 

@@ -514,3 +514,12 @@ class SentimentVote(Base):
     symbol: Mapped[str] = mapped_column(String(16), index=True)
     vote: Mapped[str] = mapped_column(String(8))  # bull | bear
     voted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AppSetting(Base):
+    """App-wide settings chosen by the admin (e.g. how many news headlines the feed collects), as JSON values."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="null")

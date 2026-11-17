@@ -60,6 +60,7 @@ function StockPage() {
   // Live quote in the header, refreshed every minute.
   useEffect(() => {
     const id = setInterval(() => {
+      if (document.hidden) return;
       api<StockData["quote"][]>(`/api/market/quotes?symbols=${encodeURIComponent(symbol)}`)
         .then(([q]) => q && !q.error && setData((d) => (d ? { ...d, quote: q } : d)))
         .catch(() => {});

@@ -146,7 +146,9 @@ def publish_summary(db: Session, day: date, hist: dict[str, pd.DataFrame], ideas
 
     from .routers.markets import _fear_greed, _indices
 
-    rows = mt.mover_rows(hist, SYMBOLS)
+    from .routers.markets import _rows
+
+    rows = _rows()  # the shared, cached movers table (not recomputed for every pass)
     cycle = []
     for sym, label in (("SPY", "S&P 500"), ("QQQ", "Nasdaq 100"), ("IWM", "Russell 2000")):
         try:
@@ -218,16 +220,37 @@ def refresh_statuses(db: Session) -> int:
 
 
 def add_feed(db: Session, items: list[dict]) -> int:
-    n = 0
+    """Store new feed items: one query finds the keys already stored, the rest are inserted together."""
+    if not items:
+        return 0
+    keys = list(dict.fromkeys(it["key"] for it in items))
+    have: set[str] = set()
+    for i in range(0, len(keys), 500):
+        have |= set(db.scalars(select(FeedItem.key).where(FeedItem.key.in_(keys[i:i + 500]))).all())
+    fresh, seen = [], set(have)
     for it in items:
-        try:
-            with db.begin_nested():
-                db.add(FeedItem(**{k: it.get(k) for k in ("key", "kind", "symbol", "severity", "title", "body", "url")}))
-            n += 1
-        except IntegrityError:
+        if it["key"] in seen:
             continue
-    db.commit()
-    return n
+        seen.add(it["key"])
+        fresh.append(FeedItem(**{k: it.get(k) for k in ("key", "kind", "symbol", "severity", "title", "body", "url")}))
+    if not fresh:
+        return 0
+    db.add_all(fresh)
+    try:
+        db.commit()
+        return len(fresh)
+    except IntegrityError:  # another writer stored some of them meanwhile: fall back to one by one
+        db.rollback()
+        n = 0
+        for row in fresh:
+            try:
+                with db.begin_nested():
+                    db.add(FeedItem(**{c: getattr(row, c) for c in ("key", "kind", "symbol", "severity", "title", "body", "url")}))
+                n += 1
+            except IntegrityError:
+                continue
+        db.commit()
+        return n
 
 
 def build_feed(db: Session) -> int:
@@ -236,7 +259,9 @@ def build_feed(db: Session) -> int:
         return 0
     day = max(df.index[-1] for df in hist.values()).date()
     scan = _scan()
-    rows = mt.mover_rows(hist, SYMBOLS)
+    from .routers.markets import _rows
+
+    rows = _rows()  # the shared, cached movers table (not recomputed for every pass)
     try:
         bench = market_data.history("SPY")
     except Exception:
@@ -247,7 +272,7 @@ def build_feed(db: Session) -> int:
     from engine.data.providers import _finnhub
 
     n = add_feed(db, items)
-    if settings.data_provider != "synthetic":
+    if settings.data_provider != "synthetic" and _news_due(db):
         try:
             n += refresh_news(db, _finnhub())
         except Exception:
@@ -256,14 +281,59 @@ def build_feed(db: Session) -> int:
 
 
 _news_cursor = 0
+_news_last = 0.0  # monotonic time of the last news pass
+_names_cache: tuple[int, list] | None = None
+
+
+def _news_due(db: Session) -> bool:
+    import time
+
+    from .app_settings import news_config
+
+    _, cfg = news_config(db)
+    if not cfg["per_pass"]:
+        purge_news(db, cfg["keep_days"])
+        return False
+    return time.monotonic() - _news_last >= cfg["every_min"] * 60 - 30
+
+
+def purge_news(db: Session, keep_days: int) -> int:
+    """Headlines older than `keep_days` are deleted (other feed items stay: they form the history)."""
+    from datetime import timedelta
+
+    cut = datetime.now(timezone.utc) - timedelta(days=keep_days)
+    n = db.query(FeedItem).filter(FeedItem.kind == "news", FeedItem.created_at < cut).delete(synchronize_session=False)
+    db.commit()
+    return n
+
+
+def _name_index(syms: list[str]) -> list:
+    """Company-name patterns for tagging headlines, compiled once per universe (not on every pass)."""
+    global _names_cache
+    from engine import news
+
+    key = hash(tuple(syms))
+    if _names_cache is None or _names_cache[0] != key:
+        _names_cache = (key, news.name_index({s: SYMBOLS.get(s, {}) for s in syms}))
+    return _names_cache[1]
 
 
 def refresh_news(db: Session, fh=None, fetch=None) -> int:
-    """Headlines from publishers' RSS feeds and Finnhub (general, M&A, company news for a rotating set of stocks)."""
-    global _news_cursor
+    """Headlines from publishers' RSS feeds and Finnhub, as much as the admin's News setting allows."""
+    global _news_cursor, _news_last
+    import time
+
     import httpx
 
     from engine import news
+
+    from .app_settings import news_config
+
+    _, cfg = news_config(db)
+    _news_last = time.monotonic()
+    purge_news(db, cfg["keep_days"])
+    if not cfg["per_pass"]:
+        return 0
 
     def get(url: str) -> bytes:
         r = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (compatible; VnicornNews/1.0)"})
@@ -271,11 +341,17 @@ def refresh_news(db: Session, fh=None, fetch=None) -> int:
         return r.content
 
     syms = stock_symbols()
-    batch = syms[_news_cursor:_news_cursor + 20] if syms else []  # ~20 company-news calls per pass, within Finnhub's limit
-    _news_cursor = (_news_cursor + 20) % max(len(syms), 1)
-    raw = news.collect(fetch or get, fh, batch)
-    names = news.name_index({s: SYMBOLS.get(s, {}) for s in syms})
-    return add_feed(db, news.to_feed_items(raw, set(syms), names))
+    k = cfg["company"]
+    batch = syms[_news_cursor:_news_cursor + k] if syms and k else []  # company news for a rotating set of stocks
+    if k:
+        _news_cursor = (_news_cursor + k) % max(len(syms), 1)
+    raw = news.collect(fetch or get, fh if cfg["finnhub"] or batch else None, batch, finnhub_general=cfg["finnhub"])
+    keys = news.keys_of(raw)
+    have: set[str] = set()
+    for i in range(0, len(keys), 500):
+        have |= set(db.scalars(select(FeedItem.key).where(FeedItem.key.in_(keys[i:i + 500]))).all())
+    items = news.to_feed_items(raw, set(syms), _name_index(syms), skip_keys=have, limit=cfg["per_pass"])
+    return add_feed(db, items)
 
 
 def due_for_ideas(db: Session, now: datetime | None = None) -> bool:

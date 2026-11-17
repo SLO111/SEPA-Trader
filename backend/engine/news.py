@@ -100,10 +100,12 @@ def _key(title: str) -> str:
     return "news:" + hashlib.sha1(norm.encode()).hexdigest()[:16]
 
 
-def to_feed_items(items: list[dict], known: set[str], names: list[tuple[re.Pattern, str]], now: datetime | None = None) -> list[dict]:
-    """Feed items (kind "news"), newest first, one per headline even if several publishers carry it."""
+def to_feed_items(items: list[dict], known: set[str], names: list[tuple[re.Pattern, str]], now: datetime | None = None,
+                  skip_keys: set[str] | None = None, limit: int | None = None) -> list[dict]:
+    """Feed items (kind "news"), newest first, one per headline even if several publishers carry it.
+    Headlines already stored (skip_keys) are dropped and at most `limit` are kept before the (costly) ticker tagging."""
     now = now or datetime.now(timezone.utc)
-    seen, out = set(), []
+    seen, fresh = set(skip_keys or ()), []
     for n in sorted(items, key=lambda x: x.get("published") or now, reverse=True):
         if n.get("published") and now - n["published"] > MAX_AGE:
             continue
@@ -111,10 +113,19 @@ def to_feed_items(items: list[dict], known: set[str], names: list[tuple[re.Patte
         if k in seen:
             continue
         seen.add(k)
+        fresh.append((k, n))
+        if limit is not None and len(fresh) >= limit:
+            break
+    out = []
+    for k, n in fresh:
         syms = n.get("symbols") or tickers(f"{n['title']} {n.get('summary', '')}", known, names)
         out.append({"key": k, "kind": "news", "symbol": syms[0] if syms else None, "severity": "info", "title": n["title"],
                     "body": n.get("summary", ""), "url": n["url"]})
     return out
+
+
+def keys_of(items: list[dict]) -> list[str]:
+    return list(dict.fromkeys(_key(n["title"]) for n in items if n.get("title")))
 
 
 def finnhub_items(rows: list[dict], source_default: str = "Finnhub") -> list[dict]:
@@ -130,7 +141,7 @@ def finnhub_items(rows: list[dict], source_default: str = "Finnhub") -> list[dic
     return out
 
 
-def collect(fetch, fh=None, company_symbols: list[str] | None = None) -> list[dict]:
+def collect(fetch, fh=None, company_symbols: list[str] | None = None, finnhub_general: bool = True) -> list[dict]:
     """All headlines: fetch(url) -> bytes for the RSS feeds (failures skipped), plus Finnhub when configured."""
     items: list[dict] = []
     for source, url in RSS_FEEDS:
@@ -138,12 +149,13 @@ def collect(fetch, fh=None, company_symbols: list[str] | None = None) -> list[di
             items += parse_feed(fetch(url), source)
         except Exception:
             continue
-    if fh is not None:
+    if fh is not None and finnhub_general:
         for cat in ("general", "merger"):
             try:
                 items += finnhub_items(fh.get("/news", category=cat) or [])
             except Exception:
                 pass
+    if fh is not None:
         for sym in company_symbols or []:
             try:
                 items += finnhub_items(fh.news(sym, days=2))
