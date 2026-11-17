@@ -477,7 +477,12 @@ def _trades_for(user: User, db: Session, source: str, portfolio_id: int | None =
 
             rows_ = db.scalars(select(PortfolioTxn).where(PortfolioTxn.portfolio_id == p.id)).all()
             stmt = set(db.scalars(select(TxnOrigin.txn_id).where(TxnOrigin.txn_id.in_([x.id for x in rows_]), TxnOrigin.origin == "statement")).all()) if rows_ else set()
-            txns = [{"date": x.date.isoformat(), "symbol": x.symbol, "side": x.side, "shares": x.shares, "price": x.price, "statement": x.id in stmt}
+            # positions imported before the origin was recorded: a statement shows up as several buys on one day
+            from collections import Counter
+
+            buys_per_day = Counter(x.date for x in rows_ if x.side == "buy")
+            txns = [{"date": x.date.isoformat(), "symbol": x.symbol, "side": x.side, "shares": x.shares, "price": x.price,
+                     "statement": x.id in stmt or (x.side == "buy" and buys_per_day[x.date] >= 3 and not stmt)}
                     for x in rows_]
             for i, rt in enumerate(round_trips(txns)):
                 out.append({**rt, "source": f"Portfolio: {p.name}", "ref": f"pf:{p.id}:{i}"})

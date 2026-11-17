@@ -149,7 +149,7 @@ function Backtest() {
       <div className="mx-auto max-w-7xl p-4 sm:p-6">
         <h1 className="text-xl font-semibold">Backtesting</h1>
         <p className="mb-4 text-sm text-muted">Does it actually work? Follow the ideas you took, and test the algorithm and strategies on historical data before trusting them with money.</p>
-        <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
+        <nav className="sticky top-0 z-20 mb-5 flex h-10 items-end gap-1 overflow-x-auto border-b border-line bg-bg">
           {([["chart", "Chart trades"], ["copy", "Copied trades"], ["trades", "Idea trades"], ["mdtrades", "Move Detector trades"], ["grader", "TradeGrader"], ["analytics", "Analytics"], ["strategy", "Strategy backtest"], ["builder", "Strategy builder"]] as const).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${tab === id ? "border-accent text-text" : "border-transparent text-muted hover:text-text"}`}>
               {label}

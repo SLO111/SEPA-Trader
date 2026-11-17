@@ -18,6 +18,7 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [presets, setPresets] = useState(false);
+  const [dragSec, setDragSec] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -335,8 +336,27 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
                   <div key={sc.id}>
                     <div
                       data-section-header={sc.id}
-                      className={`group flex items-center gap-1.5 border-t border-line bg-panel-2/40 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${dragging ? "ring-1 ring-inset ring-accent/30" : ""}`}
+                      draggable
+                      onDragStart={(e) => {
+                        setDragSec(sc.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragOver={(e) => dragSec && e.preventDefault()}
+                      onDrop={() => {
+                        if (!dragSec || dragSec === sc.id) return setDragSec(null);
+                        const moving = secs.find((x) => x.id === dragSec)!;
+                        const rest = secs.filter((x) => x.id !== dragSec);
+                        const from = secs.findIndex((x) => x.id === dragSec), to = secs.findIndex((x) => x.id === sc.id);
+                        rest.splice(rest.findIndex((x) => x.id === sc.id) + (from < to ? 1 : 0), 0, moving);
+                        setDragSec(null);
+                        saveSections(rest);
+                      }}
+                      onDragEnd={() => setDragSec(null)}
+                      className={`group flex items-center gap-1.5 border-t border-line bg-panel-2/40 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                        dragging || (dragSec && dragSec !== sc.id) ? "ring-1 ring-inset ring-accent/30" : ""
+                      } ${dragSec === sc.id ? "opacity-50" : ""}`}
                     >
+                      <span className="cursor-grab select-none text-muted/40 hover:text-muted active:cursor-grabbing" title="Drag to move this section">⋮⋮</span>
                       <button
                         onClick={() => saveSections(secs.map((x) => (x.id === sc.id ? { ...x, collapsed: !x.collapsed } : x)))}
                         className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-muted hover:text-text"
@@ -346,6 +366,20 @@ export default function WatchlistPanel({ selected, onSelect }: { selected: strin
                         <span className="font-normal normal-case text-muted/70">{sc.symbols.length}</span>
                       </button>
                       {avg !== null && <span className={`tabular font-normal normal-case ${avg >= 0 ? "text-up" : "text-down"}`} title="Average change today">{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</span>}
+                      {(() => {
+                        const i = secs.findIndex((x) => x.id === sc.id);
+                        const move = (d: number) => {
+                          const next = [...secs];
+                          [next[i], next[i + d]] = [next[i + d], next[i]];
+                          saveSections(next);
+                        };
+                        return (
+                          <>
+                            <button onClick={() => move(-1)} disabled={i === 0} className="invisible px-0.5 font-normal text-muted hover:text-text disabled:opacity-30 group-hover:visible" title="Move up">↑</button>
+                            <button onClick={() => move(1)} disabled={i === secs.length - 1} className="invisible px-0.5 font-normal text-muted hover:text-text disabled:opacity-30 group-hover:visible" title="Move down">↓</button>
+                          </>
+                        );
+                      })()}
                       <button
                         onClick={() => {
                           const name = prompt("Rename section:", sc.name);

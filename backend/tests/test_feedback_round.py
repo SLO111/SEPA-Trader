@@ -267,3 +267,39 @@ def test_ask_vnicorn_gives_rules_plans_for_a_new_stock(client, register, monkeyp
     t = client.post("/api/paper-trades/scan", headers=h, json={"symbol": "NEWCO", "side": "long"})
     assert t.status_code == 200, t.text
     assert abs(t.json()["stop"] - lg["stop"]) < 0.01
+
+
+def test_old_statement_imports_detected_by_batch(client, register):
+    """Positions imported before origins were recorded (several buys on one day, any price) are treated as a statement."""
+    from app import market_data
+    from app.models import PortfolioTxn
+
+    h, _ = register("old-import@test.ro")
+    pf = client.post("/api/portfolios", headers=h, json={"name": "Old broker"}).json()
+    day = market_data.history("NVDA").index[-3].date()
+    with SessionLocal() as db:
+        for sym, px in (("NVDA", 50.0), ("AAPL", 3000.0), ("MSFT", 900.0)):  # average costs far from that day's prices
+            db.add(PortfolioTxn(portfolio_id=pf["id"], date=day, symbol=sym, side="buy", shares=1, price=px, fees=0))
+        db.commit()
+    trades = client.get(f"/api/grader?source=portfolio&portfolio_id={pf['id']}", headers=h).json()["trades"]
+    assert len(trades) == 3 and all(t["statement"] for t in trades)
+    assert not any("check the price" in " ".join(t["notes"]) for t in trades)
+    assert all(t.get("pnl_pct") is not None for t in trades)
+
+
+def test_suggestions_follow_portfolio_profile(client, register):
+    from app import market_data
+
+    h, _ = register("profile-sugg@test.ro")
+    _plan("profile-sugg@test.ro", "pro")
+    pf = client.post("/api/portfolios", headers=h, json={"name": "Income"}).json()
+    for s in ("KO", "PEP", "MO", "T", "VZ"):
+        client.post(f"/api/portfolios/{pf['id']}/buy-now", headers=h, json={"symbol": s, "shares": 10})
+    r = client.get(f"/api/portfolios/{pf['id']}/insights", headers=h).json()
+    label = r["profile"]["label"]
+    assert label in ("Dividend Income", "Conservative", "Value")  # an income / defensive portfolio
+    assert r["suggestions"], "expected suggestions"
+    held = {"KO", "PEP", "MO", "T", "VZ"}
+    for s in r["suggestions"]:
+        assert label in s["reason"] and s["symbol"] not in held
+        assert (market_data.fundamentals(s["symbol"]).get("beta") or 1.0) <= 1.3  # defensive names, not high-flyers

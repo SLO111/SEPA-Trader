@@ -67,11 +67,13 @@ function TradeChart({ t }: { t: Graded }) {
   );
 }
 
-function GradeTable({ rows, open, setOpen, noted, onNote }: { rows: Graded[]; open: string | null; setOpen: (v: string | null) => void; noted?: Set<string>; onNote?: () => void }) {
+function GradeTable({ rows, open, setOpen, noted, onNote, stickyTop }: {
+  rows: Graded[]; open: string | null; setOpen: (v: string | null) => void; noted?: Set<string>; onNote?: () => void; stickyTop: string;
+}) {
   return (
-          <div className="overflow-x-auto rounded-xl border border-line">
+          <div className="overflow-x-auto rounded-xl border border-line lg:overflow-visible">
             <table className="w-full min-w-[820px] text-sm">
-              <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">
+              <thead className={`sticky z-[5] bg-panel text-left text-[11px] uppercase tracking-wide text-muted shadow-[0_1px_0_var(--color-line)] ${stickyTop}`}>
                 <tr>
                   {["Grade", "Ticker", "Source", "Entry", "Exit", "Result", "Buy timing", "Sell timing", "Left on table"].map((h) => (
                     <th key={h} className={`px-3 py-2.5 ${["Result", "Left on table"].includes(h) ? "text-right" : ""}`}>{h}</th>
@@ -157,7 +159,7 @@ export default function TradeGrader({ source: initial = "all", portfolioId, char
   return (
     <div className="space-y-4">
       {!portfolioId && (
-        <div className="flex flex-wrap gap-1">
+        <div className="sticky top-10 z-10 -mx-1 flex min-h-12 flex-wrap items-center gap-1 bg-bg px-1 py-2">
           {(chartOnly ? [["chart", "Charts"], ["copy", "Copied"], ["portfolio", "Portfolios"]] : [["all", "All trades"], ["ideas", "Trade ideas"], ["md", "Move Detector"], ["chart", "Charts"], ["copy", "Copied"], ["portfolio", "Portfolios"]]).map(([id, label]) => (
             <button key={id} onClick={() => setSource(id)} className={`rounded-full px-3 py-1 text-sm ${source === id ? "bg-accent text-white" : "bg-panel text-muted hover:text-text"}`}>
               {label}
@@ -211,11 +213,11 @@ export default function TradeGrader({ source: initial = "all", portfolioId, char
                   <h3 className="flex items-center gap-2 text-sm font-semibold">Closed trades <span className="text-muted">({closed.length})</span>
                     <span className="ml-auto"><ExportButton path={`/api/export/grader?source=${source}${pid ? `&portfolio_id=${pid}` : ""}`} filename="tradegrader.csv" /></span>
                   </h3>
-                  {closed.length ? <GradeTable rows={closed} open={open_} setOpen={setOpen} noted={noted} onNote={loadNotes} /> : <p className="text-sm text-muted">No closed trades yet.</p>}
+                  {closed.length ? <GradeTable rows={closed} open={open_} setOpen={setOpen} noted={noted} onNote={loadNotes} stickyTop={portfolioId ? "top-0" : "top-[88px]"} /> : <p className="text-sm text-muted">No closed trades yet.</p>}
                 </section>
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold">Open trades <span className="text-muted">({open.length})</span> <span className="text-xs font-normal text-muted">· the buy is graded after 5 trading days, the sale when the trade closes</span></h3>
-                  {open.length ? <GradeTable rows={open} open={open_} setOpen={setOpen} noted={noted} onNote={loadNotes} /> : <p className="text-sm text-muted">No open trades.</p>}
+                  {open.length ? <GradeTable rows={open} open={open_} setOpen={setOpen} noted={noted} onNote={loadNotes} stickyTop={portfolioId ? "top-0" : "top-[88px]"} /> : <p className="text-sm text-muted">No open trades.</p>}
                 </section>
               </>
             );

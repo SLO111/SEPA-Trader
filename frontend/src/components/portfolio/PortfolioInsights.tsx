@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 
 type Check = { level: "high" | "medium" | "low"; symbol: string | null; title: string; detail: string; action: "stop" | "target" | "sell" | null };
 type Sugg = { symbol: string; name: string; sector: string; reason: string; source: string };
-type Resp = { checks: Check[]; suggestions: Sugg[] | { locked: true } };
+type Resp = { checks: Check[]; suggestions: Sugg[] | { locked: true }; profile?: { key: string | null; label: string } };
 
 const DOT: Record<string, string> = { high: "bg-down", medium: "bg-amber-400", low: "bg-sky-400" };
 
@@ -59,14 +59,16 @@ export default function PortfolioInsights({ portfolioId, version, onAction }: { 
           )}
         </div>
         <div>
-          <div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">Stocks to consider</div>
+          <div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">
+            Stocks to consider{d.profile?.label ? <> · <span className="normal-case text-violet-200">fit your {d.profile.label} profile</span></> : null}
+          </div>
           {locked ? (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted">
               🔒 vnicornAI suggests leaders that fit your portfolio (Trend Template 8/8, strong RS, sectors you own little of) and open trade ideas.
               <Link href="/billing" className="mt-1 block font-semibold text-amber-300 hover:underline">Unlock with Pro</Link>
             </div>
           ) : (d.suggestions as Sugg[]).length === 0 ? (
-            <p className="text-xs text-muted">No new leaders that fit right now.</p>
+            <p className="text-xs text-muted">No stocks that fit your {d.profile?.label ?? "portfolio's"} profile are acting well enough right now.</p>
           ) : (
             <ul className="space-y-1.5">
               {(d.suggestions as Sugg[]).map((s) => (

@@ -3,7 +3,7 @@
 import EarningsBadge from "@/components/EarningsBadge";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { post, put } from "@/lib/api";
 import { num, pct, tone, usd } from "@/lib/format";
 import type { Holding, PortfolioDetail } from "@/lib/types";
@@ -62,6 +62,26 @@ export function SellNowDialog({ portfolioId, portfolioName, symbol, shares, avgC
   );
 }
 
+/** Small editing panel under a table cell, so editing never widens the table. Closes on outside click / Escape. */
+function Popover({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const down = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && onClose();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    setTimeout(() => window.addEventListener("mousedown", down), 0);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", down);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [onClose]);
+  return (
+    <div ref={ref} className="absolute right-0 top-full z-30 mt-1 w-52 whitespace-normal rounded-lg border border-line bg-panel-2 p-2.5 text-left shadow-2xl">
+      {children}
+    </div>
+  );
+}
+
 function StopCell({ portfolioId, symbol, stop, price, onSaved, autoEdit = false }: { portfolioId: number; symbol: string; stop: number | null; price: number; onSaved: (p: PortfolioDetail) => void; autoEdit?: boolean }) {
   const [edit, setEdit] = useState(false);
   useEffect(() => {
@@ -72,20 +92,28 @@ function StopCell({ portfolioId, symbol, stop, price, onSaved, autoEdit = false 
     onSaved(await put<PortfolioDetail>(`/api/portfolios/${portfolioId}/stops`, { symbol, stop: val }));
     setEdit(false);
   };
-  if (edit) {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <input autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && Number(v) > 0 && save(Number(v))}
-          className="tabular w-20 rounded border border-line bg-bg px-1.5 py-0.5 text-right text-xs" inputMode="decimal" />
-        <button onClick={() => Number(v) > 0 && save(Number(v))} className="text-xs text-up">✓</button>
-        {stop !== null && <button onClick={() => save(null)} className="text-xs text-muted hover:text-down" title="Remove the stop">✕</button>}
-      </span>
-    );
-  }
-  return stop !== null ? (
-    <button onClick={() => setEdit(true)} className="tabular text-down hover:underline" title={`${(((stop / price) - 1) * 100).toFixed(1)}% away`}>{usd(stop)}</button>
-  ) : (
-    <button onClick={() => setEdit(true)} className="rounded border border-dashed border-amber-500/50 px-1.5 py-0.5 text-[11px] text-amber-300">+ Set stop</button>
+  const pct = Number(v) > 0 ? ((Number(v) / price - 1) * 100).toFixed(1) : null;
+  return (
+    <span className="relative inline-block">
+      {stop !== null ? (
+        <button onClick={() => setEdit((x) => !x)} className="tabular whitespace-nowrap text-down hover:underline" title={`${(((stop / price) - 1) * 100).toFixed(1)}% away`}>{usd(stop)}</button>
+      ) : (
+        <button onClick={() => setEdit((x) => !x)} className="whitespace-nowrap rounded border border-dashed border-amber-500/50 px-1.5 py-0.5 text-[11px] text-amber-300">+ Stop</button>
+      )}
+      {edit && (
+        <Popover onClose={() => setEdit(false)}>
+          <label className="block text-[11px] text-muted">
+            Stop price {pct && <span className="text-down">({pct}%)</span>}
+            <input autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && Number(v) > 0 && save(Number(v))}
+              className="tabular mt-1 block w-full rounded border border-line bg-bg px-2 py-1 text-right text-sm" inputMode="decimal" />
+          </label>
+          <div className="mt-2 flex gap-1.5">
+            <button onClick={() => Number(v) > 0 && save(Number(v))} className="flex-1 rounded bg-accent px-2 py-1 text-xs font-medium text-white">Save</button>
+            {stop !== null && <button onClick={() => save(null)} className="rounded border border-line px-2 py-1 text-xs text-muted hover:text-down">Remove</button>}
+          </div>
+        </Popover>
+      )}
+    </span>
   );
 }
 
@@ -102,23 +130,34 @@ function TargetCell({ portfolioId, symbol, trim, target, price, onSaved, autoEdi
     onSaved(await put<PortfolioDetail>(`/api/portfolios/${portfolioId}/targets`, { symbol, trim: a, target: b }));
     setEdit(false);
   };
-  if (edit) {
-    const inp = "tabular w-16 rounded border border-line bg-bg px-1 py-0.5 text-right text-xs";
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] text-muted">
-        trim<input autoFocus value={t1} onChange={(e) => setT1(e.target.value)} className={inp} inputMode="decimal" />
-        target<input value={t2} onChange={(e) => setT2(e.target.value)} className={inp} inputMode="decimal" />
-        <button onClick={() => save(Number(t1) || null, Number(t2) || null)} className="text-xs text-up">✓</button>
-        {(trim || target) && <button onClick={() => save(null, null)} className="text-xs text-muted hover:text-down" title="Remove">✕</button>}
-      </span>
-    );
-  }
-  return trim || target ? (
-    <button onClick={() => setEdit(true)} className="tabular text-up hover:underline" title="Trim (sell part) / target">
-      {trim ? usd(trim) : "—"} / {target ? usd(target) : "—"}
-    </button>
-  ) : (
-    <button onClick={() => setEdit(true)} className="rounded border border-dashed border-line px-1.5 py-0.5 text-[11px] text-muted hover:text-text">+ Set</button>
+  const inp = "tabular mt-1 block w-full rounded border border-line bg-bg px-2 py-1 text-right text-sm";
+  const pctOf = (x: string) => (Number(x) > 0 ? `${((Number(x) / price - 1) * 100).toFixed(1)}%` : "");
+  return (
+    <span className="relative inline-block">
+      {trim || target ? (
+        <button onClick={() => setEdit((x) => !x)} className="tabular whitespace-nowrap text-up hover:underline" title="Trim (sell part) / target">
+          {trim ? usd(trim) : "—"} / {target ? usd(target) : "—"}
+        </button>
+      ) : (
+        <button onClick={() => setEdit((x) => !x)} className="whitespace-nowrap rounded border border-dashed border-line px-1.5 py-0.5 text-[11px] text-muted hover:text-text">+ Set</button>
+      )}
+      {edit && (
+        <Popover onClose={() => setEdit(false)}>
+          <label className="block text-[11px] text-muted">
+            Trim: sell part at <span className="text-up">{pctOf(t1)}</span>
+            <input autoFocus value={t1} onChange={(e) => setT1(e.target.value)} className={inp} inputMode="decimal" />
+          </label>
+          <label className="mt-2 block text-[11px] text-muted">
+            Target <span className="text-up">{pctOf(t2)}</span>
+            <input value={t2} onChange={(e) => setT2(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save(Number(t1) || null, Number(t2) || null)} className={inp} inputMode="decimal" />
+          </label>
+          <div className="mt-2 flex gap-1.5">
+            <button onClick={() => save(Number(t1) || null, Number(t2) || null)} className="flex-1 rounded bg-accent px-2 py-1 text-xs font-medium text-white">Save</button>
+            {(trim || target) && <button onClick={() => save(null, null)} className="rounded border border-line px-2 py-1 text-xs text-muted hover:text-down">Remove</button>}
+          </div>
+        </Popover>
+      )}
+    </span>
   );
 }
 
@@ -172,7 +211,7 @@ export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Hol
         <p className="p-4 text-sm text-muted">No open positions. Add a buy transaction below.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="mt-2 w-full min-w-[1000px] text-sm">
+          <table className="mt-2 w-full min-w-[960px] whitespace-nowrap text-sm [&_td]:px-3 [&_th]:px-3">
             <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-2">Symbol</th>

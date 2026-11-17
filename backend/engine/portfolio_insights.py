@@ -53,25 +53,27 @@ def checks(positions: list[dict], stops: dict[str, float], targets: dict[str, di
     return sorted(out, key=lambda x: rank[x["level"]])
 
 
-def suggestions(held: set[str], sectors_held: dict[str, float], scan: list[dict], meta: dict[str, dict], ideas: list[dict], n: int = 6) -> list[dict]:
-    """Stocks to consider: leaders (Trend Template 8/8, RS 80+, Bull 60+) not held, favouring sectors you are light on."""
-    total = sum(sectors_held.values()) or 1
+def suggestions(held: set[str], profile: dict, fits: dict[str, float], scan: list[dict], meta: dict[str, dict], ideas: list[dict], n: int = 6) -> list[dict]:
+    """Stocks that fit the portfolio's own profile (e.g. Aggressive Growth, Dividend Income) and are acting well.
+    profile: {"key", "label"}; fits: symbol -> how well the stock matches that profile (0-1, same scoring as the profile)."""
+    label = profile.get("label") or "your portfolio"
+    by = {r["symbol"]: r for r in scan}
     cands = []
-    for r in scan:
-        s = r["symbol"]
-        if s in held or r.get("template_passed") != 8 or (r.get("rs_rating") or 0) < 80 or (r.get("bull_score") or 0) < 60:
+    for s, fit in fits.items():
+        r = by.get(s, {})
+        if s in held or fit < 0.6 or (r.get("bear_score") or 0) >= 60 or (r.get("template_passed") or 0) < 5:
             continue
-        sector = meta.get(s, {}).get("sector", "")
-        share = sectors_held.get(sector, 0) / total
-        score = (r.get("rs_rating") or 0) * 0.5 + (r.get("bull_score") or 0) * 0.5 + (10 if share < 0.1 else -10 if share > 0.3 else 0)
-        reason = f"Trend Template 8/8, RS {r.get('rs_rating')}, Bull {r.get('bull_score'):.0f}" + (
-            f" · adds {sector}, which you own little of" if sector and share < 0.1 else "")
-        cands.append({"symbol": s, "name": meta.get(s, {}).get("name", s), "sector": sector, "reason": reason, "score": score, "source": "Move Detector"})
+        rs, bull = r.get("rs_rating") or 0, r.get("bull_score") or 0
+        score = fit * 60 + rs * 0.25 + bull * 0.15
+        reason = f"Fits your {label} profile ({round(fit * 100)}% match) · RS {rs} · Trend Template {r.get('template_passed')}/8"
+        cands.append({"symbol": s, "name": meta.get(s, {}).get("name", s), "sector": meta.get(s, {}).get("sector", ""), "reason": reason,
+                      "score": score, "source": label})
     for i in ideas:
-        if i["symbol"] not in held and i.get("side") != "short":
+        fit = fits.get(i["symbol"], 0)
+        if i["symbol"] not in held and i.get("side") != "short" and fit >= 0.5:
             cands.append({"symbol": i["symbol"], "name": meta.get(i["symbol"], {}).get("name", i["symbol"]), "sector": meta.get(i["symbol"], {}).get("sector", ""),
-                          "reason": f"Open trade idea: entry {i['entry']}, stop {i['stop']}, target {i['target']} (R/R {i['rr']})", "score": 90 + (i.get("rr") or 0),
-                          "source": "Trade idea"})
+                          "reason": f"Open trade idea that fits your {label} profile: entry {i['entry']}, stop {i['stop']}, target {i['target']} (R/R {i['rr']})",
+                          "score": 75 + fit * 20, "source": "Trade idea"})
     seen, out = set(), []
     for c in sorted(cands, key=lambda c: -c["score"]):
         if c["symbol"] in seen:

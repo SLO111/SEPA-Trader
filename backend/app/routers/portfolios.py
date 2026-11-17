@@ -686,12 +686,33 @@ def portfolio_insights(pid: int, user: User = Depends(current_user), db: Session
         earn[r["symbol"]] = market_data.earnings_in_days(r["symbol"])
     out = {"checks": checks(rows, stops, targets, scan, pm, earn, ext, stages)}
     if limits_for(user)["sepa_details"]:
-        sectors: dict[str, float] = {}
-        for r in rows:
-            sectors[r["sector"]] = sectors.get(r["sector"], 0) + r["value"]
+        from engine.portfolio import PROFILES, stock_scores
+
+        cls = classify(rows)
+        key = cls.get("primary")
+        profile = {"key": key, "label": PROFILES.get(key, {}).get("label", cls.get("label"))}
+        held = {r["symbol"] for r in rows}
         ideas = [{"symbol": i.symbol, "side": i.side, "entry": i.entry, "stop": i.stop, "target": i.target, "rr": i.rr}
                  for i in db.scalars(select(TradeIdea).where(TradeIdea.status == "WAIT").order_by(TradeIdea.score.desc()).limit(10)).all()]
-        out["suggestions"] = suggestions({r["symbol"] for r in rows}, sectors, scan_rows, SYMBOLS, ideas[: limits_for(user)["ideas_limit"]])
+
+        def fit_scores():
+            # how well each healthy, not-held stock matches this profile (the same scoring as the portfolio's profile)
+            pool = [r["symbol"] for r in sorted(scan_rows, key=lambda r: -(r.get("rs_rating") or 0))
+                    if r["symbol"] not in held and (r.get("template_passed") or 0) >= 5 and (r.get("bear_score") or 0) < 60][:120]
+            pool += [i["symbol"] for i in ideas if i["symbol"] not in pool]
+            bench = _bench_close()
+            out_ = {}
+            for s in pool:
+                try:
+                    f = market_data.fundamentals(s)
+                    out_[s] = stock_scores({**f, "sector": f.get("sector") or "Other"}, stock_metrics(market_data.history(s)["close"], bench, f.get("beta"))).get(key, 0.0)
+                except Exception:
+                    continue
+            return out_
+
+        fits = market_data._fast(f"profile-fits:{key}:{','.join(sorted(held))}", 1800, fit_scores) if key else {}
+        out["profile"] = profile
+        out["suggestions"] = suggestions(held, profile, fits, scan_rows, SYMBOLS, ideas[: limits_for(user)["ideas_limit"]])
     else:
         out["suggestions"] = {"locked": True}
     return out
