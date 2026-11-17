@@ -72,7 +72,7 @@ def public_track_record():
         with SessionLocal() as db:
             return track_record(db)
 
-    return market_data._fast("public:track-record", 3600, build)
+    return market_data._fast("public:track-record", 3600, build, stale_ok=True)
 
 
 # ------------------------------------------------------------------ community profile & leaderboard

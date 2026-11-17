@@ -37,7 +37,7 @@ def _opt(symbol: str) -> pd.DataFrame | None:
 
 
 def _rows() -> list[dict]:
-    return market_data._fast(f"{settings.data_provider}:movers", 300, lambda: mt.mover_rows(_histories(stock_symbols()), SYMBOLS))
+    return market_data._fast(f"{settings.data_provider}:movers", 300, lambda: mt.mover_rows(_histories(stock_symbols()), SYMBOLS), stale_ok=True)
 
 
 def _fear_greed() -> dict:
@@ -45,11 +45,11 @@ def _fear_greed() -> dict:
         spy = market_data.history("SPY")
         return mt.fear_greed(spy, _opt("^VIX"), _histories(stock_symbols()), _opt("TLT"), _opt("HYG"), _opt("LQD"))
 
-    return market_data._fast(f"{settings.data_provider}:fg", 300, build)
+    return market_data._fast(f"{settings.data_provider}:fg", 300, build, stale_ok=True)
 
 
 def _indices() -> list[dict]:
-    return market_data._fast(f"{settings.data_provider}:indices", 60, _build_indices)
+    return market_data._fast(f"{settings.data_provider}:indices", 60, _build_indices, stale_ok=True)
 
 
 def _build_indices() -> list[dict]:
@@ -90,7 +90,7 @@ def overview(user: User = Depends(current_user)):
 
 def _cycle() -> list[dict]:
     """Market cycle stage (Accumulation / Markup / Distribution / Markdown) of the main indexes."""
-    return market_data._fast(f"{settings.data_provider}:cycle", 1800, _build_cycle)
+    return market_data._fast(f"{settings.data_provider}:cycle", 1800, _build_cycle, stale_ok=True)
 
 
 def _build_cycle() -> list[dict]:
@@ -154,7 +154,7 @@ def earnings(user: User = Depends(current_user)):
                 entries[s] = e
         return mt.earnings_calendar(entries, _histories(list(entries)), SYMBOLS, pd.Timestamp(date.today()))
 
-    return {"demo": settings.data_provider == "synthetic", **market_data._fast(f"{settings.data_provider}:earnings", 900, build)}
+    return {"demo": settings.data_provider == "synthetic", **market_data._fast(f"{settings.data_provider}:earnings", 900, build, stale_ok=True)}
 
 
 @router.get("/fed")
@@ -221,7 +221,7 @@ def _exposure() -> dict | None:
             fg = None
         return exposure(spy, _opt("QQQ"), _rows(), fg)
 
-    return market_data._fast(f"{settings.data_provider}:exposure", 300, build)
+    return market_data._fast(f"{settings.data_provider}:exposure", 300, build, stale_ok=True)
 
 
 def _gate_exposure(e: dict | None, lim: dict) -> dict | None:
@@ -246,7 +246,7 @@ def groups_ranked() -> list[dict]:
         inds = {s: (market_data.cached("fundamentals", s) or {}).get("industry", "") for s in stock_symbols()}
         return rank_groups(_rows(), cached_scan(), inds)
 
-    return market_data._fast(f"{settings.data_provider}:groups", 1800, build)
+    return market_data._fast(f"{settings.data_provider}:groups", 1800, build, stale_ok=True)
 
 
 @router.get("/groups")

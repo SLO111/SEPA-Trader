@@ -20,20 +20,58 @@ _scan_cache: dict[str, tuple[float, list[dict]]] = {}
 _lock = Lock()
 
 
+_build_lock = Lock()  # one scan build at a time
+_rebuilding = False
+
+
 def invalidate_scan() -> None:
+    """New prices: mark the scan stale. Requests keep getting the previous scan while a new one is built."""
     with _lock:
-        _scan_cache.clear()
+        for k, (_, rows) in list(_scan_cache.items()):
+            _scan_cache[k] = (0.0, rows)
+
+
+def _build_scan(key: str) -> list[dict]:
+    with _build_lock:
+        rows = scan_universe(market_data.stored_history)
+        with _lock:
+            _scan_cache[key] = (time.monotonic(), rows)
+        return rows
+
+
+def _rebuild_in_background(key: str) -> None:
+    global _rebuilding
+    try:
+        _build_scan(key)
+    except Exception:
+        import logging
+
+        logging.getLogger("sepa.scan").warning("Scan rebuild failed; serving the previous scan", exc_info=True)
+    finally:
+        _rebuilding = False
 
 
 def cached_scan() -> list[dict]:
+    """The Move Detector scan of the whole universe, shared by every user (stale-while-revalidate, single build)."""
+    global _rebuilding
     key = settings.data_provider
     with _lock:
         hit = _scan_cache.get(key)
         if hit and time.monotonic() - hit[0] < _TTL:
             return hit[1]
-        rows = scan_universe(market_data.stored_history)
-        _scan_cache[key] = (time.monotonic(), rows)
-        return rows
+        if hit and hit[1]:
+            if not _rebuilding:
+                _rebuilding = True
+                import threading
+
+                threading.Thread(target=_rebuild_in_background, args=(key,), name="scan-rebuild", daemon=True).start()
+            return hit[1]
+    with _build_lock:  # first build: concurrent requests wait for one computation
+        with _lock:
+            hit = _scan_cache.get(key)
+            if hit and time.monotonic() - hit[0] < _TTL:
+                return hit[1]
+    return _build_scan(key)
 
 
 def _rs_for(symbol: str) -> int | None:
@@ -71,7 +109,7 @@ def pulse_map() -> dict[str, dict]:
                 continue
         return out
 
-    return market_data._fast(f"{settings.data_provider}:pulse-map", 1800, build)
+    return market_data._fast(f"{settings.data_provider}:pulse-map", 1800, build, stale_ok=True)
 
 
 @router.get("/scan")

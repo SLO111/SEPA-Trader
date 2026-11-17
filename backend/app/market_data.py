@@ -1,5 +1,7 @@
 """Market data access with an in-memory TTL cache, so the provider isn't hit on every request."""
 
+import logging
+import threading
 import time
 from threading import Lock
 
@@ -9,6 +11,8 @@ from engine.data.providers import INTERVALS, _resample, get_provider
 
 from .config import settings
 from .data_store import get_store
+
+log = logging.getLogger("sepa.cache")
 
 _TTL_SECONDS = 300
 _cache: dict[tuple, tuple[float, pd.DataFrame]] = {}
@@ -215,16 +219,48 @@ def earnings(symbol: str) -> dict:
 _fast_cache: dict[str, tuple[float, object]] = {}
 
 
-def _fast(key: str, ttl: float, loader):
+_key_locks: dict[str, threading.Lock] = {}
+_refreshing: set[str] = set()
+
+
+def _fast(key: str, ttl: float, loader, stale_ok: bool = False):
+    """In-memory cache shared by all users.
+    * Single flight: when many requests miss the same key at once, one computes it and the others wait for that result
+      (instead of all computing the same heavy screen in parallel on a small server).
+    * stale_ok: after the TTL, the previous value is served at once and refreshed in the background, so nobody waits
+      for universe-wide screens (movers, Fear & Greed, groups...) once they were computed."""
     now = time.monotonic()
     with _lock:
         hit = _fast_cache.get(key)
         if hit and now - hit[0] < ttl:
             return hit[1]
-    value = loader()
-    with _lock:
-        _fast_cache[key] = (now, value)
-    return value
+        if hit and stale_ok:
+            if key not in _refreshing:
+                _refreshing.add(key)
+                threading.Thread(target=_refresh, args=(key, loader), name=f"refresh:{key[:40]}", daemon=True).start()
+            return hit[1]
+        klock = _key_locks.setdefault(key, threading.Lock())
+    with klock:
+        with _lock:
+            hit = _fast_cache.get(key)
+            if hit and time.monotonic() - hit[0] < ttl:  # computed by another request while this one waited
+                return hit[1]
+        value = loader()
+        with _lock:
+            _fast_cache[key] = (time.monotonic(), value)
+        return value
+
+
+def _refresh(key: str, loader) -> None:
+    try:
+        value = loader()
+        with _lock:
+            _fast_cache[key] = (time.monotonic(), value)
+    except Exception:
+        log.warning("Background refresh of %s failed; serving the previous value", key, exc_info=True)
+    finally:
+        with _lock:
+            _refreshing.discard(key)
 
 
 def extended_hours(symbols: list[str]) -> list[dict]:

@@ -38,7 +38,7 @@ def _dataset():
             bench = None
         return bt.build_dataset(hist, bench)
 
-    return market_data._fast(f"{settings.data_provider}:bt-dataset", 3600, build)
+    return market_data._fast(f"{settings.data_provider}:bt-dataset", 3600, build, stale_ok=True)
 
 
 @router.get("/move-detector")
@@ -55,7 +55,7 @@ def move_detector(user: User = Depends(current_user)):
             "ml_down": bt.walk_forward(data, label="down_label", score="bear"),
         }
 
-    return market_data._fast(f"{settings.data_provider}:bt-md", 3600, build)
+    return market_data._fast(f"{settings.data_provider}:bt-md", 3600, build, stale_ok=True)
 
 
 class StrategyIn(BaseModel):

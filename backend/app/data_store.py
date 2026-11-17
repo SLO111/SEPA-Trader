@@ -93,14 +93,24 @@ class DataStore:
     def _save(self, key: str, obj) -> None:
         from .models import MarketCache
 
-        with self._session_factory() as db:
-            row = db.get(MarketCache, key)
-            if row is None:
-                row = MarketCache(key=key, payload=b"")
-                db.add(row)
-            row.payload = _pack(obj)
-            row.updated_at = _now()
-            db.commit()
+        from sqlalchemy.exc import IntegrityError
+
+        payload = _pack(obj)
+        # Two threads (the full refresh, the live loop, an on-demand chart) can save the same key at the same time:
+        # if the insert loses the race, the row exists now, so update it instead.
+        for _ in range(2):
+            with self._session_factory() as db:
+                row = db.get(MarketCache, key)
+                if row is None:
+                    db.add(MarketCache(key=key, payload=payload, updated_at=_now()))
+                else:
+                    row.payload = payload
+                    row.updated_at = _now()
+                try:
+                    db.commit()
+                    return
+                except IntegrityError:
+                    db.rollback()
 
     def load_all(self) -> int:
         """Load everything saved in the database into memory."""

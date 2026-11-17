@@ -62,22 +62,39 @@ def latest_batch(db: Session) -> date | None:
     return db.scalar(select(func.max(TradeIdea.batch_date)))
 
 
+def _completed_sessions(hist: dict[str, pd.DataFrame], now: datetime | None = None) -> dict[str, pd.DataFrame]:
+    """Before 16:15 New York time, today's row is a running intraday bar: leave it out, so ideas are always built from
+    a completed trading day (and the run after the close still happens)."""
+    t = (now or datetime.now(timezone.utc)).astimezone(ET)
+    if t.hour * 60 + t.minute >= 16 * 60 + 15:
+        return hist
+    today = pd.Timestamp(t.date())
+    return {s: df[df.index < today] for s, df in hist.items() if len(df[df.index < today])}
+
+
 def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
-    """Generate the idea list for the latest completed trading day (once per day unless forced)."""
-    hist = _histories()
+    """Generate the idea list for the latest completed trading day (once per day unless forced).
+    Forced: the day's ideas that are still waiting and that nobody took are replaced; triggered or taken ideas stay."""
+    hist = _completed_sessions(_histories())
     if not hist:
         return []
     day = max(df.index[-1] for df in hist.values()).date()
     if not force and latest_batch(db) == day:
         return []
+    kept: set[str] = set()
     if force:
-        from .models import AIPick
+        from .models import AIPick, PaperTrade
 
-        ids = [i for (i,) in db.query(TradeIdea.id).filter(TradeIdea.batch_date == day).all()]
-        if ids:
-            db.query(AIPick).filter(AIPick.idea_id.in_(ids)).delete(synchronize_session=False)
-        db.query(TradeIdea).filter(TradeIdea.batch_date == day).delete()
+        taken = {i for (i,) in db.query(PaperTrade.idea_id).filter(PaperTrade.idea_id.isnot(None)).all()}
+        day_rows = db.query(TradeIdea).filter(TradeIdea.batch_date == day).all()
+        drop = [r.id for r in day_rows if r.status == "WAIT" and r.id not in taken]
+        kept = {r.symbol for r in day_rows if r.id not in drop}
+        if drop:
+            db.query(AIPick).filter(AIPick.idea_id.in_(drop)).delete(synchronize_session=False)
+            db.query(TradeIdea).filter(TradeIdea.id.in_(drop)).delete(synchronize_session="fetch")
+        db.commit()
     ideas = generate(hist, _scan(), max_long=60, max_short=15, industry_of=industry_map(list(hist)))  # top 75 per day
+    ideas = [i for i in ideas if i.symbol not in kept]
     rows = []
     for i in ideas:
         row = TradeIdea(batch_date=day, **i.to_dict(), status="WAIT", current=i.entry)

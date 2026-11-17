@@ -230,3 +230,95 @@ def test_ideas_response_has_sector(client, register):
         with SessionLocal() as db:
             db.query(TradeIdea).filter_by(id=iid).delete()
             db.commit()
+
+
+def test_save_survives_a_concurrent_insert(monkeypatch):
+    """The insert loses a race with another thread: the row is updated instead of raising."""
+    from app.models import MarketCache
+
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    with SessionLocal() as db:
+        db.add(MarketCache(key="prices:ZRACE", payload=ds._pack({"v": 1})))
+        db.commit()
+    calls = {"n": 0}
+    from sqlalchemy.orm import Session
+
+    orig = Session.get
+
+    def first_miss(self, model, key, *a, **k):
+        if model is MarketCache and key == "prices:ZRACE" and calls["n"] == 0:
+            calls["n"] += 1
+            return None  # this thread didn't see the other thread's row yet
+        return orig(self, model, key, *a, **k)
+
+    monkeypatch.setattr(Session, "get", first_miss)
+    s._save("prices:ZRACE", {"v": 2})
+    monkeypatch.setattr(Session, "get", orig)
+    with SessionLocal() as db:
+        row = db.get(MarketCache, "prices:ZRACE")
+        assert ds._unpack(row.payload) == {"v": 2}
+        db.delete(row)
+        db.commit()
+
+
+def test_ideas_use_completed_sessions_only():
+    from datetime import datetime, timezone
+
+    import pandas as pd
+
+    from app.ideas_service import _completed_sessions
+
+    idx = pd.bdate_range("2026-11-10", "2026-11-17")
+    df = pd.DataFrame({"close": range(len(idx))}, index=idx)
+    during = datetime(2026, 11, 17, 15, 0, tzinfo=timezone.utc)  # 10:00 New York, market open
+    after = datetime(2026, 11, 17, 21, 30, tzinfo=timezone.utc)  # 16:30 New York
+    assert _completed_sessions({"X": df}, during)["X"].index[-1] == pd.Timestamp("2026-11-16")
+    assert _completed_sessions({"X": df}, after)["X"].index[-1] == pd.Timestamp("2026-11-17")
+
+
+def test_forced_regenerate_keeps_triggered_and_taken_ideas(monkeypatch):
+    from datetime import date
+
+    from app import ideas_service
+    from app.models import PaperTrade, TradeIdea, User
+    from engine.ideas import Idea
+
+    p = SyntheticProvider()
+    hist = {s: p.history(s) for s in ("AAPL", "MSFT")}
+    day = max(df.index[-1] for df in hist.values()).date()
+    monkeypatch.setattr(ideas_service, "_histories", lambda: hist)
+    monkeypatch.setattr(ideas_service, "_completed_sessions", lambda h, now=None: h)
+    monkeypatch.setattr(ideas_service, "_scan", lambda: {})
+    monkeypatch.setattr(ideas_service, "_vnicorn", lambda *a, **k: [])
+    monkeypatch.setattr(ideas_service, "publish_summary", lambda *a, **k: None)
+    monkeypatch.setattr(ideas_service, "add_feed", lambda *a, **k: 0)
+    new = [Idea("AAPL", "SWING", "long", 100, 95, 107.5, 115, 3, 10, 90, "new"),
+           Idea("ZZNEW", "SWING", "long", 50, 47, 54.5, 59, 3, 10, 80, "new")]
+    monkeypatch.setattr(ideas_service, "generate", lambda *a, **k: list(new))
+
+    def idea(sym, status):
+        return TradeIdea(batch_date=day, symbol=sym, timeframe="SWING", side="long", entry=100, stop=95, trim=107.5, target=115,
+                         rr=3, weight=10, score=50, reason="old", status=status, current=100)
+
+    with SessionLocal() as db:
+        db.query(TradeIdea).filter(TradeIdea.batch_date == day).delete()
+        a, b, c = idea("AAPL", "BUY"), idea("MSFT", "WAIT"), idea("KO", "WAIT")
+        db.add_all([a, b, c])
+        db.commit()
+        uid = db.query(User).first().id
+        db.add(PaperTrade(user_id=uid, idea_id=c.id, symbol="KO", side="long", entry_date=day, entry=100, stop=95, target=115))
+        db.commit()
+        ids = (a.id, b.id, c.id)
+    try:
+        with SessionLocal() as db:
+            ideas_service.run_ideas(db, force=True)
+            left = {(r.symbol, r.reason) for r in db.query(TradeIdea).filter(TradeIdea.batch_date == day)}
+        assert ("AAPL", "old") in left and ("AAPL", "new") not in left  # triggered idea kept, no duplicate
+        assert ("KO", "old") in left  # taken idea kept
+        assert ("MSFT", "old") not in left  # waiting, untaken idea replaced
+        assert ("ZZNEW", "new") in left
+    finally:
+        with SessionLocal() as db:
+            db.query(PaperTrade).filter(PaperTrade.idea_id.in_(ids)).delete(synchronize_session=False)
+            db.query(TradeIdea).filter(TradeIdea.batch_date == day).delete()
+            db.commit()
