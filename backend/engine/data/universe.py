@@ -237,3 +237,37 @@ def merge_universe(sp500: dict[str, dict], plus: bool, r1000: dict[str, dict] | 
                 entries[s] = meta
                 added += 1
     return entries
+
+
+# Fallback for the mid caps: the Nasdaq stock screener (every US-listed stock with market cap, sector and industry).
+NASDAQ_SCREENER = "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=10000&download=true"
+NASDAQ_SECTORS = {"Finance": "Financials", "Basic Materials": "Materials", "Telecommunications": "Communication Services"}
+_NOT_COMMON = ("warrant", "unit", " right", "preferred", "notes due", "debenture", "%")
+_NAME_TAILS = (" Class A Common Stock", " Class B Common Stock", " Class C Capital Stock", " Common Stock", " Common Shares",
+               " Ordinary Shares", " American Depositary Shares")
+
+
+def parse_nasdaq_screener(payload: dict, min_price: float = 5.0) -> dict[str, dict]:
+    """Common stocks from the Nasdaq screener JSON, priced at least `min_price`, largest market cap first."""
+    rows = ((payload or {}).get("data") or {}).get("rows") or []
+    out = []
+    for r in rows:
+        raw = (r.get("symbol") or "").strip().upper()
+        name = (r.get("name") or "").strip()
+        if not raw or "^" in raw or any(t in name.lower() for t in _NOT_COMMON):
+            continue
+        sym = raw.replace("/", "-").replace(".", "-")
+        if not all(ch.isalpha() or ch == "-" for ch in sym):
+            continue
+        cap, price = _num(r.get("marketCap", "")), _num((r.get("lastsale") or "").replace("$", ""))
+        if cap <= 0 or price < min_price:
+            continue
+        for tail in _NAME_TAILS:
+            if name.endswith(tail):
+                name = name[: -len(tail)]
+                break
+        sector = (r.get("sector") or "").strip() or "Other"
+        out.append((cap, sym, {"name": name.strip() or sym, "sector": NASDAQ_SECTORS.get(sector, sector), "exchange": "",
+                               "industry": (r.get("industry") or "").strip()}))
+    out.sort(key=lambda x: -x[0])
+    return {s: m for _, s, m in out}

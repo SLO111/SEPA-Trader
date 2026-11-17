@@ -51,7 +51,7 @@ def classify(symbol: str) -> tuple[str, str]:
     """(sector, industry) of a stock from the universe and the cached fundamentals; industry falls back to the sector."""
     f = market_data.cached("fundamentals", symbol) or {}
     sector = SYMBOLS.get(symbol, {}).get("sector") or f.get("sector") or ""
-    return sector, f.get("industry") or sector
+    return sector, f.get("industry") or SYMBOLS.get(symbol, {}).get("industry") or sector
 
 
 def industry_map(symbols: list[str]) -> dict[str, str]:

@@ -33,8 +33,17 @@ SLOW_TTL = timedelta(hours=24)
 UNIVERSE_TTL = timedelta(days=7)
 
 
+def _short(e: Exception) -> str:
+    """Exception type + a short message, for the status shown in /api/health (no secrets: no URLs with keys)."""
+    msg = str(e).split("\n")[0]
+    if "token=" in msg or "apikey" in msg.lower():
+        msg = ""
+    return f"{type(e).__name__}: {msg[:150]}".rstrip(": ")
+
+
 def _universe_key() -> str:
-    return "universe:r1000" if settings.universe == "sp500+r1000" else "universe:sp500"
+    # "wide" (not "r1000"): a list saved by an earlier version after a failed mid-cap download is ignored
+    return "universe:wide" if settings.universe == "sp500+r1000" else "universe:sp500"
 CHUNK = 100
 SLOW_PAUSE = 1.2  # seconds between per-symbol requests, to stay polite with the provider
 BREAKER_FAILURES = 5  # consecutive refusals before backing off
@@ -71,7 +80,8 @@ class DataStore:
         self.prices: dict[str, pd.DataFrame] = {}
         self.slow: dict[str, dict[str, dict]] = {"fundamentals": {}, "earnings": {}, "ath": {}, "revenue": {}}
         self.updated: dict[str, datetime] = {}
-        self.status = {"state": "idle", "message": "", "prices_refreshed_at": None, "slow_done": 0, "slow_total": 0}
+        self.status = {"state": "idle", "message": "", "prices_refreshed_at": None, "slow_done": 0, "slow_total": 0,
+                       "last_error": None, "last_error_at": None, "universe_source": None}
         self._listeners: list[Callable[[], None]] = []
         self.hot: dict[str, datetime] = {}
         self.slow_paused_until: datetime | None = None
@@ -227,6 +237,9 @@ class DataStore:
     def on_prices_refreshed(self, fn: Callable[[], None]) -> None:
         self._listeners.append(fn)
 
+    def _error(self, step: str, e: Exception) -> None:
+        self.status.update(last_error=f"{step}: {_short(e)}", last_error_at=_now().isoformat())
+
     # ---------------------------------------------------------------- refresh jobs
     def refresh_universe(self) -> int:
         """Load the S&P 500 list (weekly) and add it to the universe, plus the Nasdaq-100 extras, the theme lists and,
@@ -236,7 +249,7 @@ class DataStore:
             return 0
         import httpx
 
-        from engine.data.universe import R1000_CSV, SP500_CSV, SYMBOLS, NON_STOCK_SECTORS, extend, merge_universe, parse_constituents, parse_ishares_holdings
+        from engine.data.universe import NON_STOCK_SECTORS, SP500_CSV, SYMBOLS, extend, merge_universe, parse_constituents
 
         try:
             r = httpx.get(SP500_CSV, timeout=20, follow_redirects=True)
@@ -252,29 +265,56 @@ class DataStore:
             sp500 = parse_constituents((Path(__file__).resolve().parent.parent / "engine" / "data" / "sp500_constituents.csv").read_text())
         if len(sp500) < 400:  # sanity check: never shrink the universe because of a bad download
             raise ValueError(f"Unexpected constituents list ({len(sp500)} rows)")
-        r1000 = None
+        mids, source = None, None
         if settings.universe == "sp500+r1000":
-            try:
-                r1000 = self._fetch_r1000(httpx, R1000_CSV, parse_ishares_holdings)
-            except Exception:
-                log.warning("Russell 1000 download failed; keeping the stocks already in the universe", exc_info=True)
-        entries = merge_universe(sp500, settings.universe != "sp500", r1000, settings.universe_extra if r1000 else 0)
-        if settings.universe == "sp500+r1000" and r1000 is None:  # never drop names because of a failed download
+            mids, source = self._fetch_midcaps(httpx)
+        entries = merge_universe(sp500, settings.universe != "sp500", mids, settings.universe_extra if mids else 0)
+        if settings.universe == "sp500+r1000" and mids is None:
+            # never drop names because of a failed download, and don't save: try again on the next pass, not in a week
             entries = {**{s: m for s, m in SYMBOLS.items() if m["sector"] not in NON_STOCK_SECTORS}, **entries}
+            added = extend(entries)
+            self.status["universe_source"] = f"mid caps unavailable: {source}"
+            log.warning("Universe: %d stocks; mid caps unavailable (%s), retrying next pass", len(entries), source)
+            return added
         added = extend(entries)
         self._save(key, entries)
         self.updated[key] = _now()
+        if source:
+            n_extra = sum(1 for s in entries if s in (mids or {}) and s not in sp500)
+            self.status["universe_source"] = f"{source} ({n_extra} mid caps)"
         log.info("Universe: %d stocks (%d new)", len(entries), added)
         return added
 
-    @staticmethod
-    def _fetch_r1000(httpx, url: str, parse) -> dict:
-        r = httpx.get(url, timeout=30, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
-        r.raise_for_status()
-        out = parse(r.text)
-        if len(out) < 800:  # sanity check against a truncated or changed file
-            raise ValueError(f"Unexpected Russell 1000 list ({len(out)} rows)")
-        return out
+    def _fetch_midcaps(self, httpx) -> tuple[dict | None, str]:
+        """The largest US stocks beyond the S&P 500, ordered by size: iShares Russell 1000 first, the Nasdaq screener
+        as a fallback. Returns (list or None, source or the reasons both failed)."""
+        from engine.data.universe import NASDAQ_SCREENER, R1000_CSV, parse_ishares_holdings, parse_nasdaq_screener
+
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+        errors = []
+        try:
+            r = httpx.get(R1000_CSV, timeout=30, follow_redirects=True,
+                          headers={"User-Agent": ua, "Accept": "text/csv,*/*", "Referer": "https://www.ishares.com/us/products/239707/"})
+            r.raise_for_status()
+            out = parse_ishares_holdings(r.text)
+            if len(out) < 800:  # sanity check against a truncated or changed file
+                raise ValueError(f"only {len(out)} rows")
+            return out, "ishares"
+        except Exception as e:
+            errors.append(f"ishares {_short(e)}")
+        try:
+            r = httpx.get(NASDAQ_SCREENER, timeout=40, follow_redirects=True,
+                          headers={"User-Agent": ua, "Accept": "application/json, text/plain, */*", "Origin": "https://www.nasdaq.com",
+                                   "Referer": "https://www.nasdaq.com/"})
+            r.raise_for_status()
+            out = parse_nasdaq_screener(r.json())
+            if len(out) < 1500:
+                raise ValueError(f"only {len(out)} rows")
+            return out, "nasdaq"
+        except Exception as e:
+            errors.append(f"nasdaq {_short(e)}")
+        log.warning("Mid-cap lists unavailable: %s", "; ".join(errors))
+        return None, "; ".join(errors)
 
     def refresh_directory(self) -> int:
         """All US-listed stocks and ETFs (Nasdaq Trader symbol files), refreshed weekly. Powers the search."""
@@ -310,8 +350,12 @@ class DataStore:
                 log.exception("Bulk price download failed")
                 continue
             for s, df in got.items():
-                self.put_prices(s, df)
-                done += 1
+                try:
+                    self.put_prices(s, df)
+                    done += 1
+                except Exception as e:
+                    log.warning("Saving prices for %s failed", s, exc_info=True)
+                    self._error("prices", e)
         if done:
             self.status["prices_refreshed_at"] = _now()
             for fn in self._listeners:
@@ -384,27 +428,27 @@ class DataStore:
             except Exception:
                 log.exception("Loading the market cache failed")
             while not stop.is_set():
-                try:
-                    self.status["state"] = "refreshing"
+                self.status["state"] = "refreshing"
+                errors_before = self.status.get("last_error_at")
+                steps = (
+                    ("universe", self.refresh_universe),
+                    ("directory", self.refresh_directory),
+                    ("prices", lambda: self.refresh_prices(symbols_fn())),
+                    ("fundamentals", lambda: (self.status.update(message="Updating fundamentals and earnings"), self.refresh_slow(stocks_fn(), stop))),
+                    ("all-time highs", lambda: self.refresh_ath(stocks_fn())),
+                )
+                for name, fn in steps:  # each step on its own: one failure doesn't skip the others
+                    if stop.is_set():
+                        break
                     try:
-                        self.refresh_universe()
-                    except Exception:
-                        log.warning("Universe refresh failed; using the existing list", exc_info=True)
-                    try:
-                        self.refresh_directory()
-                    except Exception:
-                        log.warning("Symbol directory refresh failed; search uses the existing list", exc_info=True)
-                    self.refresh_prices(symbols_fn())
-                    self.status["message"] = "Updating fundamentals and earnings"
-                    self.refresh_slow(stocks_fn(), stop)
-                    try:
-                        self.refresh_ath(stocks_fn())
-                    except Exception:
-                        log.warning("All-time-high refresh failed", exc_info=True)
-                    self.status.update(state="ready", message="")
-                except Exception:
-                    log.exception("Market data refresh failed")
-                    self.status.update(state="error", message="Last refresh failed; will retry")
+                        fn()
+                    except Exception as e:
+                        log.warning("Market data step '%s' failed", name, exc_info=True)
+                        self._error(name, e)
+                failed = self.status.get("last_error_at") != errors_before
+                self.status.update(state="error" if failed else "ready", message="Last refresh had errors; will retry" if failed else "")
+                if not failed:
+                    self.status.update(last_error=None, last_error_at=None)
                 stop.wait(interval)
 
         def live_loop():

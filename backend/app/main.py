@@ -153,7 +153,8 @@ def health():
         data = {"state": st["state"], "message": st["message"], "symbols_with_prices": len(store.prices),
                 "prices_refreshed_at": st["prices_refreshed_at"], "live_updated_at": st.get("live_updated_at"),
                 "fundamentals_loaded": f"{st['slow_done']}/{st['slow_total']}",
-                "fundamentals_paused_until": store.slow_paused_until}
+                "fundamentals_paused_until": store.slow_paused_until,
+                "universe_source": st.get("universe_source"), "last_error": st.get("last_error"), "last_error_at": st.get("last_error_at")}
     config = {
         # Booleans only: never expose secrets or emails on a public endpoint.
         "data_provider": settings.data_provider,
@@ -163,6 +164,7 @@ def health():
         "email_configured": bool(settings.smtp_host and settings.smtp_from),
         "finnhub_configured": _finnhub_key_present(),
         "universe": settings.universe,
+        "universe_extra": settings.universe_extra,
     }
     return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "config": config, "market_data": data}
 

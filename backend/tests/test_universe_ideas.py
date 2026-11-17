@@ -60,23 +60,47 @@ def saved_universe():
     universe.SYMBOLS.update(saved)
 
 
-def _fake_get(r1000_ok: bool):
+def _nasdaq_json(n=1600):
+    rows = [{"symbol": f"ZN{chr(65 + i // 676)}{chr(65 + i // 26 % 26)}{chr(65 + i % 26)}", "name": f"Fake {i} Common Stock",
+             "lastsale": "$20.00", "marketCap": f"{(n - i) * 1_000_000:,}.00", "sector": "Finance", "industry": "Banks"} for i in range(n)]
+    return {"data": {"rows": rows}}
+
+
+def _fake_get(ishares_ok: bool, nasdaq_ok: bool = False):
     import httpx
 
     def get(url, *a, **k):
         if url == universe.R1000_CSV:
-            if not r1000_ok:
+            if not ishares_ok:
                 raise httpx.ConnectError("offline")
             rows = [f'"ZQ{chr(65 + i // 676)}{chr(65 + i // 26 % 26)}{chr(65 + i % 26)}","Fake {i}","Industrials","Equity","1.00","{900 - i}","1","1","1","US","NASDAQ","USD","1","USD","-"'
                     for i in range(900)]
             text = "iShares Russell 1000 ETF\nTicker,Name,Sector,Asset Class,Market Value,Weight (%),Notional Value,Quantity,Price,Location,Exchange,Currency,FX Rate,Market Currency,Accrual Date\n" + "\n".join(rows)
             return SimpleNamespace(text=text, raise_for_status=lambda: None)
+        if url == universe.NASDAQ_SCREENER:
+            if not nasdaq_ok:
+                raise httpx.ReadTimeout("timed out")
+            return SimpleNamespace(json=_nasdaq_json, raise_for_status=lambda: None)
         raise httpx.ConnectError("offline")  # S&P 500 list: falls back to the bundled copy
 
     return get
 
 
-def test_refresh_universe_r1000(monkeypatch, saved_universe):
+def _wide_row(delete=False):
+    from sqlalchemy import select
+
+    from app.models import MarketCache
+
+    with SessionLocal() as db:
+        row = db.scalar(select(MarketCache).where(MarketCache.key == "universe:wide"))
+        payload = ds._unpack(row.payload) if row else None
+        if row and delete:
+            db.delete(row)
+            db.commit()
+        return payload
+
+
+def test_refresh_universe_ishares(monkeypatch, saved_universe):
     import httpx
 
     from app.config import settings
@@ -89,22 +113,89 @@ def test_refresh_universe_r1000(monkeypatch, saved_universe):
     fake = [x for x in universe.SYMBOLS if x.startswith("ZQ")]
     assert len(fake) == 50 and "ZQAAA" in fake  # the largest 50
     assert "IONQ" in universe.SYMBOLS and "MMM" in universe.SYMBOLS
+    assert s.status["universe_source"].startswith("ishares")
+    assert "ZQAAA" in _wide_row(delete=True)
+
+
+def test_refresh_universe_falls_back_to_nasdaq(monkeypatch, saved_universe):
+    import httpx
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "universe", "sp500+r1000")
+    monkeypatch.setattr(settings, "universe_extra", 40)
+    monkeypatch.setattr(httpx, "get", _fake_get(False, True))
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    s.refresh_universe()
+    fake = [x for x in universe.SYMBOLS if x.startswith("ZN")]
+    assert len(fake) == 40 and "ZNAAA" in fake
+    assert universe.SYMBOLS["ZNAAA"] == {"name": "Fake 0", "sector": "Financials", "exchange": "", "industry": "Banks"}
+    assert s.status["universe_source"] == "nasdaq (40 mid caps)"
+    _wide_row(delete=True)
+
+
+def test_failed_midcaps_keep_universe_and_retry(monkeypatch, saved_universe):
+    import httpx
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "universe", "sp500+r1000")
+    monkeypatch.setattr(httpx, "get", _fake_get(False, False))
+    universe.SYMBOLS["ZKEEP"] = {"name": "Kept", "sector": "Energy", "exchange": ""}
     n = len(universe.stock_symbols())
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    s.refresh_universe()
+    assert "ZKEEP" in universe.SYMBOLS and len(universe.stock_symbols()) >= n
+    assert "ishares ConnectError" in s.status["universe_source"] and "nasdaq ReadTimeout" in s.status["universe_source"]
+    assert _wide_row() is None  # nothing saved ...
+    assert s.stale("universe:wide", ds.UNIVERSE_TTL)  # ... so the next pass tries again
 
-    # a failed Russell 1000 download a week later never shrinks the universe
-    monkeypatch.setattr(httpx, "get", _fake_get(False))
-    s2 = ds.DataStore(SyntheticProvider, SessionLocal)
-    s2.refresh_universe()
-    assert len(universe.stock_symbols()) == n
-    from sqlalchemy import select
 
-    from app.models import MarketCache
+def test_parse_nasdaq_screener_filters():
+    payload = {"data": {"rows": [
+        {"symbol": "SMALL", "name": "Small Co Common Stock", "lastsale": "$50", "marketCap": "1,000,000", "sector": "Technology", "industry": "x"},
+        {"symbol": "BIG", "name": "Big Corp Class A Common Stock", "lastsale": "$100", "marketCap": "9,000,000,000", "sector": "Finance", "industry": "y"},
+        {"symbol": "PENNY", "name": "Penny Inc Common Stock", "lastsale": "$1.20", "marketCap": "5,000,000,000", "sector": "Energy", "industry": "z"},
+        {"symbol": "ABCW", "name": "ABC Corp Warrant", "lastsale": "$10", "marketCap": "8,000,000,000", "sector": "Energy", "industry": "z"},
+        {"symbol": "XYZ^A", "name": "XYZ 6% Preferred", "lastsale": "$25", "marketCap": "8,000,000,000", "sector": "Energy", "industry": "z"},
+        {"symbol": "BRK/B", "name": "Berkshire Hathaway Inc. Class B", "lastsale": "$480", "marketCap": "7,000,000,000", "sector": "Finance", "industry": "w"},
+        {"symbol": "NOCAP", "name": "No Cap Common Stock", "lastsale": "$10", "marketCap": "", "sector": "Energy", "industry": "z"},
+    ]}}
+    out = universe.parse_nasdaq_screener(payload)
+    assert list(out) == ["BIG", "BRK-B", "SMALL"]
+    assert out["BIG"]["name"] == "Big Corp" and out["BIG"]["sector"] == "Financials"
 
-    with SessionLocal() as db:
-        row = db.scalar(select(MarketCache).where(MarketCache.key == "universe:r1000"))
-        assert row is not None and "ZQAAA" in ds._unpack(row.payload)
-        db.delete(row)
-        db.commit()
+
+def test_refresh_loop_continues_after_a_failing_step(monkeypatch):
+    import threading
+
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    calls = []
+    monkeypatch.setattr(s, "load_all", lambda: 0)
+    monkeypatch.setattr(s, "refresh_universe", lambda: calls.append("universe"))
+    monkeypatch.setattr(s, "refresh_directory", lambda: calls.append("directory"))
+
+    def boom(*a, **k):
+        calls.append("prices")
+        raise RuntimeError("database went away")
+
+    monkeypatch.setattr(s, "refresh_prices", boom)
+    monkeypatch.setattr(s, "refresh_slow", lambda *a, **k: calls.append("fundamentals"))
+    done = threading.Event()
+    monkeypatch.setattr(s, "refresh_ath", lambda *a, **k: (calls.append("ath"), done.set()))
+    s.start(lambda: ["AAPL"], lambda: ["AAPL"], interval=3600)
+    try:
+        assert done.wait(5)
+        for _ in range(50):
+            if s.status["state"] == "error":
+                break
+            import time
+
+            time.sleep(0.05)
+        assert calls == ["universe", "directory", "prices", "fundamentals", "ath"]
+        assert s.status["state"] == "error" and s.status["last_error"] == "prices: RuntimeError: database went away"
+    finally:
+        s._stop.set()
 
 
 def test_diversify_moves_the_fourth_of_an_industry_down():
