@@ -30,6 +30,7 @@ export class ApiError extends Error {
 const CACHE_TTL: [string, number][] = [
   ["/api/strategies", 3600_000],
   ["/api/markets/screener/presets", 3600_000],
+  ["/api/markets/screener?", 20_000], // pages of a list that fills in after a restart: keep it short
   ["/api/markets/overview", 60_000],
   ["/api/markets/", 120_000],
   ["/api/feed/summary", 300_000],

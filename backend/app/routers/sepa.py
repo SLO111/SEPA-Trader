@@ -59,7 +59,7 @@ def cached_scan() -> list[dict]:
         hit = _scan_cache.get(key)
         if hit and time.monotonic() - hit[0] < market_data.screen_ttl(_TTL):
             return hit[1]
-        if hit and hit[1]:
+        if hit and hit[1] and not market_data.in_background():
             if not _rebuilding:
                 _rebuilding = True
                 import threading

@@ -257,17 +257,17 @@ class DataStore:
 
     def _notify(self) -> None:
         """Prices or the universe changed: rebuild the shared screens (scan, movers, screener...) in the background."""
-        for fn in self._listeners:
-            try:
-                fn()
-            except Exception:
-                log.exception("Price-refresh listener failed")
         try:
             from . import market_data
 
             market_data.mark_stale()
         except Exception:
             log.debug("Marking screens stale failed", exc_info=True)
+        for fn in self._listeners:
+            try:
+                fn()
+            except Exception:
+                log.exception("Price-refresh listener failed")
 
     def _error(self, step: str, e: Exception) -> None:
         self.status.update(last_error=f"{step}: {_short(e)}", last_error_at=_now().isoformat())

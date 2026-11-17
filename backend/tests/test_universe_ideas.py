@@ -526,3 +526,27 @@ def test_saved_universe_restored_on_startup(monkeypatch, saved_universe):
         with SessionLocal() as db:
             db.query(MarketCache).filter(MarketCache.key.in_(["universe:wide2", "universe:wide"])).delete(synchronize_session=False)
             db.commit()
+
+
+def test_background_rebuild_uses_fresh_inputs(monkeypatch):
+    """A screen rebuilt in the background computes the screens it depends on fresh, not from their stale value."""
+    from app import market_data
+
+    calls = {"inner": 0}
+    market_data._fast_cache.pop("t:inner", None)
+    market_data._fast_cache.pop("t:outer", None)
+
+    def inner():
+        calls["inner"] += 1
+        return calls["inner"]
+
+    assert market_data._fast("t:inner", 999, inner, stale_ok=True) == 1
+    market_data._fast_cache["t:inner"] = (float("-inf"), 1)  # stale
+    market_data._tls.rebuilding = True
+    try:
+        assert market_data._fast("t:inner", 999, inner, stale_ok=True) == 2  # computed now, not the stale 1
+    finally:
+        market_data._tls.rebuilding = False
+    market_data._fast_cache["t:inner"] = (float("-inf"), 2)
+    assert market_data._fast("t:inner", 999, inner, stale_ok=True) == 2  # a request thread gets the old value at once
+    market_data._fast_cache.pop("t:inner", None)

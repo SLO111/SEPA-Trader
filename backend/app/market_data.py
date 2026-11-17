@@ -246,7 +246,7 @@ def _fast(key: str, ttl: float, loader, stale_ok: bool = False):
         hit = _fast_cache.get(key)
         if hit and now - hit[0] < ttl:
             return hit[1]
-        if hit and stale_ok:
+        if hit and stale_ok and not in_background():
             if key not in _refreshing:
                 _refreshing.add(key)
                 threading.Thread(target=_refresh, args=(key, loader), name=f"refresh:{key[:40]}", daemon=True).start()
@@ -292,7 +292,17 @@ def screen_ttl(normal: float) -> float:
     return 30 if loading() else normal
 
 
+_tls = threading.local()
+
+
+def in_background() -> bool:
+    """Inside a background rebuild: nested shared screens are computed fresh (a rebuilt screener table must not be
+    made from a stale movers table), instead of returning their previous value."""
+    return getattr(_tls, "rebuilding", False)
+
+
 def _refresh(key: str, loader) -> None:
+    _tls.rebuilding = True
     try:
         value = loader()
         with _lock:
@@ -302,6 +312,7 @@ def _refresh(key: str, loader) -> None:
         cache_error = f"{key}: {type(e).__name__}: {str(e)[:120]}"
         log.warning("Background refresh of %s failed; serving the previous value", key, exc_info=True)
     finally:
+        _tls.rebuilding = False
         with _lock:
             _refreshing.discard(key)
 

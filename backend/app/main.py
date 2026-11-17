@@ -72,8 +72,33 @@ def _start_market_data() -> None:
     if store is None:
         return
     store.on_prices_refreshed(invalidate_scan)
+    store.on_prices_refreshed(lambda: threading.Thread(target=_rebuild_screens, name="screens-rebuild", daemon=True).start())
     store.start(lambda: list(SYMBOLS), stock_symbols)
     threading.Thread(target=_warm_loop, name="cache-warmer", daemon=True).start()
+
+
+_rebuild_lock = threading.Lock()
+
+
+def _rebuild_screens() -> None:
+    """New prices (or startup loading finished): rebuild the shared screens now, in dependency order, so the next
+    visitor gets the full lists instead of the previous ones."""
+    from . import market_data
+    from .routers import markets as mk
+    from .routers.sepa import cached_scan
+
+    if not _rebuild_lock.acquire(blocking=False):
+        return  # a rebuild is already running
+    market_data._tls.rebuilding = True
+    try:
+        for fn in (cached_scan, mk._rows, mk._screen_rows):
+            try:
+                fn()
+            except Exception:
+                log.warning("Rebuilding %s failed", getattr(fn, "__name__", fn), exc_info=True)
+    finally:
+        market_data._tls.rebuilding = False
+        _rebuild_lock.release()
 
 
 def _warm_loop() -> None:
@@ -88,7 +113,7 @@ def _warm_loop() -> None:
     while True:
         store = get_store()
         if store is not None and store.prices:
-            for fn in (cached_scan, mk._rows, mk._fear_greed, mk._indices, mk._cycle, pulse_map):
+            for fn in (cached_scan, mk._rows, mk._screen_rows, mk._fear_greed, mk._indices, mk._cycle, pulse_map):
                 try:
                     fn()
                 except Exception:
