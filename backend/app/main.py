@@ -198,7 +198,12 @@ def health():
 
         with SessionLocal() as db:
             lb = latest_batch(db)
-            ideas = {"last_batch": lb.isoformat() if lb else None, "due": due_for_ideas(db)}
+            from . import vnicorn_service as vs
+
+            st = vs.status(db)
+            ideas = {"last_batch": lb.isoformat() if lb else None, "due": due_for_ideas(db),
+                     "vnicorn": {"trained": st.get("trained"), "stocks": st.get("symbols"), "trained_at": st.get("trained_at"),
+                                 "error": vs.last_error}}
     except Exception:
         ideas = None
     return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "config": config, "market_data": data,

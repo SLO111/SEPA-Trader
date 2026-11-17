@@ -121,8 +121,11 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
     db.commit()
     try:
         rows += _vnicorn(db, day, hist, rows)
-    except Exception:
+    except Exception as e:
         log.exception("vnicornAI failed")
+        from . import vnicorn_service
+
+        vnicorn_service.last_error = f"rating: {type(e).__name__}: {str(e)[:120]}"
         db.rollback()
     add_feed(db, feedmod.idea_items([i.to_dict() for i in ideas], day.isoformat()))
     log.info("Generated %d ideas for %s", len(rows), day)

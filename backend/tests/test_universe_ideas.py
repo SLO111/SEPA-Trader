@@ -585,7 +585,7 @@ def test_vnicorn_retrains_when_universe_grew(monkeypatch):
     monkeypatch.setattr(vs, "_trained_at", __import__("datetime").datetime.now(__import__("datetime").timezone.utc))
     monkeypatch.setattr(vs, "_liquid", lambda hist, n: {f"S{i}": None for i in range(120)})
     monkeypatch.setattr(vs, "real_trades", lambda db, hist: [])
-    monkeypatch.setattr(vs.ai, "train", lambda subset, bench, trades, trade_histories=None: trained.append(len(subset)) or {"models": {"y": 1}})
+    monkeypatch.setattr(vs.ai, "train", lambda subset, bench, trades, trade_histories=None, **k: trained.append(len(subset)) or {"models": {"y": 1}})
     monkeypatch.setattr(vs, "_save", lambda db, b: None)
     vs.ensure_trained(None, {}, None)
     assert trained == [120]  # 36 << 120 available: retrained although trained this week
@@ -618,3 +618,22 @@ def test_regenerate_runs_in_background(client, register, monkeypatch):
             break
         time.sleep(0.05)
     assert st["generated"] == 3 and st["error"] is None
+
+
+def test_training_rows_stay_within_budget():
+    """More stocks make the sampling sparser, so training memory stays about the same."""
+    import numpy as np
+
+    from engine import vnicorn_ai as ai
+
+    p = SyntheticProvider()
+    base = [p.history(s) for s in universe.stock_symbols()[:10]]
+    few = {f"F{i}": base[i % 10] for i in range(10)}
+    many = {f"M{i}": base[i % 10] for i in range(80)}
+    bench = p.history("SPY")
+    n_few = len(ai.build_dataset(few, bench, budget=800)["long"])
+    n_many = len(ai.build_dataset(many, bench, budget=800)["long"])
+    assert n_many < 2 * n_few  # 8x the stocks, not 8x the rows
+    d = ai.build_dataset(few, bench, budget=800)
+    assert set(ai.MARKET_FEATURES) <= set(d["long"].columns) and {"stop_atr", "target_r", "y", "symbol", "date"} <= set(d["long"].columns)
+    assert d["long"]["y"].isin([0, 1]).all() and np.isfinite(d["long"]["stop_atr"]).all()

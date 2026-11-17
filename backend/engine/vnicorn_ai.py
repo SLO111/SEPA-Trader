@@ -112,10 +112,21 @@ def _move_label(df: pd.DataFrame, starts: np.ndarray) -> np.ndarray:
     return out
 
 
-def build_dataset(histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None, step: int = 5) -> dict[str, pd.DataFrame]:
-    """Training rows for the long, short and move models (one row per stock, sample date and plan)."""
-    plans = {"long": [], "short": []}
-    moves = []
+SAMPLE_BUDGET = 6000  # sample dates across all stocks: training memory stays about the same for 100 or 850 stocks
+
+
+def build_dataset(histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None, step: int | None = None,
+                  budget: int = SAMPLE_BUDGET) -> dict[str, pd.DataFrame]:
+    """Training rows for the long, short and move models (one row per stock, sample date and plan).
+    The sampling step grows with the number of stocks so the total stays near `budget` sample dates: many stocks give
+    variety, not more memory (the free server has 512 MB)."""
+    cols = ("X", "stop_atr", "target_r", "y", "realized_r", "date", "symbol")
+    plans = {side: {c: [] for c in cols} for side in ("long", "short")}
+    moves = {c: [] for c in ("X", "y", "date", "symbol")}
+    if step is None:
+        usable = sum(1 for df in histories.values() if len(df) >= 320)
+        per_stock = max(1, max(len(df) for df in histories.values()) - 200 - HORIZON) if histories else 1
+        step = max(5, int(np.ceil(usable * per_stock / max(budget, 1))))
     for sym, df in histories.items():
         if len(df) < 320:
             continue
@@ -126,19 +137,38 @@ def build_dataset(histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None
         if not len(starts):
             continue
         X = f[MARKET_FEATURES].to_numpy(dtype=np.float32)[starts]
-        dates = df.index[starts]
+        dates = df.index[starts].to_numpy()
         atr_v = f["_atr"].to_numpy(dtype=float)[starts]
+        del f
+        n = len(starts)
         for side in ("long", "short"):
             for k, tr, won, realized in plan_outcomes(df, starts, atr_v, side):
-                d = pd.DataFrame(X, columns=MARKET_FEATURES)
-                d["stop_atr"], d["target_r"] = np.float32(k), np.float32(tr)
-                d["y"], d["realized_r"], d["date"], d["symbol"] = won, realized, dates, sym
-                plans[side].append(d)
-        m = pd.DataFrame(X, columns=MARKET_FEATURES)
-        m["y"], m["date"], m["symbol"] = _move_label(df, starts), dates, sym
-        moves.append(m.dropna(subset=["y"]))
-    out = {side: pd.concat(v, ignore_index=True) if v else pd.DataFrame() for side, v in plans.items()}
-    out["move"] = pd.concat(moves, ignore_index=True) if moves else pd.DataFrame()
+                acc = plans[side]
+                acc["X"].append(X)
+                acc["stop_atr"].append(np.full(n, k, np.float32))
+                acc["target_r"].append(np.full(n, tr, np.float32))
+                acc["y"].append(np.asarray(won, np.float32))
+                acc["realized_r"].append(np.asarray(realized, np.float32))
+                acc["date"].append(dates)
+                acc["symbol"].append(np.full(n, sym, dtype=object))
+        y = _move_label(df, starts)
+        keep = ~np.isnan(np.asarray(y, dtype=float))
+        moves["X"].append(X[keep])
+        moves["y"].append(np.asarray(y, dtype=float)[keep])
+        moves["date"].append(dates[keep])
+        moves["symbol"].append(np.full(int(keep.sum()), sym, dtype=object))
+
+    def frame(acc: dict, extra: tuple[str, ...]) -> pd.DataFrame:
+        # one DataFrame at the end (thousands of small per-stock frames cost hundreds of MB in pandas overhead)
+        if not acc["X"]:
+            return pd.DataFrame()
+        d = pd.DataFrame(np.concatenate(acc["X"]), columns=MARKET_FEATURES)
+        for col in extra:
+            d[col] = np.concatenate(acc[col])
+        return d
+
+    out = {side: frame(plans[side], ("stop_atr", "target_r", "y", "realized_r", "date", "symbol")) for side in ("long", "short")}
+    out["move"] = frame(moves, ("y", "date", "symbol"))
     return out
 
 
@@ -215,10 +245,10 @@ def _validate(d: pd.DataFrame, cols: list[str], plan: bool) -> dict:
 
 
 def train(histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None, trades: list[dict] | None = None,
-          trade_histories: dict[str, pd.DataFrame] | None = None) -> dict:
+          trade_histories: dict[str, pd.DataFrame] | None = None, budget: int | None = None) -> dict:
     """Train the three models and return them with their walk-forward report.
     Real closed trades (if given) are added to the plan models with a higher weight: winners 3x, losers 2x."""
-    data = build_dataset(histories, bench)
+    data = build_dataset(histories, bench, budget=budget or SAMPLE_BUDGET)
     real = trade_examples(trades or [], trade_histories or histories, bench) if trades else {}
     real_n = {s: int(len(v)) for s, v in real.items()}
     real_w = {s: int(v["y"].sum()) if len(v) else 0 for s, v in real.items()}

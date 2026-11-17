@@ -27,5 +27,9 @@ services:
       - key: UNIVERSE
         value: sp500+r1000 # S&P 500 + Nasdaq-100 + theme lists + the largest other Russell 1000 stocks (~800 in all).
         # Lighter: "sp500+" (~560) or "core" (built-in symbols only).
+      - key: VNICORN_TRAIN_STOCKS
+        value: "850" # vnicornAI learns from this many of the most liquid stocks
+      - key: VNICORN_SAMPLES
+        value: "3000" # training sample budget (memory); lower to 1500 if the free server runs short of memory
       - key: UNIVERSE_EXTRA
         value: "300" # extra Russell 1000 stocks with sp500+r1000; lower it (e.g. 150) if the free server runs short of memory

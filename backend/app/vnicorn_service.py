@@ -21,7 +21,8 @@ from .models import AIPick, ModelBlob, TradeIdea
 log = logging.getLogger("sepa.vnicornai")
 MODEL = "vnicornai"
 RETRAIN_DAYS = 7
-TRAIN_SYMBOLS = 120  # the most liquid stocks: enough data, small enough for a free server
+TRAIN_SYMBOLS = 850  # default; settings.vnicorn_train_stocks (VNICORN_TRAIN_STOCKS on Render) decides
+last_error: str | None = None  # last training / rating failure, shown in /api/health
 MAX_AI_IDEAS = 10
 
 _bundle: dict | None = None
@@ -97,7 +98,9 @@ def real_trades(db: Session, hist: dict[str, pd.DataFrame]) -> list[dict]:
 def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFrame | None, force: bool = False) -> dict | None:
     bundle = load(db)
     fresh = _trained_at is not None and datetime.now(timezone.utc) - _trained_at < timedelta(days=RETRAIN_DAYS)
-    subset = _liquid(hist, TRAIN_SYMBOLS)
+    from .config import settings
+
+    subset = _liquid(hist, settings.vnicorn_train_stocks or TRAIN_SYMBOLS)
     # the universe grew (e.g. 36 -> 850 stocks): a model that learned from far fewer stocks than it could is retrained now
     grown = bundle is not None and (bundle.get("symbols") or 0) < 0.8 * len(subset)
     if bundle is not None and fresh and not force and not grown:
@@ -106,10 +109,16 @@ def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFra
         return bundle
     trades = real_trades(db, hist)
     log.info("Training vnicornAI on %d stocks and %d real trades", len(subset), len(trades))
+    global last_error
     try:
-        new = ai.train(subset, bench, trades, trade_histories=hist)
-    except Exception:
+        import gc
+
+        ai.SAMPLE_BUDGET = settings.vnicorn_samples
+        new = ai.train(subset, bench, trades, trade_histories=hist, budget=settings.vnicorn_samples)
+        gc.collect()
+    except Exception as e:
         log.exception("vnicornAI training failed")
+        last_error = f"training: {type(e).__name__}: {str(e)[:120]}"
         return bundle
     if not new.get("models"):
         return bundle
@@ -141,10 +150,14 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
         df = hist.get(i.symbol)
         if df is None or f(i.symbol) is None:
             continue
-        a = float(f(i.symbol)["_atr"].iloc[-1])
-        risk = abs(i.entry - i.stop)
-        extra = [(risk / a, abs(i.target - i.entry) / risk)] if a > 0 and risk > 0 else []
-        plan = ai.best_plan(bundle, df, bench, i.side, extra, f(i.symbol))
+        try:  # one stock with odd data must not cancel the ratings of all the others
+            a = float(f(i.symbol)["_atr"].iloc[-1])
+            risk = abs(i.entry - i.stop)
+            extra = [(risk / a, abs(i.target - i.entry) / risk)] if a > 0 and risk > 0 else []
+            plan = ai.best_plan(bundle, df, bench, i.side, extra, f(i.symbol))
+        except Exception:
+            log.debug("vnicornAI could not rate %s", i.symbol, exc_info=True)
+            continue
         if plan:
             db.merge(AIPick(idea_id=i.id, prob=plan["prob"], ev=plan["ev"], stop=plan["stop"], trim=plan["trim"],
                             target=plan["target"], rr=plan["rr"], pick=plan["pick"] and bundle.get("trusted", {}).get(i.side, False)))
@@ -163,7 +176,10 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
             continue
         if f(sym) is None:
             continue
-        plan = ai.best_plan(bundle, df, bench, side, None, f(sym))
+        try:
+            plan = ai.best_plan(bundle, df, bench, side, None, f(sym))
+        except Exception:
+            continue
         if plan and plan["pick"]:
             cands.append((sym, plan))
     cands.sort(key=lambda x: -x[1]["ev"])
