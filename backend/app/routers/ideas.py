@@ -480,8 +480,12 @@ def _trades_for(user: User, db: Session, source: str, portfolio_id: int | None =
         if portfolio_id:
             q = q.where(Portfolio.id == portfolio_id)
         for p in db.scalars(q).all():
-            txns = [{"date": x.date.isoformat(), "symbol": x.symbol, "side": x.side, "shares": x.shares, "price": x.price}
-                    for x in db.scalars(select(PortfolioTxn).where(PortfolioTxn.portfolio_id == p.id)).all()]
+            from ..models import TxnOrigin
+
+            rows_ = db.scalars(select(PortfolioTxn).where(PortfolioTxn.portfolio_id == p.id)).all()
+            stmt = set(db.scalars(select(TxnOrigin.txn_id).where(TxnOrigin.txn_id.in_([x.id for x in rows_]), TxnOrigin.origin == "statement")).all()) if rows_ else set()
+            txns = [{"date": x.date.isoformat(), "symbol": x.symbol, "side": x.side, "shares": x.shares, "price": x.price, "statement": x.id in stmt}
+                    for x in rows_]
             for i, rt in enumerate(round_trips(txns)):
                 out.append({**rt, "source": f"Portfolio: {p.name}", "ref": f"pf:{p.id}:{i}"})
     return out

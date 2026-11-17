@@ -1,5 +1,8 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from engine.data.universe import NON_STOCK_SECTORS, SYMBOLS
 from engine.report import build_pdf, period_returns, takeaways, verdict
@@ -118,3 +121,93 @@ def technicals(symbol: str, interval: str = "1d", user: User = Depends(current_u
         raise
     except Exception:
         raise HTTPException(404, f"No data for {sym} on {interval}")
+
+
+
+# ------------------------------------------------------------------ scorecard: health, fair value, members' sentiment
+
+def _sentiment(db, symbol: str, user_id: int | None = None) -> dict:
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from ..models import SentimentVote
+
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    votes = db.scalars(select(SentimentVote).where(SentimentVote.symbol == symbol, SentimentVote.voted_at >= since)).all()
+    bull = sum(v.vote == "bull" for v in votes)
+    mine = next((v.vote for v in votes if v.user_id == user_id), None) if user_id else None
+    n = len(votes)
+    return {"votes": n, "bullish_pct": round(bull / n * 100) if n else None, "bearish_pct": round((n - bull) / n * 100) if n else None, "mine": mine}
+
+
+@router.get("/{symbol}/scorecard")
+def scorecard(symbol: str, user: User = Depends(current_user)):
+    """Company's health (everyone; categories on Pro), fair value (label on Free, price on Pro) and members' sentiment."""
+    from engine.stages import stage_now
+    from engine.valuation import fair_value, health
+
+    from ..db import SessionLocal
+
+    sym = symbol.upper().strip()
+    lim = limits_for(user)
+
+    def build():
+        co = market_data.company(sym)
+        try:
+            df = market_data.history(sym)
+            price = float(df["close"].iloc[-1])
+            st = stage_now(df)
+        except Exception:
+            price, st = None, None
+        try:
+            sepa = sepa_report(market_data.history, sym, _rs_for(sym))
+        except Exception:
+            sepa = None
+        sector_pe = None
+        try:
+            from engine import market_tools as mt
+
+            from .markets import _rows
+            from .sepa import cached_scan
+
+            funds = {s: market_data.cached("fundamentals", s) or {} for s in [r["symbol"] for r in _rows()]}
+            row = next((r for r in mt.screen_rows(_rows(), cached_scan(), funds) if r["symbol"] == sym), None)
+            sector_pe = row.get("sector_pe") if row else None
+        except Exception:
+            pass
+        return {"health": health(co, sepa, st["stage"] if st else None), "fair_value": fair_value(co, price, sector_pe), "price": price}
+
+    data = market_data._fast(f"scorecard:{sym}", 6 * 3600, build)
+    h, fv = dict(data["health"]), dict(data["fair_value"])
+    if not lim["sepa_details"]:
+        h = {"score": h["score"], "label": h["label"], "categories_locked": True}
+        fv = {"label": fv["label"], "locked": True}
+    with SessionLocal() as db:
+        sent = _sentiment(db, sym, user.id)
+    return {"symbol": sym, "price": data["price"], "health": h, "fair_value": fv, "sentiment": sent}
+
+
+class VoteIn(BaseModel):
+    vote: Literal["bull", "bear"]
+
+
+@router.post("/{symbol}/sentiment")
+def vote(symbol: str, body: VoteIn, user: User = Depends(current_user)):
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from ..db import SessionLocal
+    from ..models import SentimentVote
+
+    sym = symbol.upper().strip()
+    with SessionLocal() as db:
+        v = db.scalar(select(SentimentVote).where(SentimentVote.user_id == user.id, SentimentVote.symbol == sym))
+        if v is None:
+            v = SentimentVote(user_id=user.id, symbol=sym, vote=body.vote)
+            db.add(v)
+        else:
+            v.vote, v.voted_at = body.vote, datetime.now(timezone.utc)
+        db.commit()
+        return _sentiment(db, sym, user.id)

@@ -218,13 +218,36 @@ def build_feed(db: Session) -> int:
              + feedmod.breakout_items(hist, bench))
     from engine.data.providers import _finnhub
 
-    fh = _finnhub() if settings.data_provider != "synthetic" else None
-    if fh is not None:
+    n = add_feed(db, items)
+    if settings.data_provider != "synthetic":
         try:
-            items += feedmod.news_items(fh.general_news())
+            n += refresh_news(db, _finnhub())
         except Exception:
-            log.warning("Finnhub news failed", exc_info=True)
-    return add_feed(db, items)
+            log.warning("News refresh failed", exc_info=True)
+    return n
+
+
+_news_cursor = 0
+
+
+def refresh_news(db: Session, fh=None, fetch=None) -> int:
+    """Headlines from publishers' RSS feeds and Finnhub (general, M&A, company news for a rotating set of stocks)."""
+    global _news_cursor
+    import httpx
+
+    from engine import news
+
+    def get(url: str) -> bytes:
+        r = httpx.get(url, timeout=10, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (compatible; VnicornNews/1.0)"})
+        r.raise_for_status()
+        return r.content
+
+    syms = stock_symbols()
+    batch = syms[_news_cursor:_news_cursor + 20] if syms else []  # ~20 company-news calls per pass, within Finnhub's limit
+    _news_cursor = (_news_cursor + 20) % max(len(syms), 1)
+    raw = news.collect(fetch or get, fh, batch)
+    names = news.name_index({s: SYMBOLS.get(s, {}) for s in syms})
+    return add_feed(db, news.to_feed_items(raw, set(syms), names))
 
 
 def due_for_ideas(db: Session, now: datetime | None = None) -> bool:

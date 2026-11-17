@@ -69,6 +69,31 @@ def _liquid(hist: dict[str, pd.DataFrame], n: int) -> dict[str, pd.DataFrame]:
     return {s: hist[s] for s in keep}
 
 
+def real_trades(db: Session, hist: dict[str, pd.DataFrame]) -> list[dict]:
+    """Closed real trades to learn from: daily ideas (target / stop) and Move Detector + chart trades (not copies)."""
+    from sqlalchemy import select
+
+    from .models import PaperTrade
+
+    out = []
+    for r in db.scalars(select(TradeIdea).where(TradeIdea.status.in_(("TARGET", "STOPPED")), TradeIdea.r_multiple.is_not(None))).all():
+        out.append({"symbol": r.symbol, "side": r.side, "entry_date": r.batch_date, "entry": r.entry, "stop": r.stop, "target": r.target,
+                    "won": r.r_multiple > 0, "r": r.r_multiple})
+    from engine.paper import follow
+
+    for t in db.scalars(select(PaperTrade).where(PaperTrade.timeframe.in_(("MD", "CH")))).all():
+        df = hist.get(t.symbol)
+        if df is None:
+            continue
+        f = follow({"side": t.side, "entry": t.entry, "stop": t.stop, "trim": t.trim, "target": t.target, "entry_date": t.entry_date,
+                    "exit_date": t.exit_date, "exit_price": t.exit_price}, df)
+        if f["open"]:
+            continue
+        out.append({"symbol": t.symbol, "side": t.side, "entry_date": t.entry_date, "entry": t.entry, "stop": t.stop, "target": t.target,
+                    "won": f["r_multiple"] > 0, "r": f["r_multiple"]})
+    return out
+
+
 def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFrame | None, force: bool = False) -> dict | None:
     bundle = load(db)
     fresh = _trained_at is not None and datetime.now(timezone.utc) - _trained_at < timedelta(days=RETRAIN_DAYS)
@@ -77,9 +102,10 @@ def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFra
     subset = _liquid(hist, TRAIN_SYMBOLS)
     if len(subset) < 10:
         return bundle
-    log.info("Training vnicornAI on %d stocks", len(subset))
+    trades = real_trades(db, hist)
+    log.info("Training vnicornAI on %d stocks and %d real trades", len(subset), len(trades))
     try:
-        new = ai.train(subset, bench)
+        new = ai.train(subset, bench, trades, trade_histories=hist)
     except Exception:
         log.exception("vnicornAI training failed")
         return bundle

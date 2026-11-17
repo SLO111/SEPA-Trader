@@ -142,6 +142,38 @@ def build_dataset(histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None
     return out
 
 
+REAL_WIN_WEIGHT, REAL_LOSS_WEIGHT = 3.0, 2.0  # real trades count more than market samples; winners the most
+
+
+def trade_examples(trades: list[dict], histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None) -> dict[str, pd.DataFrame]:
+    """Training rows from real closed trades (ideas, Move Detector, chart trades).
+    trades: [{symbol, side long|short, entry_date, entry, stop, target, won bool, r}]. Winners are the examples to follow."""
+    rows: dict[str, list] = {"long": [], "short": []}
+    feats: dict[str, pd.DataFrame] = {}
+    for t in trades:
+        sym, side = t["symbol"], "short" if t.get("side") == "short" else "long"
+        df = histories.get(sym)
+        if df is None or len(df) < 220:
+            continue
+        if sym not in feats:
+            feats[sym] = features(df, bench)
+        f = feats[sym]
+        pos = f.index.searchsorted(pd.Timestamp(t["entry_date"]), side="right") - 1
+        if pos < 200:
+            continue
+        row = f.iloc[pos]
+        a = float(row["_atr"]) if row["_atr"] > 0 else None
+        risk = abs(float(t["entry"]) - float(t["stop"]))
+        if not a or not risk or row[MARKET_FEATURES].isna().any():
+            continue
+        won = bool(t["won"])
+        rows[side].append({**{c: float(row[c]) for c in MARKET_FEATURES}, "stop_atr": risk / a,
+                           "target_r": abs(float(t["target"]) - float(t["entry"])) / risk, "y": int(won),
+                           "realized_r": float(t.get("r") or 0.0), "date": f.index[pos], "symbol": sym,
+                           "w": REAL_WIN_WEIGHT if won else REAL_LOSS_WEIGHT, "real": True})
+    return {s: pd.DataFrame(v) for s, v in rows.items()}
+
+
 # ------------------------------------------------------------------ training
 
 def _model():
@@ -163,7 +195,7 @@ def _validate(d: pd.DataFrame, cols: list[str], plan: bool) -> dict:
     train, test = d[d["date"] < split - gap], d[d["date"] >= split]
     if train["y"].nunique() < 2 or test["y"].nunique() < 2 or len(test) < 50:
         return {}
-    m = _model().fit(train[cols], train["y"])
+    m = _model().fit(train[cols], train["y"], sample_weight=train["w"] if "w" in train else None)
     p = m.predict_proba(test[cols])[:, 1]
     out = {"auc": round(float(roc_auc_score(test["y"], p)), 3), "test_rows": int(len(test)),
            "test_from": pd.Timestamp(split).strftime("%Y-%m-%d"), "base_rate": round(float(test["y"].mean()) * 100, 1)}
@@ -182,9 +214,20 @@ def _validate(d: pd.DataFrame, cols: list[str], plan: bool) -> dict:
     return out
 
 
-def train(histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None) -> dict:
-    """Train the three models and return them with their walk-forward report."""
+def train(histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None, trades: list[dict] | None = None,
+          trade_histories: dict[str, pd.DataFrame] | None = None) -> dict:
+    """Train the three models and return them with their walk-forward report.
+    Real closed trades (if given) are added to the plan models with a higher weight: winners 3x, losers 2x."""
     data = build_dataset(histories, bench)
+    real = trade_examples(trades or [], trade_histories or histories, bench) if trades else {}
+    real_n = {s: int(len(v)) for s, v in real.items()}
+    real_w = {s: int(v["y"].sum()) if len(v) else 0 for s, v in real.items()}
+    for side in ("long", "short"):
+        d = data.get(side, pd.DataFrame())
+        if not d.empty:
+            d["w"], d["real"] = 1.0, False
+        if side in real and len(real[side]):
+            data[side] = pd.concat([d, real[side]], ignore_index=True) if not d.empty else real[side]
     cols = MARKET_FEATURES + PLAN_FEATURES
     bundle: dict = {"models": {}, "report": {}, "features": MARKET_FEATURES}
     for name, d in data.items():
@@ -192,7 +235,10 @@ def train(histories: dict[str, pd.DataFrame], bench: pd.DataFrame | None) -> dic
             continue
         use = cols if name != "move" else MARKET_FEATURES
         bundle["report"][name] = {"rows": int(len(d)), "symbols": int(d["symbol"].nunique()), **_validate(d, use, name != "move")}
-        bundle["models"][name] = _model().fit(d[use], d["y"])
+        w = d["w"].to_numpy(dtype=float) if "w" in d else None
+        bundle["models"][name] = _model().fit(d[use], d["y"], sample_weight=w)
+        if name in real_n:
+            bundle["report"][name].update({"real_trades": real_n[name], "real_winners": real_w[name]})
     # Trust a plan model only if, on the unseen period, its picks beat taking every setup (and are positive).
     bundle["trusted"] = {
         side: bool(r.get("picks_avg_r") is not None and r["picks_avg_r"] > max(0.0, r.get("all_avg_r", 0.0)) and r.get("picks", 0) >= 30)

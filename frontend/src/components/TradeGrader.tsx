@@ -14,6 +14,7 @@ const PriceChart = dynamic(() => import("@/components/PriceChart"), { ssr: false
 
 type Cls = "Perfect" | "Early" | "Late" | "Fair";
 type Graded = {
+  statement?: boolean;
   ref: string; source: string; symbol: string; side: "long" | "short"; entry_date: string; entry_price: number; exit_date: string | null; exit_price: number | null;
   stop?: number; entry_class?: Cls | null; exit_class?: Cls | null; grade?: string | null; score?: number | null; pnl_pct?: number; r_multiple?: number | null;
   mfe_pct?: number; mae_pct?: number; left_on_table_pct?: number; days?: number; open?: boolean; notes: string[];
@@ -90,7 +91,9 @@ function GradeTable({ rows, open, setOpen, noted, onNote }: { rows: Graded[]; op
                       </td>
                       <td className="px-3 py-2 text-xs text-muted">
                         {t.source}
-                        {!t.grade && !t.entry_class && t.notes?.[0] && <div className="max-w-[220px] text-[10px] text-amber-300">{t.notes[0]}</div>}
+                        {t.statement ? (
+                          <div className="max-w-[220px] text-[10px] text-muted">Imported from a statement · buy date unknown</div>
+                        ) : !t.grade && !t.entry_class && t.notes?.[0] && <div className="max-w-[220px] text-[10px] text-amber-300">{t.notes[0]}</div>}
                       </td>
                       <td className="tabular whitespace-nowrap px-3 py-2 text-xs">{t.entry_date}<div className="text-muted">${fmt(t.entry_price)}</div></td>
                       <td className="tabular whitespace-nowrap px-3 py-2 text-xs">{t.exit_date ?? "open"}<div className="text-muted">{t.exit_price ? `$${fmt(t.exit_price)}` : ""}</div></td>

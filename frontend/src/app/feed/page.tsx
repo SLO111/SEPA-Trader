@@ -22,6 +22,23 @@ const KINDS = [
 const ICON: Record<string, string> = { earnings: "📊", mover: "⚡", breakout: "📈", high: "🏔️", idea: "💡", news: "📰" };
 const ACCENT = { bull: "border-l-up", bear: "border-l-down", info: "border-l-accent" };
 
+// headlines that usually move prices (same idea as the server's "critical news" rule)
+const MOVING = /\b(FDA|SEC|antitrust|lawsuit|investigation|probe|recall|bankrupt\w*|acquir\w*|acquisition|merger|buyout|takeover|guidance|outlook|warns?|layoffs?|CEO|CFO|resign\w*|upgrade\w*|downgrade\w*|beats?|miss(es|ed)?|tariffs?|Fed|FOMC|rate (cut|hike)s?|CPI|inflation|jobs report|payrolls|recession|stock split|buyback)\b/i;
+const SOURCES: Record<string, string> = {
+  "cnbc.com": "CNBC", "marketwatch.com": "MarketWatch", "yahoo.com": "Yahoo Finance", "investing.com": "Investing.com", "nasdaq.com": "Nasdaq",
+  "seekingalpha.com": "Seeking Alpha", "foxbusiness.com": "Fox Business", "reuters.com": "Reuters", "bloomberg.com": "Bloomberg", "wsj.com": "WSJ",
+  "benzinga.com": "Benzinga", "fool.com": "Motley Fool", "barrons.com": "Barron's", "ft.com": "Financial Times", "finnhub.io": "Finnhub",
+};
+function sourceOf(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    const k = Object.keys(SOURCES).find((d) => host === d || host.endsWith(`.${d}`));
+    return k ? SOURCES[k] : host;
+  } catch {
+    return "News";
+  }
+}
+
 function ago(iso: string) {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
   if (s < 60) return "just now";
@@ -102,7 +119,7 @@ function Feed() {
                     </p>
                     <span className="ml-auto shrink-0 text-xs text-muted">{ago(it.created_at)}</span>
                   </div>
-                  {it.body && <p className="mt-1 text-sm text-muted">{it.body}</p>}
+                  {it.body && <p className={`mt-1 text-sm text-muted ${it.kind === "news" ? "line-clamp-2" : ""}`}>{it.body}</p>}
                   <div className="mt-2 flex items-center gap-3 text-xs">
                     {it.symbol && (
                       <Link href={`/chart?s=${encodeURIComponent(it.symbol)}`} className="rounded bg-panel-2 px-2 py-0.5 font-medium hover:text-accent">
@@ -114,7 +131,8 @@ function Feed() {
                         Read more ↗
                       </a>
                     )}
-                    <span className="text-muted capitalize">{KINDS.find((k) => k.id === it.kind)?.label ?? it.kind}</span>
+                    <span className="text-muted capitalize">{it.kind === "news" && it.url ? sourceOf(it.url) : KINDS.find((k) => k.id === it.kind)?.label ?? it.kind}</span>
+                    {it.kind === "news" && MOVING.test(it.title) && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-300">Market-moving</span>}
                   </div>
                 </div>
               </div>

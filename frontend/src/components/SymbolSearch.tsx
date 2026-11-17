@@ -42,7 +42,7 @@ export default function SymbolSearch() {
   };
 
   return (
-    <div ref={box} className="relative w-full max-w-[9.5rem] sm:max-w-[12rem] lg:w-56 lg:max-w-none">
+    <div ref={box} className="relative w-full max-w-[9.5rem] sm:max-w-[12rem] lg:w-44 lg:max-w-none 2xl:w-56">
       <input
         value={q}
         onChange={(e) => {

@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import Scorecard from "./Scorecard";
 import GrowthTable from "./GrowthTable";
 import { useState } from "react";
 import { scoreColor } from "@/components/ScoreBadge";
@@ -186,6 +187,10 @@ export default function Overview({ d, candles }: { d: StockData; candles: Candle
             )}
           </section>
         )}
+
+        <Card title={`${c.symbol} scorecard`} right={<span className="text-[11px] text-muted">Health · Fair value · Sentiment</span>}>
+          <Scorecard symbol={c.symbol} />
+        </Card>
 
         {c.analysts && c.analysts.score !== null && (
           <Card title="Analyst rating" right={<span className="text-[11px] text-muted">{c.analysts.total} analysts</span>}>

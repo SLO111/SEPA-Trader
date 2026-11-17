@@ -1,6 +1,7 @@
 "use client";
 
-import ExportButton from "@/components/ExportButton";
+import ExportMenu from "@/components/ExportMenu";
+import PortfolioInsights from "@/components/portfolio/PortfolioInsights";
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -13,7 +14,7 @@ import HoldingsTable, { HeatCard } from "@/components/portfolio/HoldingsTable";
 import { PROFILE_STYLE, RiskMeter } from "@/components/portfolio/profile";
 import TemplateGallery from "@/components/portfolio/TemplateGallery";
 import Transactions from "@/components/portfolio/Transactions";
-import { api, del, patch, post } from "@/lib/api";
+import { api, del, patch, post, put } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { pct, signedUsd, tone, usd } from "@/lib/format";
 import type { Performance, PortfolioDetail, PortfolioSummary } from "@/lib/types";
@@ -128,8 +129,8 @@ function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChang
             <button onClick={() => setModal("import")} className="rounded-md border border-line px-3 py-1 text-muted hover:text-text">
               ⬆ Import CSV / PDF
             </button>
-            <ExportButton path={`/api/export/transactions?portfolio_id=${p.id}`} filename={`${p.name}-transactions.csv`} label="Transactions" />
-            <ExportButton path={`/api/export/holdings?portfolio_id=${p.id}`} filename={`${p.name}-holdings.csv`} label="Holdings" />
+            <ExportMenu path={`/api/export/transactions?portfolio_id=${p.id}`} filename={`Vnicorn-${p.name}-transactions`} label="Transactions" />
+            <ExportMenu path={`/api/export/holdings?portfolio_id=${p.id}`} filename={`Vnicorn-${p.name}-holdings`} label="Holdings" />
             <button onClick={rename} className="rounded px-2 py-1 text-muted hover:bg-panel-2 hover:text-text">
               Rename
             </button>
@@ -161,6 +162,12 @@ function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChang
         </div>
       )}
 
+      {p.positions.length > 0 && (
+        <PortfolioInsights portfolioId={p.id} version={version} onAction={(a, sym) => {
+          window.dispatchEvent(new CustomEvent("holding-edit", { detail: { kind: a, symbol: sym } }));
+          document.getElementById("holdings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }} />
+      )}
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <PerformanceCard id={p.id} version={version} />
         <ClassificationCard c={p.classification} />
@@ -232,13 +239,39 @@ function Portfolios() {
   useEffect(() => {
     loadList()
       .then((l) => {
-        if (l.length) setSelected((s) => s ?? (l.find((x) => !x.locked) ?? l[0]).id);
+        // open the portfolio you looked at last (only its id is kept on this device)
+        let last: number | null = null;
+        try {
+          last = Number(localStorage.getItem("vn_last_portfolio")) || null;
+        } catch {
+          /* ignore */
+        }
+        const remembered = l.find((x) => x.id === last && !x.locked);
+        if (l.length) setSelected((s) => s ?? (remembered ?? l.find((x) => !x.locked) ?? l[0]).id);
         else setMode("templates");
       })
       .catch((e) => setError(e.message));
   }, [loadList]);
 
   const selLocked = !!list?.find((x) => x.id === selected)?.locked;
+  useEffect(() => {
+    if (selected === null) return;
+    try {
+      localStorage.setItem("vn_last_portfolio", String(selected));
+    } catch {
+      /* ignore */
+    }
+  }, [selected]);
+  // drag & drop to reorder the portfolios in the side list
+  const [dragId, setDragId] = useState<number | null>(null);
+  const dropOn = async (targetId: number) => {
+    if (!list || dragId === null || dragId === targetId) return setDragId(null);
+    const ids = list.map((x) => x.id).filter((x) => x !== dragId);
+    ids.splice(ids.indexOf(targetId) + (list.findIndex((x) => x.id === dragId) < list.findIndex((x) => x.id === targetId) ? 1 : 0), 0, dragId);
+    setList(ids.map((i) => list.find((x) => x.id === i)!));
+    setDragId(null);
+    await put("/api/portfolios/order", { ids }).catch(() => {});
+  };
   useEffect(() => {
     if (selected === null || selLocked) return setDetail(null);
     const load = () => api<PortfolioDetail>(`/api/portfolios/${selected}`).then(setDetail).catch((e) => setError(e.message));
@@ -324,7 +357,7 @@ function Portfolios() {
         {atLimit && max < 1e6 && <p className="border-b border-line px-3 py-2 text-xs text-amber-300">Your plan allows {max} portfolio{max > 1 ? "s" : ""}. Upgrade for more.</p>}
         <ul className="min-h-0 flex-1 overflow-y-auto">
           {list?.map((p) => p.locked ? (
-            <li key={p.id}>
+            <li key={p.id} draggable onDragStart={() => setDragId(p.id)} onDragOver={(e) => e.preventDefault()} onDrop={() => dropOn(p.id)}>
               <button onClick={() => { setSelected(p.id); setMode("view"); }}
                 className={`w-full border-b border-line px-3 py-3 text-left opacity-60 ${p.id === selected && mode === "view" ? "bg-panel-2" : "hover:bg-panel-2/60"}`}>
                 <div className="flex items-baseline justify-between gap-2">
@@ -335,7 +368,8 @@ function Portfolios() {
               </button>
             </li>
           ) : (
-            <li key={p.id}>
+            <li key={p.id} draggable onDragStart={() => setDragId(p.id)} onDragOver={(e) => e.preventDefault()} onDrop={() => dropOn(p.id)}
+              className={dragId === p.id ? "opacity-50" : ""} title="Drag to reorder">
               <button
                 onClick={() => {
                   setSelected(p.id);

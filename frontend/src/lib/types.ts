@@ -44,7 +44,8 @@ export type User = {
   subscription_status?: string | null;
 };
 
-export type Watchlist = { id: number; name: string; color: string; symbols: string[]; locked?: boolean; hidden?: number };
+export type WatchSection = { id: string; name: string; symbols: string[]; collapsed: boolean };
+export type Watchlist = { id: number; name: string; color: string; symbols: string[]; locked?: boolean; hidden?: number; sections?: WatchSection[]; skipped?: string[] };
 
 export type Quote = {
   symbol: string;
@@ -224,7 +225,7 @@ export type PortfolioSummary = {
 export type Holding = {
   symbol: string; name: string; sector: string; shares: number; avg_cost: number; price: number; value: number; cost: number;
   pnl: number; pnl_pct: number | null; day_change: number; day_change_pct: number; weight: number;
-  beta: number | null; dividend_yield: number | null; pe: number | null; earnings_in?: number | null; stop?: number | null;
+  beta: number | null; dividend_yield: number | null; pe: number | null; earnings_in?: number | null; stop?: number | null; trim?: number | null; target?: number | null;
 };
 
 export type PortfolioTxn = { id: number; date: string; symbol: string; side: "buy" | "sell"; shares: number; price: number; fees: number };

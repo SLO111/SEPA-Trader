@@ -102,7 +102,7 @@ def csv_response(rows: list[dict], filename: str) -> Response:
 
 
 @router.get("/export/{kind}")
-def export(kind: str, portfolio_id: int | None = None, source: str = "all", preset: str | None = None,
+def export(kind: str, portfolio_id: int | None = None, source: str = "all", preset: str | None = None, format: str = "csv",
            user: User = Depends(current_user), db: Session = Depends(get_db)):
     """CSV export: transactions | holdings (portfolio_id), paper-trades | grader (source), screener (preset)."""
     if not limits_for(user)["csv_export"]:
@@ -116,6 +116,25 @@ def export(kind: str, portfolio_id: int | None = None, source: str = "all", pres
         p = _owned(db, user, portfolio_id)
         d = _summary(p, detail=True)
         rows = d["transactions"] if kind == "transactions" else d["positions"]
+        if format in ("xlsx", "pdf"):
+            from engine import branded_export as be
+
+            if kind == "transactions":
+                rows = [{**r, "amount": round((-1 if r["side"] == "buy" else 1) * r["shares"] * r["price"] - (r.get("fees") or 0), 2),
+                         "side": r["side"].capitalize()} for r in sorted(rows, key=lambda r: r["date"])]
+                cols, totals = be.TXN_COLUMNS, {"symbol": f"{len(rows)} transactions", "fees": round(sum(r.get("fees") or 0 for r in rows), 2)}
+                title = f"Transactions · {p.name}"
+            else:
+                cols = be.HOLDING_COLUMNS
+                totals = {"value": d["value"], "pnl": d["unrealized_pnl"], "pnl_pct": d["unrealized_pnl_pct"], "weight": 100.0}
+                title = f"Holdings · {p.name}"
+            sub = f"{len(rows)} rows · portfolio value ${d['value']:,.2f}"
+            fn = f"Vnicorn-{p.name}-{kind}-{day}".replace(" ", "_")
+            if format == "xlsx":
+                return Response(be.to_xlsx(title, sub, cols, rows, totals), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                headers={"Content-Disposition": f'attachment; filename="{fn}.xlsx"'})
+            return Response(be.to_pdf(title, sub, cols, rows, totals), media_type="application/pdf",
+                            headers={"Content-Disposition": f'attachment; filename="{fn}.pdf"'})
         return csv_response(rows, f"{p.name}-{kind}-{day}.csv")
     if kind == "paper-trades":
         from .ideas import paper_trades

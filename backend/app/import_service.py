@@ -256,8 +256,14 @@ def apply(db: Session, pid: int, kind: str, as_of: str, rows: list[dict], close_
                 continue
             new.append(r)
     validate(_txns(existing) + _txns(new))  # never oversell
+    from .models import TxnOrigin
+
     for r in new:
-        db.add(PortfolioTxn(portfolio_id=pid, date=pd.Timestamp(r["date"]).date(), symbol=r["symbol"], side=r["side"],
-                            shares=float(r["shares"]), price=float(r["price"]), fees=float(r.get("fees") or 0.0)))
+        t = PortfolioTxn(portfolio_id=pid, date=pd.Timestamp(r["date"]).date(), symbol=r["symbol"], side=r["side"],
+                         shares=float(r["shares"]), price=float(r["price"]), fees=float(r.get("fees") or 0.0))
+        db.add(t)
+        if kind == "positions" and r["side"] == "buy":
+            db.flush()
+            db.add(TxnOrigin(txn_id=t.id, origin="statement"))  # average cost on the import day, not the real buy
     db.commit()
     return {"added": len(new), "skipped_duplicates": dups, "changes": new}

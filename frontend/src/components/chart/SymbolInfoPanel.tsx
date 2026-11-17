@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Scorecard from "@/components/stock/Scorecard";
 import Locked from "@/components/Locked";
 import { scoreColor } from "@/components/ScoreBadge";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
@@ -145,6 +146,10 @@ export default function SymbolInfoPanel({ symbol, info, error }: { symbol: strin
           )}
         </div>
       )}
+
+      <div className="border-b border-line p-4">
+        <Scorecard symbol={info.symbol} compact />
+      </div>
 
       {sepa && (
         <div className="p-4">

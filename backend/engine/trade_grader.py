@@ -50,8 +50,12 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
     hi, lo, cl = df["high"].to_numpy(float), df["low"].to_numpy(float), df["close"].to_numpy(float)
     notes: list[str] = []
 
-    # sanity: the price must be close to where the stock traded that day
-    if not (lo[ei] * 0.95 <= entry <= hi[ei] * 1.05):
+    # A price outside the day's range usually means a position imported from a broker statement (average cost, dated the
+    # day of the import): the buy timing can't be graded, but the trade is followed and its sale graded.
+    in_range = lo[ei] * 0.95 <= entry <= hi[ei] * 1.05
+    statement = bool(t.get("statement")) or not in_range
+    if not t.get("statement") and not (lo[ei] * 0.6 <= entry <= hi[ei] * 1.4):
+        # far off (e.g. a price in another currency) on a trade entered by hand: ask to check it
         return {**t, "grade": None, "entry_class": None, "exit_class": None, "open": not t.get("exit_date"),
                 "notes": [f"The entry price {entry} is far from where {t['symbol']} traded on {str(t['entry_date'])[:10]}: check the price (currency?) or the date."]}
 
@@ -74,7 +78,11 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
         adverse = float(entry - np.min(lo[ei + 1: look_end])) if long else float(np.max(hi[ei + 1: look_end]) - entry)
     else:
         adverse = 0.0
-    if xi is None and len(df) - 1 - ei < 5 and not extended:
+    if statement:
+        entry_class = None
+        extended = False
+        notes.append("Opened before it was imported (statement average cost): the buy timing can't be graded; the sale will be.")
+    elif xi is None and len(df) - 1 - ei < 5 and not extended:
         entry_class = None
         notes.append("Too soon to judge the entry: it needs at least 5 trading days after the buy.")
     elif extended:
@@ -90,7 +98,7 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
         entry_class = "Fair"
         notes.append("Entry was fair: not extended, but not at the ideal point either.")
 
-    out = {**t, "entry_class": entry_class, "exit_class": None, "open": xi is None}
+    out = {**t, "entry_class": entry_class, "exit_class": None, "open": xi is None, "statement": statement}
     if xi is None:
         cur = float(cl[-1])
         hold_hi, hold_lo = float(np.max(hi[ei:])), float(np.min(lo[ei:]))
@@ -138,7 +146,7 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
 
     pnl = (exitp / entry - 1) * 100 * sign
     loss_r = (entry - exitp) * sign / risk
-    score = 70 + ENTRY_PTS[entry_class] + EXIT_PTS[exit_class] + (5 if pnl > 0 else -5)
+    score = 70 + ENTRY_PTS.get(entry_class, 0) + EXIT_PTS[exit_class] + (5 if pnl > 0 else -5)
     if loss_r > 1.25 and t.get("stop"):
         score -= 10
         notes.append(f"The loss was {loss_r:.1f}× the planned risk: the stop wasn't respected.")
@@ -157,7 +165,7 @@ def grade_trade(t: dict, df: pd.DataFrame) -> dict:
 
 def aggregate(graded: list[dict]) -> dict:
     ok = [g for g in graded if g.get("entry_class")]
-    closed = [g for g in ok if g.get("exit_class")]
+    closed = [g for g in graded if g.get("exit_class")]  # includes imported positions sold later
     def dist(rows, key):
         c = Counter(r[key] for r in rows)
         n = len(rows) or 1
@@ -185,21 +193,21 @@ def round_trips(txns: list[dict]) -> list[dict]:
     for x in sorted(txns, key=lambda r: (str(r["date"]), 0 if r["side"] == "buy" else 1)):
         sym = x["symbol"].upper()
         if x["side"] == "buy":
-            lots[sym].append([x["date"], float(x["price"]), float(x["shares"])])
+            lots[sym].append([x["date"], float(x["price"]), float(x["shares"]), bool(x.get("statement"))])
             continue
         left = float(x["shares"])
         while left > 1e-9 and lots[sym]:
             lot = lots[sym][0]
             take = min(left, lot[2])
             out.append({"symbol": sym, "side": "long", "entry_date": lot[0], "entry_price": lot[1], "exit_date": x["date"],
-                        "exit_price": float(x["price"]), "shares": take})
+                        "exit_price": float(x["price"]), "shares": take, "statement": lot[3]})
             lot[2] -= take
             left -= take
             if lot[2] <= 1e-9:
                 lots[sym].pop(0)
     for sym, ls in lots.items():
-        for d, p, sh in ls:
-            out.append({"symbol": sym, "side": "long", "entry_date": d, "entry_price": p, "exit_date": None, "exit_price": None, "shares": sh})
+        for d, p, sh, st in ls:
+            out.append({"symbol": sym, "side": "long", "entry_date": d, "entry_price": p, "exit_date": None, "exit_price": None, "shares": sh, "statement": st})
     return out
 
 

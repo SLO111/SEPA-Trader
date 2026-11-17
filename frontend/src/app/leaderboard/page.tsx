@@ -7,7 +7,7 @@ import { api, del, post, put } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 type Row = { rank: number; user_id: number; display_name: string; allow_copy: boolean; followers: number; trades: number; win_rate: number; avg_r: number; total_r: number };
-type Me = { profile: { display_name: string; public: boolean; allow_copy: boolean } | null; following: { user_id: number; display_name: string }[]; followers: number; max_follows: number };
+type Me = { profile: { display_name: string; public: boolean; allow_copy: boolean } | null; following: { user_id: number; display_name: string; paused?: boolean }[]; followers: number; max_follows: number };
 
 /** Monthly ranking of members' trades, with copy trading. */
 export default function LeaderboardPage() {
@@ -17,11 +17,12 @@ export default function LeaderboardPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [name, setName] = useState("");
   const [msg, setMsg] = useState("");
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     setRows(null);
     api<{ rows: Row[] }>(`/api/public/leaderboard?period=${period}`).then((r) => setRows(r.rows)).catch(() => setRows([]));
-  }, [period]);
+  }, [period, reload]);
   const loadMe = useCallback(() => {
     if (user) api<Me>("/api/community/profile").then(setMe).catch(() => {});
   }, [user]);
@@ -31,6 +32,7 @@ export default function LeaderboardPage() {
     setMsg("");
     try {
       setMe(await fn());
+      setReload((x) => x + 1); // show / hide on the leaderboard right away
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Error");
     }
@@ -63,7 +65,7 @@ export default function LeaderboardPage() {
                     <input type="checkbox" checked={me.profile.allow_copy} onChange={(e) => act(() => put<Me>("/api/community/profile", { ...me.profile, allow_copy: e.target.checked }))} />
                     Allow others to copy me
                   </label>
-                  <span className="ml-auto text-muted">Copying {me.following.length}/{me.max_follows >= 1e6 ? "∞" : me.max_follows}{me.following.length ? `: ${me.following.map((f) => f.display_name).join(", ")}` : ""}</span>
+                  <span className="ml-auto text-muted">Copying {me.following.length}/{me.max_follows >= 1e6 ? "∞" : me.max_follows}{me.following.length ? `: ${me.following.map((f) => f.display_name + (f.paused ? " (⏸ stopped sharing)" : "")).join(", ")}` : ""}</span>
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">

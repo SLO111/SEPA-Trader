@@ -84,6 +84,16 @@ def _positions(txns: list[Txn]) -> tuple[list[dict], float]:
     return rows, realized
 
 
+def _target_of(p: Portfolio, symbol: str) -> dict:
+    from sqlalchemy.orm import object_session
+
+    from ..models import PositionTarget
+
+    db = object_session(p)
+    t = db.scalar(select(PositionTarget).where(PositionTarget.portfolio_id == p.id, PositionTarget.symbol == symbol)) if db else None
+    return {"trim": t.trim if t else None, "target": t.target if t else None}
+
+
 def _heat(p: Portfolio, rows: list[dict], value: float) -> dict:
     """Portfolio heat: what you'd lose if every stop were hit (positions without a stop are flagged)."""
     from sqlalchemy.orm import object_session
@@ -140,6 +150,7 @@ def _summary(p: Portfolio, detail: bool = False) -> dict:
                     "beta": r["metrics"]["beta"], "dividend_yield": r["fundamentals"].get("dividend_yield"), "pe": r["fundamentals"].get("pe"),
                     "earnings_in": market_data.earnings_in_days(r["symbol"]),
                     "stop": out["heat"]["stops"].get(r["symbol"]),
+                    **_target_of(p, r["symbol"]),
                 } for r in rows],
                 "dividends": divs,
                 "dividends_total": round(sum(d["amount"] for d in divs), 2),
@@ -186,6 +197,14 @@ class PortfolioIn(BaseModel):
 @router.get("/portfolios")
 def list_portfolios(user: User = Depends(current_user), db: Session = Depends(get_db)):
     rows = db.scalars(select(Portfolio).where(Portfolio.user_id == user.id).order_by(Portfolio.created_at, Portfolio.id)).all()
+    import json
+
+    from ..models import UserPrefs
+
+    pref = db.get(UserPrefs, user.id)
+    order = json.loads(pref.data or "{}").get("portfolio_order", []) if pref else []
+    pos = {pid: k for k, pid in enumerate(order)}
+    rows = sorted(rows, key=lambda p: pos.get(p.id, len(pos) + rows.index(p)))  # your order; new ones at the end
     active = _active_ids(db, user)
     return [_summary(p) if p.id in active else {"id": p.id, "name": p.name, "description": p.description, "locked": True,
                                                   "value": 0, "symbols": [], "positions_count": 0} for p in rows]
@@ -604,3 +623,95 @@ def set_stop(pid: int, body: StopIn, user: User = Depends(current_user), db: Ses
         db.add(PositionStop(portfolio_id=pid, symbol=sym, stop=body.stop))
     db.commit()
     return _summary(p, detail=True)
+
+
+
+# ------------------------------------------------------------------ trim / target, vnicornAI insights, order
+
+class TargetIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=16)
+    trim: float | None = Field(default=None, gt=0)
+    target: float | None = Field(default=None, gt=0)
+
+
+@router.put("/portfolios/{pid}/targets")
+def set_target(pid: int, body: TargetIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..models import PositionTarget
+
+    p = _owned(db, user, pid)
+    sym = body.symbol.upper().strip()
+    row = db.scalar(select(PositionTarget).where(PositionTarget.portfolio_id == pid, PositionTarget.symbol == sym))
+    if body.trim is None and body.target is None:
+        if row:
+            db.delete(row)
+    else:
+        row = row or PositionTarget(portfolio_id=pid, symbol=sym)
+        row.trim, row.target = body.trim, body.target
+        db.add(row)
+    db.commit()
+    return _summary(p, detail=True)
+
+
+@router.get("/portfolios/{pid}/insights")
+def portfolio_insights(pid: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """vnicornAI insights: checks on every position (everyone) and stocks to consider (Pro / Premium)."""
+    from engine.data.universe import SYMBOLS
+    from engine.indicators import sma
+    from engine.portfolio_insights import checks, suggestions
+    from engine.stages import stage_now
+
+    from ..models import PositionStop, PositionTarget, TradeIdea
+    from .sepa import cached_scan, pulse_map
+
+    p = _owned(db, user, pid)
+    rows, _ = _positions(_txns(p))
+    stops = {s.symbol: s.stop for s in db.scalars(select(PositionStop).where(PositionStop.portfolio_id == pid)).all()}
+    targets = {t.symbol: {"trim": t.trim, "target": t.target} for t in db.scalars(select(PositionTarget).where(PositionTarget.portfolio_id == pid)).all()}
+    scan_rows = cached_scan()
+    scan = {r["symbol"]: r for r in scan_rows}
+    try:
+        pm = pulse_map()
+    except Exception:
+        pm = {}
+    ext, stages, earn = {}, {}, {}
+    for r in rows:
+        try:
+            df = market_data.history(r["symbol"])
+            m50 = float(sma(df["close"], 50).iloc[-1])
+            ext[r["symbol"]] = round((r["price"] / m50 - 1) * 100, 1) if m50 else None
+            st = stage_now(df)
+            stages[r["symbol"]] = st["stage"] if st else None
+        except Exception:
+            pass
+        earn[r["symbol"]] = market_data.earnings_in_days(r["symbol"])
+    out = {"checks": checks(rows, stops, targets, scan, pm, earn, ext, stages)}
+    if limits_for(user)["sepa_details"]:
+        sectors: dict[str, float] = {}
+        for r in rows:
+            sectors[r["sector"]] = sectors.get(r["sector"], 0) + r["value"]
+        ideas = [{"symbol": i.symbol, "side": i.side, "entry": i.entry, "stop": i.stop, "target": i.target, "rr": i.rr}
+                 for i in db.scalars(select(TradeIdea).where(TradeIdea.status == "WAIT").order_by(TradeIdea.score.desc()).limit(10)).all()]
+        out["suggestions"] = suggestions({r["symbol"] for r in rows}, sectors, scan_rows, SYMBOLS, ideas[: limits_for(user)["ideas_limit"]])
+    else:
+        out["suggestions"] = {"locked": True}
+    return out
+
+
+class OrderIn(BaseModel):
+    ids: list[int] = Field(max_length=500)
+
+
+@router.put("/portfolios/order")
+def set_order(body: OrderIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Your own order of the portfolios in the side list (saved in the account's preferences)."""
+    import json
+
+    from ..models import UserPrefs
+
+    row = db.get(UserPrefs, user.id) or UserPrefs(user_id=user.id, data="{}")
+    data = json.loads(row.data or "{}")
+    data["portfolio_order"] = [int(i) for i in body.ids]
+    row.data = json.dumps(data)
+    db.add(row)
+    db.commit()
+    return {"ok": True}

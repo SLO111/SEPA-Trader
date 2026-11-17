@@ -469,3 +469,48 @@ class CopiedTrade(Base):
     paper_id: Mapped[int] = mapped_column(ForeignKey("paper_trades.id", ondelete="CASCADE"), primary_key=True)
     leader_paper_id: Mapped[int] = mapped_column(ForeignKey("paper_trades.id", ondelete="CASCADE"), index=True)
     leader_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+
+
+class TxnOrigin(Base):
+    """Where a portfolio transaction came from, when it matters: "statement" = a position imported from a broker
+    statement (average cost, dated the day of the import, not the real trade date)."""
+
+    __tablename__ = "txn_origins"
+
+    txn_id: Mapped[int] = mapped_column(ForeignKey("portfolio_transactions.id", ondelete="CASCADE"), primary_key=True)
+    origin: Mapped[str] = mapped_column(String(16))
+
+
+class WatchlistLayout(Base):
+    """Sections inside a watchlist (like TradingView): {"sections": [{"id", "name", "symbols", "collapsed"}]}."""
+
+    __tablename__ = "watchlist_layouts"
+
+    watchlist_id: Mapped[int] = mapped_column(ForeignKey("watchlists.id", ondelete="CASCADE"), primary_key=True)
+    data: Mapped[str] = mapped_column(Text, default='{"sections": []}')
+
+
+class PositionTarget(Base):
+    """Your trim (sell part) and target levels for a portfolio position."""
+
+    __tablename__ = "position_targets"
+    __table_args__ = (UniqueConstraint("portfolio_id", "symbol"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id", ondelete="CASCADE"), index=True)
+    symbol: Mapped[str] = mapped_column(String(16))
+    trim: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class SentimentVote(Base):
+    """Members' sentiment: one Bullish / Bearish vote per member per stock (changeable)."""
+
+    __tablename__ = "sentiment_votes"
+    __table_args__ = (UniqueConstraint("user_id", "symbol"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    symbol: Mapped[str] = mapped_column(String(16), index=True)
+    vote: Mapped[str] = mapped_column(String(8))  # bull | bear
+    voted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

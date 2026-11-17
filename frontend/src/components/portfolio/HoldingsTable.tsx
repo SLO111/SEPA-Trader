@@ -3,7 +3,7 @@
 import EarningsBadge from "@/components/EarningsBadge";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { post, put } from "@/lib/api";
 import { num, pct, tone, usd } from "@/lib/format";
 import type { Holding, PortfolioDetail } from "@/lib/types";
@@ -62,8 +62,11 @@ export function SellNowDialog({ portfolioId, portfolioName, symbol, shares, avgC
   );
 }
 
-function StopCell({ portfolioId, symbol, stop, price, onSaved }: { portfolioId: number; symbol: string; stop: number | null; price: number; onSaved: (p: PortfolioDetail) => void }) {
+function StopCell({ portfolioId, symbol, stop, price, onSaved, autoEdit = false }: { portfolioId: number; symbol: string; stop: number | null; price: number; onSaved: (p: PortfolioDetail) => void; autoEdit?: boolean }) {
   const [edit, setEdit] = useState(false);
+  useEffect(() => {
+    if (autoEdit) setEdit(true);
+  }, [autoEdit]);
   const [v, setV] = useState(stop ? String(stop) : (price * 0.93).toFixed(2));
   const save = async (val: number | null) => {
     onSaved(await put<PortfolioDetail>(`/api/portfolios/${portfolioId}/stops`, { symbol, stop: val }));
@@ -83,6 +86,39 @@ function StopCell({ portfolioId, symbol, stop, price, onSaved }: { portfolioId: 
     <button onClick={() => setEdit(true)} className="tabular text-down hover:underline" title={`${(((stop / price) - 1) * 100).toFixed(1)}% away`}>{usd(stop)}</button>
   ) : (
     <button onClick={() => setEdit(true)} className="rounded border border-dashed border-amber-500/50 px-1.5 py-0.5 text-[11px] text-amber-300">+ Set stop</button>
+  );
+}
+
+function TargetCell({ portfolioId, symbol, trim, target, price, onSaved, autoEdit = false }: {
+  portfolioId: number; symbol: string; trim: number | null; target: number | null; price: number; onSaved: (p: PortfolioDetail) => void; autoEdit?: boolean;
+}) {
+  const [edit, setEdit] = useState(false);
+  const [t1, setT1] = useState(trim ? String(trim) : (price * 1.1).toFixed(2));
+  const [t2, setT2] = useState(target ? String(target) : (price * 1.2).toFixed(2));
+  useEffect(() => {
+    if (autoEdit) setEdit(true);
+  }, [autoEdit]);
+  const save = async (a: number | null, b: number | null) => {
+    onSaved(await put<PortfolioDetail>(`/api/portfolios/${portfolioId}/targets`, { symbol, trim: a, target: b }));
+    setEdit(false);
+  };
+  if (edit) {
+    const inp = "tabular w-16 rounded border border-line bg-bg px-1 py-0.5 text-right text-xs";
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-muted">
+        trim<input autoFocus value={t1} onChange={(e) => setT1(e.target.value)} className={inp} inputMode="decimal" />
+        target<input value={t2} onChange={(e) => setT2(e.target.value)} className={inp} inputMode="decimal" />
+        <button onClick={() => save(Number(t1) || null, Number(t2) || null)} className="text-xs text-up">✓</button>
+        {(trim || target) && <button onClick={() => save(null, null)} className="text-xs text-muted hover:text-down" title="Remove">✕</button>}
+      </span>
+    );
+  }
+  return trim || target ? (
+    <button onClick={() => setEdit(true)} className="tabular text-up hover:underline" title="Trim (sell part) / target">
+      {trim ? usd(trim) : "—"} / {target ? usd(target) : "—"}
+    </button>
+  ) : (
+    <button onClick={() => setEdit(true)} className="rounded border border-dashed border-line px-1.5 py-0.5 text-[11px] text-muted hover:text-text">+ Set</button>
   );
 }
 
@@ -119,8 +155,14 @@ export function HeatCard({ heat, value }: { heat: NonNullable<PortfolioDetail["h
 
 export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Holding[]; portfolioId?: number; onSold?: (p: PortfolioDetail) => void }) {
   const [selling, setSelling] = useState<Holding | null>(null);
+  const [editing, setEditing] = useState<{ kind: string; symbol: string } | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setEditing((e as CustomEvent).detail);
+    window.addEventListener("holding-edit", on);
+    return () => window.removeEventListener("holding-edit", on);
+  }, []);
   return (
-    <section className="rounded-xl border border-line bg-panel">
+    <section id="holdings" className="scroll-mt-4 rounded-xl border border-line bg-panel">
       <h2 className="px-4 pt-4 font-semibold">Holdings</h2>
       {selling && portfolioId && onSold && (
         <SellNowDialog portfolioId={portfolioId} symbol={selling.symbol} shares={selling.shares} avgCost={selling.avg_cost} price={selling.price}
@@ -130,7 +172,7 @@ export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Hol
         <p className="p-4 text-sm text-muted">No open positions. Add a buy transaction below.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="mt-2 w-full min-w-[820px] text-sm">
+          <table className="mt-2 w-full min-w-[1000px] text-sm">
             <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-2">Symbol</th>
@@ -142,6 +184,7 @@ export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Hol
                 <th className="px-4 py-2 text-right">Today</th>
                 <th className="px-4 py-2 text-right">Total P/L</th>
                 {portfolioId && <th className="px-4 py-2 text-right" title="Your stop: used for the open-risk (heat) card">Stop</th>}
+                {portfolioId && <th className="px-4 py-2 text-right" title="Where you sell part (trim) and take profits (target)">Trim / Target</th>}
                 {portfolioId && <th className="px-2 py-2" />}
               </tr>
             </thead>
@@ -167,7 +210,14 @@ export default function HoldingsTable({ rows, portfolioId, onSold }: { rows: Hol
                   </td>
                   {portfolioId && onSold && (
                     <td className="px-4 py-2 text-right">
-                      <StopCell portfolioId={portfolioId} symbol={r.symbol} stop={r.stop ?? null} price={r.price} onSaved={onSold} />
+                      <StopCell portfolioId={portfolioId} symbol={r.symbol} stop={r.stop ?? null} price={r.price} onSaved={onSold}
+                        autoEdit={editing?.kind === "stop" && editing.symbol === r.symbol} />
+                    </td>
+                  )}
+                  {portfolioId && onSold && (
+                    <td className="px-4 py-2 text-right">
+                      <TargetCell portfolioId={portfolioId} symbol={r.symbol} trim={r.trim ?? null} target={r.target ?? null} price={r.price} onSaved={onSold}
+                        autoEdit={editing?.kind === "target" && editing.symbol === r.symbol} />
                     </td>
                   )}
                   {portfolioId && (

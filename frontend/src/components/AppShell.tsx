@@ -131,7 +131,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
               <Link
                 key={n.label}
                 href={n.tabs[0].href}
-                className={`whitespace-nowrap rounded px-3 py-1.5 ${on ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
+                className={`whitespace-nowrap rounded px-2.5 py-1.5 xl:px-3 ${on ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
               >
                 {(n.label)}
                 {n.label === "Signals" && !user.limits.move_detector && <span className="ml-1 text-[10px]">🔒</span>}
@@ -144,7 +144,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
           {user.role === "admin" && (
             <Link
               href="/admin"
-              className={`whitespace-nowrap rounded px-3 py-1.5 ${pathname.startsWith("/admin") ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
+              className={`whitespace-nowrap rounded px-2.5 py-1.5 xl:px-3 ${pathname.startsWith("/admin") ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
             >
               Admin
             </Link>

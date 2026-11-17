@@ -91,10 +91,11 @@ def _profile(db: Session, uid: int) -> CommunityProfile | None:
 def get_profile(user: User = Depends(current_user), db: Session = Depends(get_db)):
     p = _profile(db, user.id)
     following = db.scalars(select(CopyFollow.leader_id).where(CopyFollow.follower_id == user.id)).all()
-    names = {c.user_id: c.display_name for c in db.scalars(select(CommunityProfile).where(CommunityProfile.user_id.in_(following))).all()} if following else {}
+    leaders = {c.user_id: c for c in db.scalars(select(CommunityProfile).where(CommunityProfile.user_id.in_(following))).all()} if following else {}
     followers = db.scalar(select(func.count()).select_from(CopyFollow).where(CopyFollow.leader_id == user.id)) or 0
     return {"profile": {"display_name": p.display_name, "public": p.public, "allow_copy": p.allow_copy} if p else None,
-            "following": [{"user_id": i, "display_name": names.get(i, "?")} for i in following], "followers": followers,
+            "following": [{"user_id": i, "display_name": leaders[i].display_name if i in leaders else "?",
+                           "paused": not (i in leaders and leaders[i].allow_copy)} for i in following], "followers": followers,
             "max_follows": limits_for(user)["max_copy_follows"]}
 
 
@@ -109,9 +110,10 @@ def set_profile(body: ProfileIn, user: User = Depends(current_user), db: Session
     p = _profile(db, user.id) or CommunityProfile(user_id=user.id, display_name=name)
     p.display_name, p.public, p.allow_copy = name, body.public, body.allow_copy
     db.add(p)
-    if not body.allow_copy:  # stop being copied
-        db.query(CopyFollow).filter(CopyFollow.leader_id == user.id).delete()
+    # Turning copying off keeps the followers (and their copied trades), they just stop receiving new ones.
     db.commit()
+    for period in ("month", "90d", "all"):  # the leaderboard reflects the change right away
+        market_data._fast_cache.pop(f"public:leaderboard:{period}", None)
     return get_profile(user, db)
 
 
@@ -201,6 +203,9 @@ def unfollow(leader_id: int, user: User = Depends(current_user), db: Session = D
 def copy_new_trade(db: Session, leader_trade: PaperTrade) -> int:
     """Mirror a leader's new chart trade into every follower's account (source "Copied")."""
     n = 0
+    lp = _profile(db, leader_trade.user_id)
+    if lp is None or not lp.allow_copy:  # the trader stopped sharing: followers keep what they have, nothing new
+        return 0
     for f in db.scalars(select(CopyFollow).where(CopyFollow.leader_id == leader_trade.user_id)).all():
         c = PaperTrade(user_id=f.follower_id, idea_id=None, symbol=leader_trade.symbol, timeframe="CP", side=leader_trade.side,
                        entry_date=leader_trade.entry_date, entry=leader_trade.entry, stop=leader_trade.stop, trim=leader_trade.trim,

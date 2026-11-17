@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import PaperTrades from "@/components/PaperTrades";
+import CopyStatus from "@/components/CopyStatus";
 import TradeAnalytics from "@/components/TradeAnalytics";
 import TradeGrader from "@/components/TradeGrader";
 import RulesBuilder from "@/components/backtest/RulesBuilder";
@@ -167,7 +168,10 @@ function Backtest() {
         ) : tab === "analytics" ? (
           <TradeAnalytics chartOnly={!paid} />
         ) : tab === "copy" ? (
-          <PaperTrades source="copy" />
+          <>
+            <CopyStatus />
+            <PaperTrades source="copy" />
+          </>
         ) : tab === "builder" ? (
           <RulesBuilder allowed={!!user?.limits.custom_backtest} />
         ) : !paid ? (
