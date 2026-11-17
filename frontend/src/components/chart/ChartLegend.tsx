@@ -34,8 +34,8 @@ export default function ChartLegend({ active, defs, onChange, header, values = {
           <div key={a.uid} className="pointer-events-auto">
             <div className={`group inline-flex items-center gap-2 rounded bg-bg/70 px-2 py-0.5 text-xs backdrop-blur ${a.hidden ? "opacity-50" : ""}`}>
               <span className="text-text">{d?.name ?? a.id}</span>
-              <span className="tabular text-muted">{summary(a, d)}</span>
-              {values[a.uid] && <span className="tabular text-text/90">{values[a.uid]}</span>}
+              <span className="tabular hidden text-muted sm:inline">{summary(a, d)}</span>
+              {values[a.uid] && <span className="tabular hidden text-text/90 sm:inline">{values[a.uid]}</span>}
               <span className="flex gap-1 opacity-60 group-hover:opacity-100">
                 <button title={a.hidden ? "Show" : "Hide"} onClick={() => update(a.uid, { hidden: !a.hidden })} className="px-0.5 hover:text-accent">
                   {a.hidden ? "◌" : "◉"}

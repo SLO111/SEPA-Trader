@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import EarningsBadge, { tradingDaysUntil } from "@/components/EarningsBadge";
 
 import dynamic from "next/dynamic";
@@ -72,6 +74,7 @@ function ChartWorkspace() {
     }
   }, []);
   const [panel, setPanel] = useState<"none" | "watch" | "info">("none");
+  useBackClose(panel !== "none", () => setPanel("none"));
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
   const loaded = useRef(false); // don't overwrite saved indicators with the empty initial state
   const max = user?.limits.max_strategies_on_chart ?? 3;
@@ -193,7 +196,14 @@ function ChartWorkspace() {
 
   return (
     <div className="relative flex h-full">
-      <aside className={`${panel === "watch" ? "absolute inset-y-0 left-0 z-30 flex" : "hidden"} w-64 shrink-0 flex-col border-r border-line bg-panel lg:static lg:flex`}>
+      {panel !== "none" && (
+        <div className={`absolute inset-0 z-20 bg-black/50 ${panel === "watch" ? "lg:hidden" : "xl:hidden"}`} onClick={() => setPanel("none")} aria-hidden />
+      )}
+      <aside className={`${panel === "watch" ? "absolute inset-y-0 left-0 z-30 flex" : "hidden"} w-72 max-w-[85vw] shrink-0 flex-col border-r border-line bg-panel lg:static lg:flex lg:w-64`}>
+        <div className="flex items-center justify-between border-b border-line px-3 py-2 lg:hidden">
+          <span className="text-sm font-semibold">Watchlists</span>
+          <button onClick={() => setPanel("none")} className="rounded px-2 py-1 text-lg leading-none text-muted hover:bg-panel-2" aria-label="Close">✕</button>
+        </div>
         <WatchlistPanel
           selected={symbol}
           onSelect={(s) => {
@@ -283,11 +293,15 @@ function ChartWorkspace() {
           {data?.live_at && <span className="text-up">● Live · updated {data.live_at}</span>}
           {intraday && <span>Faded candles: pre-market (4:00–9:30) and after-hours (16:00–20:00), New York time</span>}
           {data && data.delay_minutes > 0 && <span>Data delayed by {data.delay_minutes} min</span>}
-          <span>For educational purposes only. Not financial advice.</span>
+          <span className="hidden sm:inline">For educational purposes only. Not financial advice.</span>
         </div>
       </section>
 
-      <aside className={`${panel === "info" ? "absolute inset-y-0 right-0 z-30 flex" : "hidden"} w-80 shrink-0 flex-col border-l border-line bg-panel xl:static xl:flex`}>
+      <aside className={`${panel === "info" ? "absolute inset-y-0 right-0 z-30 flex" : "hidden"} w-80 max-w-[90vw] shrink-0 flex-col overflow-y-auto border-l border-line bg-panel xl:static xl:flex`}>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel px-3 py-2 xl:hidden">
+          <span className="text-sm font-semibold">{symbol} details</span>
+          <button onClick={() => setPanel("none")} className="rounded px-2 py-1 text-lg leading-none text-muted hover:bg-panel-2" aria-label="Close">✕</button>
+        </div>
         <SymbolInfoPanel symbol={symbol} info={info} error={infoError} />
       </aside>
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SellNowDialog } from "@/components/portfolio/HoldingsTable";
@@ -11,6 +13,7 @@ type Paper = { id: number; symbol: string; side: string; entry: number; open: bo
 
 /** Sell from the chart: every place you hold the symbol — your portfolios (real sale at market) and open chart trades. */
 export default function SellDialog({ symbol, onClose, onShort }: { symbol: string; onClose: () => void; onShort: () => void }) {
+  useBackClose(true, onClose);
   const [pos, setPos] = useState<Pos[] | null>(null);
   const [paper, setPaper] = useState<Paper[] | null>(null);
   const [selling, setSelling] = useState<Pos | null>(null);

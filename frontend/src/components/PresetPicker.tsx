@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -7,6 +9,7 @@ type Preset = { id: string; name: string; description: string; symbols: string[]
 
 /** Ready-made lists (ETFs, Mag 7, semiconductors, memory, AI…): one click adds a section with the tickers. */
 export default function PresetPicker({ onPick, onClose }: { onPick: (p: Preset) => void; onClose: () => void }) {
+  useBackClose(true, onClose);
   const [list, setList] = useState<Preset[]>([]);
   const [q, setQ] = useState("");
   useEffect(() => {

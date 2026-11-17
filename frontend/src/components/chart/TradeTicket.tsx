@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api, post, put } from "@/lib/api";
@@ -22,6 +24,7 @@ const ACCOUNT_KEY = "vn_ticket_account";
  * Free: Buy, quantity, Stop loss, Take profit. Pro / Premium: entry, trim, R/R, position sizing, ATR / VCP / resistance shortcuts, vnicornAI's plan.
  */
 export default function TradeTicket({ symbol, price, side, pro, onClose, snapshot }: { symbol: string; price: number; side: "long" | "short"; pro: boolean; onClose: () => void; snapshot?: () => string | null }) {
+  useBackClose(true, onClose);
   const long = side === "long";
   const [dest, setDest] = useState<"sim" | number>("sim");
   const [portfolios, setPortfolios] = useState<Pf[]>([]);

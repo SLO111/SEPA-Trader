@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, post } from "@/lib/api";
@@ -65,6 +67,7 @@ function PlanCard({ p, symbol, onTaken }: { p: Plan; symbol: string; onTaken: ()
 
 /** "Ask vnicornAI": a plain-English read of the chart with vnicornAI's long and short plans. */
 export default function AskVnicorn({ symbol, onClose, locked = false }: { symbol: string; onClose: () => void; locked?: boolean }) {
+  useBackClose(true, onClose);
   const [a, setA] = useState<Analysis | null>(null);
   const [error, setError] = useState("");
   const [taken, setTaken] = useState(false);

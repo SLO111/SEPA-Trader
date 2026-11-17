@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import { useMemo, useState } from "react";
 import { post } from "@/lib/api";
 import { fmt } from "@/lib/format";
@@ -23,6 +25,7 @@ const STATUS: Record<Row["status"], [string, string]> = {
 
 /** Import from any broker: CSV, Excel or PDF, a list of trades or a statement of positions. Keeps the portfolio in sync. */
 export default function ImportCsv({ portfolioId, onClose, onSaved }: { portfolioId: number; onClose: () => void; onSaved: () => void }) {
+  useBackClose(true, onClose);
   const [file, setFile] = useState<{ name: string; b64: string } | null>(null);
   const [p, setP] = useState<Preview | null>(null);
   const [rows, setRows] = useState<Row[]>([]);

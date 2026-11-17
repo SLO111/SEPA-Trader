@@ -31,7 +31,7 @@ export default function LegalPage({ title, children }: { title: string; children
 /** One-line footer for every app page: the legal links. */
 export function LegalFooter() {
   return (
-    <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-1.5 text-[11px] text-muted">
+    <footer className="hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-1.5 text-[11px] text-muted md:flex">
       <span>© {new Date().getFullYear()} Vnicorn Investments</span>
       <span className="ml-auto flex gap-3">
         <Link href="/terms" className="hover:text-text">Terms</Link>

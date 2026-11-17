@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import Link from "next/link";
 import { LegalFooter } from "@/components/legal/LegalPage";
 import { usePathname, useRouter } from "next/navigation";
@@ -50,6 +52,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
   const [unread, setUnread] = useState(0);
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [pathname]);
+  useBackClose(menu, () => setMenu(false));
 
   // After a new deploy an open tab may ask for files of the old version: reload once to get the new one.
   useEffect(() => {
@@ -180,6 +183,11 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
                 </Link>
               ))}
             </nav>
+            <div className="mt-3 flex gap-4 border-t border-line pt-3 text-xs text-muted">
+              <Link href="/terms">Terms</Link>
+              <Link href="/privacy">Privacy</Link>
+              <Link href="/disclaimer">Risk disclaimer</Link>
+            </div>
             <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-sm">
               <Link href="/settings" className="truncate text-muted">⚙ {user.name || user.email}</Link>
               <span className="flex items-center gap-2">

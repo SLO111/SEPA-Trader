@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActiveStrategy, StrategyDef } from "@/lib/types";
 
@@ -21,6 +23,7 @@ const LEVEL_STYLE: Record<string, string> = {
 
 /** TradingView-style indicator dialog: search, categories on the left, click to add. */
 export default function IndicatorPicker({ defs, features, active, max, onAdd, onRemove, onClose }: Props) {
+  useBackClose(true, onClose);
   const activeCount = active.length;
   const countOf = (id: string) => active.filter((a) => a.id === id).length;
   const nameOf = (id: string) => defs.find((d) => d.id === id)?.name ?? id;

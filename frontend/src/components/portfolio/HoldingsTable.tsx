@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import EarningsBadge from "@/components/EarningsBadge";
 
 import Link from "next/link";
@@ -13,6 +15,7 @@ export function SellNowDialog({ portfolioId, portfolioName, symbol, shares, avgC
   portfolioId: number; portfolioName?: string; symbol: string; shares: number; avgCost: number; price: number | null;
   onClose: () => void; onSold: (p: PortfolioDetail) => void;
 }) {
+  useBackClose(true, onClose);
   const [qty, setQty] = useState(shares);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");

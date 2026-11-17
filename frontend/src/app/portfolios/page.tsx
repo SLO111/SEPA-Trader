@@ -1,5 +1,7 @@
 "use client";
 
+import { useBackClose } from "@/lib/useBackClose";
+
 import ExportMenu from "@/components/ExportMenu";
 import PortfolioInsights from "@/components/portfolio/PortfolioInsights";
 
@@ -98,6 +100,7 @@ function PerformanceCard({ id, version }: { id: number; version: number }) {
 function PortfolioView({ p, onChange, onDeleted }: { p: PortfolioDetail; onChange: (p: PortfolioDetail) => void; onDeleted: () => void }) {
   const [version, setVersion] = useState(0);
   const [modal, setModal] = useState<"none" | "import" | "grade">("none");
+  useBackClose(modal === "grade", () => setModal("none"));
   const reload = async () => update(await api<PortfolioDetail>(`/api/portfolios/${p.id}`));
   const update = (np: PortfolioDetail) => {
     onChange(np);
