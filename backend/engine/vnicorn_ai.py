@@ -293,6 +293,30 @@ def best_plan(bundle: dict, df: pd.DataFrame, bench: pd.DataFrame | None, side: 
             "stop_atr": round(k, 2), "pick": bool(p[i] >= MIN_PROB and ev[i] >= MIN_EV)}
 
 
+def rules_plan(df: pd.DataFrame, side: str) -> dict | None:
+    """The platform's rule-based plan, used when the model can't rate a stock (e.g. too little history):
+    stop at 2 ATR (or under the VCP for longs), trim at 1.5R, target at 3R."""
+    from .indicators import atr
+    from .vcp import detect_vcp
+
+    if len(df) < 20:
+        return None
+    price = float(df["close"].iloc[-1])
+    a = float(atr(df, 14).iloc[-1])
+    if not np.isfinite(a) or a <= 0:
+        return None
+    long = side == "long"
+    stop = price - 2 * a if long else price + 2 * a
+    if long and len(df) >= 60:
+        v = detect_vcp(df)
+        if v.get("stop") and price * 0.85 < v["stop"] < price:
+            stop = float(v["stop"])
+    risk = abs(price - stop)
+    sign = 1 if long else -1
+    return {"side": side, "prob": None, "ev": None, "entry": round(price, 2), "stop": round(stop, 2), "trim": round(price + sign * 1.5 * risk, 2),
+            "target": round(price + sign * 3 * risk, 2), "rr": 3.0, "pick": False, "source": "rules"}
+
+
 def move_probability(bundle: dict, feats: pd.DataFrame) -> float | None:
     model = bundle.get("models", {}).get("move")
     row = feats.iloc[[-1]][MARKET_FEATURES]

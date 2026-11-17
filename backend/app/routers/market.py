@@ -210,14 +210,28 @@ def analysis(symbol: str, user: User = Depends(current_user)):
         if bundle is not None:
             feats = vnicorn_ai.features(df, bench)
             for side in ("long", "short"):
-                plans[side] = vnicorn_ai.best_plan(bundle, df, bench, side, feats=feats)
+                p = vnicorn_ai.best_plan(bundle, df, bench, side, feats=feats)
+                plans[side] = {**p, "source": "vnicornAI"} if p else None
+        # vnicornAI can't rate a stock without ~a year of history (or before it is trained): use the platform's rules
+        plan_note = None
+        if not any(plans.values()):
+            fallback = {side: vnicorn_ai.rules_plan(df, side) for side in ("long", "short")}
+            if any(fallback.values()):
+                plans = fallback
+                if len(df) < 220:
+                    plan_note = (f"{sym} has {len(df)} trading days of history. vnicornAI needs about a year to rate a setup, so these plans "
+                                 "follow the platform's rules (2 ATR / VCP stop, trim at 1.5R, target at 3R).")
+                else:
+                    plan_note = "vnicornAI is not trained yet, so these plans follow the platform's rules (2 ATR / VCP stop, trim at 1.5R, target at 3R)."
         st = stage_now(df)
         preferred = "short" if st and st["stage"] == 4 else "long"
-        best = plans.get(preferred)
-        if plans.get("long") and plans.get("short") and plans["short"]["ev"] > plans["long"]["ev"] + 0.2:
-            best = plans["short"]
+        ai_plans = {k: v for k, v in plans.items() if v and v.get("source") == "vnicornAI"}
+        best = ai_plans.get(preferred)
+        if ai_plans.get("long") and ai_plans.get("short") and ai_plans["short"]["ev"] > ai_plans["long"]["ev"] + 0.2:
+            best = ai_plans["short"]
         out = chart_commentary.analyze(df, bench, best, sym)
         out["plans"] = plans
+        out["plan_note"] = plan_note
         out["name"] = market_data.symbol_meta(sym).get("name", sym)
         return out
 

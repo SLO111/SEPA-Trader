@@ -357,17 +357,10 @@ def scan_plan(symbol: str, side: str, db: Session) -> dict:
         plan = vnicorn_ai.best_plan(bundle, df, bench, side)
         if plan:
             return {**plan, "source": "vnicornAI", "df": df}
-    price = float(df["close"].iloc[-1])
-    a = float(atr(df, 14).iloc[-1])
-    stop = price - 2 * a if side == "long" else price + 2 * a
-    if side == "long":
-        v = detect_vcp(df)
-        if v.get("stop") and price * 0.85 < v["stop"] < price:
-            stop = float(v["stop"])
-    risk = abs(price - stop)
-    sign = 1 if side == "long" else -1
-    return {"entry": round(price, 2), "stop": round(stop, 2), "trim": round(price + sign * 1.5 * risk, 2),
-            "target": round(price + sign * 3 * risk, 2), "rr": 3.0, "source": "rules", "df": df}
+    plan = vnicorn_ai.rules_plan(df, side)
+    if plan is None:
+        raise HTTPException(400, f"Not enough price history for {symbol} yet to build a plan.")
+    return {**plan, "source": "rules", "df": df}
 
 
 @router.post("/paper-trades/scan")

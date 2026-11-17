@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, post } from "@/lib/api";
 
-type Plan = { side: "long" | "short"; prob: number; ev: number; entry: number; stop: number; trim: number; target: number; rr: number; pick: boolean } | null;
+type Plan = {
+  side: "long" | "short"; prob: number | null; ev: number | null; entry: number; stop: number; trim: number; target: number; rr: number; pick: boolean;
+  source?: "vnicornAI" | "rules";
+} | null;
 type Analysis = {
   symbol: string; name: string; verdict: string; bias: number; as_of: string;
   sections: { title: string; text: string }[];
   pulse: { conf: number; warn: number; tone: string };
   plans: { long?: Plan; short?: Plan };
+  plan_note?: string | null;
 };
 
 const VERDICT: Record<string, string> = {
@@ -21,7 +25,7 @@ function PlanCard({ p, symbol, onTaken }: { p: Plan; symbol: string; onTaken: ()
   if (!p) return null;
   const long = p.side === "long";
   const take = async () => {
-    if (!confirm(`${long ? "Buy" : "Short"} ${symbol} now with vnicornAI's plan?\nStop ${p.stop} · trim ${p.trim} · target ${p.target}\n\nFollowed in Backtest → Move Detector trades.`)) return;
+    if (!confirm(`${long ? "Buy" : "Short"} ${symbol} now with ${p.source === "rules" ? "the rule-based" : "vnicornAI's"} plan?\nStop ${p.stop} · trim ${p.trim} · target ${p.target}\n\nFollowed in Backtest → Move Detector trades.`)) return;
     try {
       await post("/api/paper-trades/scan", { symbol, side: p.side });
       onTaken();
@@ -33,10 +37,16 @@ function PlanCard({ p, symbol, onTaken }: { p: Plan; symbol: string; onTaken: ()
     <div className={`rounded-xl border p-3 ${p.pick ? "border-violet-400/50 bg-violet-500/10" : "border-line bg-panel-2/40"}`}>
       <div className="mb-2 flex items-center justify-between">
         <span className={`text-sm font-semibold ${long ? "text-up" : "text-down"}`}>{long ? "▲ Long plan" : "▼ Short plan"}</span>
-        <span className="tabular text-xs text-muted">
-          {Math.round(p.prob * 100)}% · <span className={p.ev > 0 ? "text-up" : "text-down"}>{p.ev > 0 ? "+" : ""}{p.ev}R</span>
-          {p.pick && <span className="ml-1.5 rounded bg-gradient-to-r from-violet-500 to-cyan-500 px-1.5 py-0.5 text-[10px] font-bold text-white">PICK</span>}
-        </span>
+        {p.prob === null || p.ev === null ? (
+          <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px] font-semibold text-muted" title="Stop at 2 ATR (or under the VCP), trim at 1.5R, target at 3R">
+            Rules-based · R/R {p.rr}
+          </span>
+        ) : (
+          <span className="tabular text-xs text-muted">
+            {Math.round(p.prob * 100)}% · <span className={p.ev > 0 ? "text-up" : "text-down"}>{p.ev > 0 ? "+" : ""}{p.ev}R</span>
+            {p.pick && <span className="ml-1.5 rounded bg-gradient-to-r from-violet-500 to-cyan-500 px-1.5 py-0.5 text-[10px] font-bold text-white">PICK</span>}
+          </span>
+        )}
       </div>
       <div className="tabular grid grid-cols-4 gap-1 text-center text-xs">
         {[["Entry", p.entry, ""], ["Stop", p.stop, "text-down"], ["Trim", p.trim, "text-amber-300"], ["Target", p.target, "text-up"]].map(([k, v, c]) => (
@@ -125,7 +135,8 @@ export default function AskVnicorn({ symbol, onClose, locked = false }: { symbol
               ))}
               {(a.plans.long || a.plans.short) ? (
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-violet-200">vnicornAI plans</h3>
+                  <h3 className="text-sm font-semibold text-violet-200">{a.plan_note ? "Plans" : "vnicornAI plans"}</h3>
+                  {a.plan_note && <p className="rounded-lg border border-line bg-panel-2/50 px-3 py-2 text-xs text-muted">{a.plan_note}</p>}
                   {taken && (
                     <p className="rounded bg-up/10 px-3 py-2 text-xs text-up">
                       Added. Follow it in <Link href="/backtest?tab=md" className="underline">Backtest → Move Detector trades</Link>.
@@ -133,10 +144,12 @@ export default function AskVnicorn({ symbol, onClose, locked = false }: { symbol
                   )}
                   <PlanCard p={a.plans.long ?? null} symbol={symbol} onTaken={() => setTaken(true)} />
                   <PlanCard p={a.plans.short ?? null} symbol={symbol} onTaken={() => setTaken(true)} />
-                  <p className="text-[11px] text-muted">Probability = estimated chance to reach the target before the stop; EV = expected result per trade in R (multiples of the risk).</p>
+                  {!a.plan_note && (
+                    <p className="text-[11px] text-muted">Probability = estimated chance to reach the target before the stop; EV = expected result per trade in R (multiples of the risk).</p>
+                  )}
                 </section>
               ) : (
-                <p className="text-xs text-muted">vnicornAI plans appear once the model has been trained (after the next close).</p>
+                <p className="text-xs text-muted">Not enough price history yet for a plan on {symbol}.</p>
               )}
               <p className="text-[11px] text-muted">Written automatically from the chart and the platform&apos;s analysis. For educational purposes only. Not financial advice.</p>
             </>

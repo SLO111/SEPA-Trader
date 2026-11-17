@@ -237,3 +237,33 @@ def test_scorecard_health_fair_value_and_sentiment(client, register):
     h2, _ = register("scorecard2@test.ro")
     s3 = client.post("/api/stock/NVDA/sentiment", headers=h2, json={"vote": "bull"}).json()
     assert s3["votes"] == 2 and s3["bullish_pct"] == 50
+
+
+# ------------------------------------------------------------------ Ask vnicornAI on a recently listed stock
+
+def test_ask_vnicorn_gives_rules_plans_for_a_new_stock(client, register, monkeypatch):
+    from app import market_data
+    from engine import vnicorn_ai
+
+    real = market_data.history
+    short = real("NVDA").iloc[-60:]  # like a stock listed 3 months ago
+
+    def fake(symbol, interval="1d", years=3):
+        return short if symbol.upper() == "NEWCO" else real(symbol, interval, years)
+
+    monkeypatch.setattr(market_data, "history", fake)
+    market_data._fast_cache.pop("analysis:NEWCO", None)
+    h, _ = register("newco@test.ro")
+    _plan("newco@test.ro", "premium")
+    r = client.get("/api/market/analysis/NEWCO", headers=h)
+    assert r.status_code == 200, r.text
+    a = r.json()
+    lg, sh = a["plans"]["long"], a["plans"]["short"]
+    assert lg["source"] == sh["source"] == "rules" and lg["prob"] is None and lg["rr"] == 3.0
+    assert lg["stop"] < lg["entry"] < lg["trim"] < lg["target"] and sh["target"] < sh["trim"] < sh["entry"] < sh["stop"]
+    assert "60 trading days" in a["plan_note"]
+    # the same levels are used when the plan is taken
+    assert vnicorn_ai.rules_plan(short, "long")["stop"] == lg["stop"]
+    t = client.post("/api/paper-trades/scan", headers=h, json={"symbol": "NEWCO", "side": "long"})
+    assert t.status_code == 200, t.text
+    assert abs(t.json()["stop"] - lg["stop"]) < 0.01
