@@ -409,3 +409,78 @@ def test_screens_rebuilt_after_startup_load(monkeypatch):
     finally:
         s._stop.set()
         market_data._fast_cache.pop(key, None)
+
+
+def _store_with_prices(last_day: str, n_symbols: int | None = None):
+    import pandas as pd
+
+    from engine.data.universe import stock_symbols
+
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    idx = pd.bdate_range(end=last_day, periods=30)
+    df = pd.DataFrame({"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0}, index=idx)
+    syms = stock_symbols()
+    for sym in syms[: n_symbols if n_symbols is not None else len(syms)]:
+        s.prices[sym] = df
+    s.status["state"] = "refreshing"
+    return s
+
+
+def test_ideas_due_from_data_after_sleep(monkeypatch):
+    from datetime import date, datetime, timezone
+
+    from app import data_store, ideas_service
+
+    batch = {"last": date(2026, 11, 13)}  # Friday's batch exists
+    monkeypatch.setattr(ideas_service, "latest_batch", lambda db: batch["last"])
+    s = _store_with_prices("2026-11-16")  # prices through Monday
+    monkeypatch.setattr(data_store, "get_store", lambda: s)
+    tue_morning = datetime(2026, 11, 17, 15, 0, tzinfo=timezone.utc)  # 10:00 New York
+    assert ideas_service.last_completed_session(tue_morning) == date(2026, 11, 16)
+    assert ideas_service.due_for_ideas(None, tue_morning)  # Monday's batch was missed while asleep: catch up
+    batch["last"] = date(2026, 11, 16)
+    assert not ideas_service.due_for_ideas(None, tue_morning)
+
+    # weekend: prices through Friday, Friday's batch exists -> nothing to do
+    s2 = _store_with_prices("2026-11-20")
+    monkeypatch.setattr(data_store, "get_store", lambda: s2)
+    batch["last"] = date(2026, 11, 20)
+    assert not ideas_service.due_for_ideas(None, datetime(2026, 11, 21, 15, 0, tzinfo=timezone.utc))
+
+    # a running bar for today doesn't count before 16:15 New York, it does after
+    s3 = _store_with_prices("2026-11-17")
+    monkeypatch.setattr(data_store, "get_store", lambda: s3)
+    batch["last"] = date(2026, 11, 16)
+    assert not ideas_service.due_for_ideas(None, tue_morning)
+    assert ideas_service.due_for_ideas(None, datetime(2026, 11, 17, 21, 30, tzinfo=timezone.utc))
+
+
+def test_ideas_wait_for_complete_data(monkeypatch):
+    from datetime import date
+
+    from app import data_store, ideas_service
+    from engine.data.universe import stock_symbols
+
+    monkeypatch.setattr(ideas_service, "latest_batch", lambda db: date(2026, 11, 13))
+    s = _store_with_prices("2026-11-16")
+    s.status["state"] = "loading"
+    monkeypatch.setattr(data_store, "get_store", lambda: s)
+    assert not ideas_service.due_for_ideas(None)  # still loading saved prices
+    s2 = _store_with_prices("2026-11-16", n_symbols=len(stock_symbols()) // 2)
+    monkeypatch.setattr(data_store, "get_store", lambda: s2)
+    assert not ideas_service.due_for_ideas(None)  # only half the universe has prices
+
+
+def test_final_close_bars_refreshed_before_a_batch(monkeypatch):
+    from app import data_store, ideas_service
+
+    calls = []
+    s = _store_with_prices("2026-11-16")
+    monkeypatch.setattr(s, "refresh_live", lambda syms, persist=False: calls.append((len(syms), persist)) or 0)
+    monkeypatch.setattr(data_store, "get_store", lambda: s)
+    monkeypatch.setattr(ideas_service, "_histories", lambda: {})
+    ideas_service.run_ideas(None)
+    assert calls and calls[0][1] is True
+    calls.clear()
+    ideas_service.run_ideas(None, force=True)  # the Regenerate button doesn't re-download
+    assert not calls

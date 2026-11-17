@@ -166,7 +166,17 @@ def health():
         "universe": settings.universe,
         "universe_extra": settings.universe_extra,
     }
-    return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "config": config, "market_data": data}
+    ideas = None
+    try:
+        from .ideas_service import due_for_ideas, latest_batch
+
+        with SessionLocal() as db:
+            lb = latest_batch(db)
+            ideas = {"last_batch": lb.isoformat() if lb else None, "due": due_for_ideas(db)}
+    except Exception:
+        ideas = None
+    return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "config": config, "market_data": data,
+            "ideas": ideas}
 
 
 # Frontend (static Next.js export), mounted last so it doesn't shadow /api routes.

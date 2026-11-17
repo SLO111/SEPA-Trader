@@ -75,6 +75,8 @@ def _completed_sessions(hist: dict[str, pd.DataFrame], now: datetime | None = No
 def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
     """Generate the idea list for the latest completed trading day (once per day unless forced).
     Forced: the day's ideas that are still waiting and that nobody took are replaced; triggered or taken ideas stay."""
+    if not force:
+        _final_close_bars()
     hist = _completed_sessions(_histories())
     if not hist:
         return []
@@ -354,13 +356,72 @@ def refresh_news(db: Session, fh=None, fetch=None) -> int:
     return add_feed(db, items)
 
 
+def _data_ready() -> bool:
+    """Ideas need the whole universe: not while saved prices are still loading, and only with prices for 90 % of it."""
+    from .data_store import get_store
+
+    store = get_store()
+    if store is None:
+        return True
+    if store.status.get("state") == "loading":
+        return False
+    syms = stock_symbols()
+    return not syms or sum(1 for s in syms if s in store.prices) >= 0.9 * len(syms)
+
+
+def last_completed_session(now: datetime | None = None) -> date | None:
+    """The latest trading day whose close is in the stored prices (today only after 16:15 New York). The median over
+    the universe, so a few symbols with a running bar don't decide it."""
+    from .data_store import get_store
+
+    store = get_store()
+    t = (now or datetime.now(timezone.utc)).astimezone(ET)
+    today = t.date()
+    after_close = t.hour * 60 + t.minute >= 16 * 60 + 15
+    if store is not None:
+        frames = [store.prices[s] for s in stock_symbols() if s in store.prices]
+    else:
+        frames = list(_histories().values())
+    days = []
+    for df in frames:
+        idx = df.index
+        if not len(idx):
+            continue
+        last = idx[-1].date()
+        if last >= today and not after_close:
+            last = idx[-2].date() if len(idx) > 1 else None
+        if last:
+            days.append(last)
+    if not days:
+        return None
+    days.sort()
+    return days[len(days) // 2]
+
+
 def due_for_ideas(db: Session, now: datetime | None = None) -> bool:
-    """After 16:15 New York time on a weekday, if today's batch is missing; always when there are no ideas yet."""
+    """When the stored prices hold a completed trading day newer than the last batch. Driven by the data, not the clock,
+    so a server that slept through the close (Render's free plan) catches up at the next wake-up, weekends included."""
+    if not _data_ready():
+        return False
     last = latest_batch(db)
     if last is None:
         return True
-    t = (now or datetime.now(timezone.utc)).astimezone(ET)
-    return t.weekday() < 5 and t.hour * 60 + t.minute >= 16 * 60 + 15 and last < t.date()
+    sess = last_completed_session(now)
+    return sess is not None and sess > last
+
+
+def _final_close_bars() -> None:
+    """Before a batch: refresh the latest daily bar of every stock once, so ideas use the real closing prices and not
+    the last intraday update (every 15 minutes until the close)."""
+    from .data_store import get_store
+
+    store = get_store()
+    if store is None:
+        return
+    try:
+        store.refresh_live(stock_symbols(), persist=True)
+    except Exception:
+        log.warning("Final close-bar refresh failed; using the stored prices", exc_info=True)
 
 
 def tick(db: Session) -> None:
