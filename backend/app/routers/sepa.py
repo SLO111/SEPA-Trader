@@ -144,7 +144,7 @@ def scan(
     with SessionLocal() as db:
         vnicorn_service.load(db)  # makes the stored major-move probabilities available after a restart
     pm = pulse_map(region) if limits_for(user)["pulse"] else {}
-    ai = limits_for(user)["ai_picks"] and region == "US"  # vnicornAI learns from US stocks
+    ai = limits_for(user)["ai_picks"]  # every region: vnicornAI rates each stock against its own index
     if sort == "ai" and not ai:
         raise HTTPException(403, "vnicornAI move probabilities are part of Premium.")
     from engine.data.universe import currency_of

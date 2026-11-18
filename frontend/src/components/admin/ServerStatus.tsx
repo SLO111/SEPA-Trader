@@ -19,7 +19,7 @@ type Health = {
   } | null;
   ideas?: {
     last_batch: string | null; due: boolean;
-    vnicorn?: { trained?: boolean; stocks?: number | null; trained_at?: string | null; error?: string | null };
+    vnicorn?: { trained?: boolean; stocks?: number | null; trained_at?: string | null; error?: string | null; rated?: number | null; rated_by_region?: Record<string, number> | null };
     regenerate?: { running?: boolean; stage?: string | null; started_at?: string | null; finished_at?: string | null; generated?: number | null; error?: string | null; interrupted?: boolean };
   } | null;
   memory?: { used_mb: number; limit_mb: number; breakdown_mb?: Record<string, number> };
@@ -151,7 +151,17 @@ export default function ServerStatus() {
         <Section title="Signals & vnicornAI">
           <Row label="Last trade ideas">{h.ideas?.last_batch ? `${h.ideas.last_batch} close` : "none yet"}</Row>
           <Row label="Next batch">{h.ideas?.due ? <span className="text-amber-300">due now</span> : "after the next close"}</Row>
-          <Row label="vnicornAI">{v?.trained ? `${v.stocks ?? "?"} stocks` : "not trained yet"}</Row>
+          <Row label="vnicornAI learned from">{v?.trained ? `${(v.stocks ?? 0).toLocaleString("en-US")} US stocks` : "not trained yet"}</Row>
+          {v?.trained && (
+            <Row label="vnicornAI rates">
+              <span title={Object.entries(v.rated_by_region ?? {}).map(([r, n]) => `${r} ${n}`).join(" · ")}>
+                {(v.rated ?? 0).toLocaleString("en-US")} stocks
+                {Object.keys(v.rated_by_region ?? {}).length > 1 && (
+                  <span className="ml-1 text-xs text-muted">({Object.entries(v.rated_by_region ?? {}).map(([r, n]) => `${r === "ASIA" ? "Asia" : r} ${n}`).join(" · ")})</span>
+                )}
+              </span>
+            </Row>
+          )}
           <Row label="Trained">{ago(v?.trained_at)}</Row>
           <Row label="Last regeneration">
             {r?.running ? <span className="text-accent">running: {r.stage}</span> : r?.finished_at ? `${r.generated ?? 0} ideas · ${ago(r.finished_at)}` : "—"}

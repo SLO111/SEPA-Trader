@@ -214,7 +214,7 @@ def health():
             st = vs.status(db)
             ideas = {"last_batch": lb.isoformat() if lb else None, "due": due_for_ideas(db),
                      "vnicorn": {"trained": st.get("trained"), "stocks": st.get("symbols"), "trained_at": st.get("trained_at"),
-                                 "error": vs.last_error}}
+                                 "rated": st.get("rated"), "rated_by_region": st.get("rated_by_region"), "error": vs.last_error}}
             from . import regen_status
 
             rs = regen_status.status()
@@ -263,7 +263,7 @@ def _health_summary(h: dict) -> list[str]:
         out.append(f"Last trade ideas: {ideas.get('last_batch') or 'none yet'} close" + (" (a new batch is due)." if ideas.get("due") else "."))
         v = ideas.get("vnicorn") or {}
         if v.get("trained"):
-            out.append(f"vnicornAI: learned from {v.get('stocks')} stocks, trained {str(v.get('trained_at'))[:10]}."
+            out.append(f"vnicornAI: learned from {v.get('stocks')} US stocks, rates {v.get('rated') or 0} stocks, trained {str(v.get('trained_at'))[:10]}."
                        + (f" Note: {v['error']}." if v.get("error") else ""))
         else:
             out.append("vnicornAI: not trained yet.")

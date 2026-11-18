@@ -485,10 +485,7 @@ def scan_plan(symbol: str, side: str, db: Session) -> dict:
     from .. import market_data, vnicorn_service
 
     df = market_data.history(symbol)
-    try:
-        bench = market_data.history("SPY")
-    except Exception:
-        bench = None
+    bench = vnicorn_service.bench_for(symbol)  # the stock's own index (SPY, Euro Stoxx 50, Asia ex Japan)
     bundle = vnicorn_service.load(db)
     if bundle is not None:
         plan = vnicorn_ai.best_plan(bundle, df, bench, side)

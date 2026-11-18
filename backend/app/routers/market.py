@@ -200,10 +200,7 @@ def analysis(symbol: str, user: User = Depends(current_user)):
         left = consume(db, user, "ask_ai", lim["ask_ai_monthly"], "Ask vnicornAI questions")
 
     def build():
-        try:
-            bench = market_data.history("SPY")
-        except Exception:
-            bench = None
+        bench = vnicorn_service.bench_for(sym)  # the stock's own index
         with SessionLocal() as db:
             bundle = vnicorn_service.load(db)
         plans = {}
@@ -274,11 +271,7 @@ def trade_levels(symbol: str, side: Literal["long", "short"] = "long", user: Use
                 bundle = vnicorn_service.load(db)
             if bundle is None:
                 return None
-            try:
-                bench = market_data.history("SPY")
-            except Exception:
-                bench = None
-            return vnicorn_ai.best_plan(bundle, df, bench, side)
+            return vnicorn_ai.best_plan(bundle, df, vnicorn_service.bench_for(sym), side)
 
         try:
             out["ai_plan"] = market_data._fast(f"tktplan:{sym}:{side}", 600, plan)

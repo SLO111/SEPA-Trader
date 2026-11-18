@@ -959,7 +959,17 @@ def test_scan_and_screener_by_region(client, register, monkeypatch, saved_univer
     try:
         eu = client.get("/api/sepa/scan?region=EU&limit=200", headers=h).json()["results"]
         assert {r["symbol"] for r in eu} == {"ZEU1.DE", "ZEU2.PA"} and all(r["currency"] == "EUR" for r in eu)
-        assert all(r["ai_prob"] is None for r in eu)  # vnicornAI is US-only
+        assert all(r["ai_prob"] is None for r in eu)  # not rated yet
+        from app import vnicorn_service as vs
+
+        saved_move = dict(vs._move)
+        vs._move["ZEU1.DE"] = 0.42
+        try:
+            eu = client.get("/api/sepa/scan?region=EU&limit=200", headers=h).json()["results"]
+            assert {r["symbol"]: r["ai_prob"] for r in eu}["ZEU1.DE"] == 0.42  # vnicornAI rates every region
+        finally:
+            vs._move.clear()
+            vs._move.update(saved_move)
         us = {r["symbol"] for r in client.get("/api/sepa/scan?limit=200", headers=h).json()["results"]}
         assert "ZEU1.DE" not in us and "AAPL" in us
         sc = client.get("/api/markets/screener?region=EU", headers=h).json()["results"]
@@ -969,3 +979,62 @@ def test_scan_and_screener_by_region(client, register, monkeypatch, saved_univer
     finally:
         market_data._fast_cache.clear()
         sepa._scan_cache.clear()
+
+
+def test_vnicorn_rates_every_region_against_its_own_index(monkeypatch, saved_universe):
+    from datetime import date
+
+    from app import memory
+    from app import vnicorn_service as vs
+    from app.models import AIPick, TradeIdea
+    from engine import vnicorn_ai as ai
+    from engine.data.universe import region_of
+
+    p = SyntheticProvider()
+    us = {s: p.history(s) for s in universe.stock_symbols()[:12]}
+    universe.SYMBOLS["ZEU1.DE"] = {"name": "Euro One", "sector": "Industrials", "exchange": "Xetra", "region": "EU", "currency": "EUR"}
+    universe.SYMBOLS["ZAS1.T"] = {"name": "Asia One", "sector": "Technology", "exchange": "Tokyo", "region": "ASIA", "currency": "JPY"}
+    rate = {**us, "ZEU1.DE": p.history("AAPL"), "ZAS1.T": p.history("MSFT")}
+    spy = p.history("SPY")
+    bundle = ai.train(us, spy, [], trade_histories=us, budget=400)
+    bundle["trusted"] = {"long": True, "short": True}
+    trained_on = []
+    monkeypatch.setattr(vs, "ensure_trained", lambda db, h, b, force=False: trained_on.append(len(h)) or bundle)
+    monkeypatch.setattr(memory, "free_mb", lambda: 5000)
+    asked = []
+
+    def bench_of(sym):
+        asked.append(region_of(sym))
+        return spy
+
+    with SessionLocal() as db:
+        idea = TradeIdea(batch_date=date(2026, 11, 17), symbol="ZEU1.DE", timeframe="SWING", side="long", entry=float(rate["ZEU1.DE"]["close"].iloc[-1]),
+                         stop=float(rate["ZEU1.DE"]["close"].iloc[-1]) * 0.93, trim=None, target=float(rate["ZEU1.DE"]["close"].iloc[-1]) * 1.2,
+                         rr=2.9, weight=10, score=50, reason="test", status="WAIT", current=1.0)
+        db.add(idea)
+        db.commit()
+        vs.rate_and_create(db, date(2026, 11, 17), rate, spy, [idea], {k: 2 for k in rate}, train_hist=us, bench_of=bench_of)
+        assert db.get(AIPick, idea.id) is not None  # a European idea is rated
+        db.delete(idea)
+        db.commit()
+    assert trained_on == [12]  # learns from the US stocks only
+    assert {"EU", "ASIA", "US"} <= set(asked)  # each stock against its own region's index
+    assert vs.move_prob("ZEU1.DE") is not None and vs.move_prob("ZAS1.T") is not None
+    st_regions = {region_of(s) for s in vs._move}
+    assert {"US", "EU", "ASIA"} <= st_regions
+
+
+def test_bench_for_uses_the_region_index(monkeypatch, saved_universe):
+    from app import market_data
+    from app import vnicorn_service as vs
+
+    universe.SYMBOLS["ZEU1.DE"] = {"name": "Euro One", "sector": "Industrials", "exchange": "Xetra", "region": "EU", "currency": "EUR"}
+    seen = []
+    monkeypatch.setattr(market_data, "stored_history", lambda s: seen.append(s) or pd.DataFrame({"close": [1.0]}))
+    market_data._fast_cache.pop("bench:^STOXX50E", None)
+    market_data._fast_cache.pop("bench:SPY", None)
+    vs.bench_for("ZEU1.DE")
+    vs.bench_for("AAPL")
+    assert list(dict.fromkeys(seen)) == ["^STOXX50E", "SPY"]
+    market_data._fast_cache.pop("bench:^STOXX50E", None)
+    market_data._fast_cache.pop("bench:SPY", None)

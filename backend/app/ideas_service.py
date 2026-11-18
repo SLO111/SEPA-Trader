@@ -157,7 +157,9 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
 
 
 def _vnicorn(db: Session, day: date, hist: dict[str, pd.DataFrame], rows: list[TradeIdea]) -> list[TradeIdea]:
-    """vnicornAI: rate the ideas, add its own, refresh major-move probabilities (trains weekly, on demand)."""
+    """vnicornAI: rate the ideas, add its own, refresh major-move probabilities (trains weekly, on demand).
+    It learns from the US stocks (`hist`) and rates every stock of every region, each against its own index."""
+    from engine.data.intl import enabled_regions
     from engine.stages import stage_now
 
     from . import vnicorn_service
@@ -166,14 +168,21 @@ def _vnicorn(db: Session, day: date, hist: dict[str, pd.DataFrame], rows: list[T
         bench = market_data.history("SPY")
     except Exception:
         bench = None
+    rate = dict(hist)
+    for region in enabled_regions(settings.intl_markets)[1:]:
+        try:  # their sessions closed hours before the US close: the latest bars are complete
+            rate.update({s: df for s, df in _histories(region).items() if len(df)})
+        except Exception:
+            log.exception("vnicornAI: loading %s prices failed", region)
     stage_of = {}
-    for s, df in hist.items():
+    for s, df in rate.items():
         try:
             st = stage_now(df)
             stage_of[s] = st["stage"] if st else 0
         except Exception:
             continue
-    return vnicorn_service.rate_and_create(db, day, hist, bench, rows, stage_of)
+    log.info("vnicornAI: learning from %d US stocks, rating %d stocks", len(hist), len(rate))
+    return vnicorn_service.rate_and_create(db, day, rate, bench, rows, stage_of, train_hist=hist, bench_of=vnicorn_service.bench_for)
 
 
 def _next_trading_day(day: date) -> date:

@@ -104,7 +104,7 @@ function Scanner() {
         </div>
         <p className="mb-5 text-sm text-muted">{TABS.find((t) => t.id === tab)?.hint}</p>
         <div className="mb-3"><RegionSwitch region={region} onChange={setRegion} regions={regions} /></div>
-        {region !== "US" && <p className="mb-3 text-xs text-muted">RS ratings and scores rank stocks within this region, against its own index. vnicornAI learns from US stocks, so its probabilities show for the US only.</p>}
+        {region !== "US" && <p className="mb-3 text-xs text-muted">RS ratings and scores rank stocks within this region, against its own index. vnicornAI rates each stock against its own region&apos;s index.</p>}
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {TABS.map((t) => t.id === "ai" && user && !user.limits.ai_picks ? (

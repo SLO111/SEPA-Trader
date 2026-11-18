@@ -169,17 +169,22 @@ def training_budget(wanted: int) -> tuple[int | None, int]:
 
 
 def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.DataFrame | None, ideas: list[TradeIdea],
-                    stage_of: dict[str, int]) -> list[TradeIdea]:
+                    stage_of: dict[str, int], train_hist: dict[str, pd.DataFrame] | None = None, bench_of=None) -> list[TradeIdea]:
     """Rate today's ideas, publish vnicornAI's own ideas (only if the model passed its walk-forward test),
-    and refresh the major-move probabilities. Returns the new AI ideas."""
+    and refresh the major-move probabilities. Returns the new AI ideas.
+    hist: every stock to rate (all regions); train_hist: the stocks it learns from (US; default = hist);
+    bench_of(symbol): each stock's own index (default: `bench` for all)."""
     global _move
     from . import regen_status
+    from engine.data.universe import region_of
 
+    bench_of = bench_of or (lambda _s: bench)
+    train_hist = train_hist if train_hist is not None else hist
     regen_status.stage("Checking the vnicornAI model")
-    bundle = ensure_trained(db, hist, bench)
+    bundle = ensure_trained(db, train_hist, bench)
     if bundle is None:
         return []
-    regen_status.stage("vnicornAI rating ideas and move probabilities")
+    regen_status.stage(f"vnicornAI rating {len(ideas)} ideas and {len(hist)} stocks")
     feats: dict[str, pd.DataFrame] = {}
 
     def f(sym: str) -> pd.DataFrame | None:
@@ -187,7 +192,7 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
         # (~0.16 MB per stock, ~135 MB for the universe on a 512 MB server)
         if sym not in feats:
             try:
-                feats[sym] = ai.features(hist[sym], bench).iloc[[-1]].copy()
+                feats[sym] = ai.features(hist[sym], bench_of(sym)).iloc[[-1]].copy()
             except Exception:
                 feats[sym] = None
             if len(feats) % 100 == 0:
@@ -209,7 +214,7 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
             a = float(f(i.symbol)["_atr"].iloc[-1])
             risk = abs(i.entry - i.stop)
             extra = [(risk / a, abs(i.target - i.entry) / risk)] if a > 0 and risk > 0 else []
-            plan = ai.best_plan(bundle, df, bench, i.side, extra, f(i.symbol))
+            plan = ai.best_plan(bundle, df, bench_of(i.symbol), i.side, extra, f(i.symbol))
         except Exception:
             log.debug("vnicornAI could not rate %s", i.symbol, exc_info=True)
             continue
@@ -238,14 +243,21 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
         if f(sym) is None:
             continue
         try:
-            plan = ai.best_plan(bundle, df, bench, side, None, f(sym))
+            plan = ai.best_plan(bundle, df, bench_of(sym), side, None, f(sym))
         except Exception:
             continue
         if plan and plan["pick"]:
             cands.append((sym, plan))
     cands.sort(key=lambda x: -x[1]["ev"])
+    per_region: dict[str, int] = {}
+    chosen = []
+    for sym, p in cands:  # the best of each region, so the US doesn't crowd out Europe / Asia
+        r = region_of(sym)
+        if per_region.get(r, 0) < MAX_AI_IDEAS:
+            per_region[r] = per_region.get(r, 0) + 1
+            chosen.append((sym, p))
     new = []
-    for sym, p in cands[:MAX_AI_IDEAS]:
+    for sym, p in chosen:
         risk = abs(p["entry"] - p["stop"])
         row = TradeIdea(batch_date=day, symbol=sym, timeframe="AI", side=p["side"], entry=p["entry"], stop=p["stop"], trim=p["trim"],
                         target=p["target"], rr=p["rr"], weight=round(min(20.0, 1 / (risk / p["entry"])), 1) if risk else 0.0,
@@ -279,6 +291,26 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
     return [r for r, _ in new]
 
 
+def bench_for(symbol: str) -> pd.DataFrame | None:
+    """The index a stock is measured against: SPY for US stocks, Euro Stoxx 50 / Asia ex Japan for Europe / Asia
+    (vnicornAI learned from US stocks against SPY; each other stock is compared with its own market the same way)."""
+    from engine.data.intl import BENCHMARKS
+    from engine.data.universe import region_of
+
+    from . import market_data
+
+    sym = BENCHMARKS.get(region_of(symbol), "SPY")
+    for s in dict.fromkeys((sym, "SPY")):
+        try:
+            return market_data._fast(f"bench:{s}", 1800, lambda s=s: market_data.stored_history(s))
+        except Exception:
+            try:
+                return market_data.history(s)
+            except Exception:
+                continue
+    return None
+
+
 def move_prob(symbol: str) -> float | None:
     return _move.get(symbol)
 
@@ -287,6 +319,13 @@ def status(db: Session) -> dict:
     bundle = load(db)
     if bundle is None:
         return {"trained": False}
+    from engine.data.universe import region_of
+
+    preds = bundle.get("move_preds") or _move
+    by_region: dict[str, int] = {}
+    for s in preds:
+        by_region[region_of(s)] = by_region.get(region_of(s), 0) + 1
     return {"trained": True, "trained_at": _trained_at.isoformat() if _trained_at else None, "symbols": bundle.get("symbols"),
+            "rated": len(preds), "rated_by_region": by_region,
             "report": bundle.get("report", {}), "trusted": bundle.get("trusted", {}),
             "retrain_days": RETRAIN_DAYS, "min_prob": ai.MIN_PROB, "min_ev": ai.MIN_EV, "horizon_days": ai.HORIZON}
