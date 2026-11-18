@@ -592,9 +592,12 @@ def test_vnicorn_retrains_when_universe_grew(monkeypatch):
     vs.ensure_trained(None, {}, None)
     assert trained == [120]  # 36 << 120 available: retrained although trained this week
     trained.clear()
-    monkeypatch.setattr(vs, "load", lambda db: {"symbols": 118, "models": {"x": 1}})
+    monkeypatch.setattr(vs, "load", lambda db: {"symbols": 118, "models": {"x": 1}, "train_config": {"budget": 1000, "years": 3}})
     vs.ensure_trained(None, {}, None)
     assert trained == []  # close enough: keeps the weekly schedule
+    monkeypatch.setattr(vs, "load", lambda db: {"symbols": 118, "models": {"x": 1}, "train_config": {"budget": 200, "years": 3}})
+    vs.ensure_trained(None, {}, None)
+    assert trained == [120]  # learned from far fewer samples than the server allows now: retrained
 
 
 def test_regenerate_runs_in_background(client, register, monkeypatch):
@@ -1038,3 +1041,50 @@ def test_bench_for_uses_the_region_index(monkeypatch, saved_universe):
     assert list(dict.fromkeys(seen)) == ["^STOXX50E", "SPY"]
     market_data._fast_cache.pop("bench:^STOXX50E", None)
     market_data._fast_cache.pop("bench:SPY", None)
+
+
+def test_training_samples_auto_and_long_history(monkeypatch):
+    from app import memory
+    from app import vnicorn_service as vs
+    from app.config import Settings, settings
+
+    assert Settings().vnicorn_samples == 0  # 0 = as many as memory allows
+    monkeypatch.setattr(vs, "FIXED_MB_LOADED", 50)
+    monkeypatch.setattr(vs, "FIXED_MB_COLD", 50)
+    monkeypatch.setattr(memory, "free_mb", lambda: 11000)
+    assert vs.training_budget(0)[0] == vs.MAX_AUTO_SAMPLES  # big server: capped
+    assert vs.training_budget(5000)[0] == 5000  # an explicit value wins
+    monkeypatch.setattr(memory, "free_mb", lambda: 300)
+    assert vs.training_budget(0)[0] < 20000  # small server: what fits
+
+    monkeypatch.setattr(memory, "limit_mb", lambda: 12000)
+    monkeypatch.setattr(settings, "data_provider", "yfinance")
+    assert vs._use_long_history() == settings.vnicorn_train_years
+    monkeypatch.setattr(memory, "limit_mb", lambda: 512)
+    assert vs._use_long_history() == 0  # small server: the stored years
+
+    # training downloads the long history, falls back to the stored prices where a download failed
+    p = SyntheticProvider()
+    stored = {s: p.history(s, years=2) for s in universe.stock_symbols()[:12]}
+    asked, seen = [], {}
+
+    class Prov:
+        def bulk_history(self, symbols, years=3):
+            asked.append(years)
+            return {s: p.history(s, years=years) for s in symbols if s not in list(stored)[:2]}  # the first two fail
+
+    import engine.data.providers as prov
+
+    monkeypatch.setattr(prov, "get_provider", lambda name: Prov())
+    monkeypatch.setattr(vs, "_use_long_history", lambda: 10)
+    monkeypatch.setattr(vs, "load", lambda db: None)
+    monkeypatch.setattr(vs, "real_trades", lambda db, hist: [])
+    monkeypatch.setattr(vs, "training_budget", lambda wanted: (1000, 8000))
+    monkeypatch.setattr(vs, "_save", lambda db, b: None)
+    monkeypatch.setattr(vs.ai, "train", lambda subset, bench, trades, **k: seen.update({s: len(df) for s, df in subset.items()}) or {"models": {"y": 1}})
+    new = vs.ensure_trained(None, stored, p.history("SPY", years=2))
+    assert asked and set(asked) == {10}
+    first = list(stored)[:2]
+    assert all(seen[s] == len(stored[s]) for s in first)  # download failed: stored prices kept
+    assert all(seen[s] > len(stored[s]) for s in list(stored)[2:])  # the rest learn from ~10 years
+    assert new["train_config"]["budget"] == 1000 and new["train_config"]["years"] == 10

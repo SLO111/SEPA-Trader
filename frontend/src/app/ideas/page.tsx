@@ -211,6 +211,12 @@ function Ideas() {
                 <tbody>
                   {!data && <tr><td colSpan={11} className="px-3 py-10 text-center text-muted">Loading ideas…</td></tr>}
                   {data?.ideas.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-muted">No ideas here yet. New ideas are published after each trading day.</td></tr>}
+                  {data && data.ideas.length > 0 && tf === "AIPICKS" && listed.length === 0 && (
+                    <tr><td colSpan={11} className="px-3 py-10 text-center text-sm text-muted">
+                      vnicornAI is still learning: on the test period it never saw, its picks did not beat taking every setup, so it publishes none yet.
+                      Its ratings still show on every idea. See the model card for the numbers.
+                    </td></tr>
+                  )}
                   {page.visible.map((i) => {
                     const move = i.current !== null ? ((i.current / i.entry - 1) * 100 * (i.side === "short" ? -1 : 1)) : null;
                     return (

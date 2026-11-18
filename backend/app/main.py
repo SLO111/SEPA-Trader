@@ -214,7 +214,8 @@ def health():
             st = vs.status(db)
             ideas = {"last_batch": lb.isoformat() if lb else None, "due": due_for_ideas(db),
                      "vnicorn": {"trained": st.get("trained"), "stocks": st.get("symbols"), "trained_at": st.get("trained_at"),
-                                 "rated": st.get("rated"), "rated_by_region": st.get("rated_by_region"), "error": vs.last_error}}
+                                 "rated": st.get("rated"), "rated_by_region": st.get("rated_by_region"),
+                                 "samples": st.get("samples"), "years": st.get("years"), "trusted": st.get("trusted"), "error": vs.last_error}}
             from . import regen_status
 
             rs = regen_status.status()

@@ -19,7 +19,7 @@ type Health = {
   } | null;
   ideas?: {
     last_batch: string | null; due: boolean;
-    vnicorn?: { trained?: boolean; stocks?: number | null; trained_at?: string | null; error?: string | null; rated?: number | null; rated_by_region?: Record<string, number> | null };
+    vnicorn?: { trained?: boolean; stocks?: number | null; trained_at?: string | null; error?: string | null; rated?: number | null; rated_by_region?: Record<string, number> | null; samples?: number | null; years?: number | null; trusted?: Record<string, boolean> | null };
     regenerate?: { running?: boolean; stage?: string | null; started_at?: string | null; finished_at?: string | null; generated?: number | null; error?: string | null; interrupted?: boolean };
   } | null;
   memory?: { used_mb: number; limit_mb: number; breakdown_mb?: Record<string, number> };
@@ -151,7 +151,18 @@ export default function ServerStatus() {
         <Section title="Signals & vnicornAI">
           <Row label="Last trade ideas">{h.ideas?.last_batch ? `${h.ideas.last_batch} close` : "none yet"}</Row>
           <Row label="Next batch">{h.ideas?.due ? <span className="text-amber-300">due now</span> : "after the next close"}</Row>
-          <Row label="vnicornAI learned from">{v?.trained ? `${(v.stocks ?? 0).toLocaleString("en-US")} US stocks` : "not trained yet"}</Row>
+          <Row label="vnicornAI learned from">
+            {v?.trained
+              ? `${(v.stocks ?? 0).toLocaleString("en-US")} US stocks${v.years ? ` · ${v.years} y` : ""}${v.samples ? ` · ${v.samples >= 1000 ? `${Math.round(v.samples / 1000)}k` : v.samples} samples` : ""}`
+              : "not trained yet"}
+          </Row>
+          {v?.trained && (
+            <Row label="vnicornAI picks">
+              {v.trusted && Object.values(v.trusted).some(Boolean)
+                ? <span className="text-up">on ({Object.entries(v.trusted).filter(([, t]) => t).map(([k]) => k).join(" + ")})</span>
+                : <span className="text-amber-300">learning (not beating the baseline yet)</span>}
+            </Row>
+          )}
           {v?.trained && (
             <Row label="vnicornAI rates">
               <span title={Object.entries(v.rated_by_region ?? {}).map(([r, n]) => `${r} ${n}`).join(" · ")}>

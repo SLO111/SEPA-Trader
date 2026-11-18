@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 type Report = { rows: number; symbols: number; auc?: number; test_from?: string; base_rate?: number; all_avg_r?: number; picks?: number; picks_win_rate?: number | null; picks_avg_r?: number | null; top10_hit_rate?: number };
-type Status = { trained: boolean; trained_at?: string; symbols?: number; report?: Record<string, Report>; trusted?: Record<string, boolean>; retrain_days?: number; min_prob?: number; min_ev?: number; horizon_days?: number };
+type Status = { trained: boolean; trained_at?: string; symbols?: number; report?: Record<string, Report>; trusted?: Record<string, boolean>; retrain_days?: number; min_prob?: number; min_ev?: number; horizon_days?: number; samples?: number | null; years?: number | null };
 
 export function AIBadge() {
   return <span className="rounded bg-gradient-to-r from-violet-500 to-cyan-500 px-1.5 py-0.5 text-[10px] font-bold text-white">vnicornAI</span>;
@@ -28,7 +28,7 @@ export default function VnicornAICard({ aiAvgR, rulesAvgR, aiClosed }: { aiAvgR?
       ) : (
         <>
           <p className="text-xs text-muted">
-            Learns from {s.symbols} liquid stocks which plans (stop, trim, target) reached the target before the stop within {s.horizon_days} trading days. Retrained every {s.retrain_days} days
+            Learns from {s.symbols?.toLocaleString("en-US")} liquid stocks{s.years ? ` over ${s.years} years` : ""}{s.samples ? ` (${s.samples.toLocaleString("en-US")} sample days)` : ""} which plans (stop, trim, target) reached the target before the stop within {s.horizon_days} trading days. Retrained every {s.retrain_days} days
             {s.trained_at ? `, last on ${s.trained_at.slice(0, 10)}` : ""}.
           </p>
           <div className="mt-3 space-y-2 text-sm">
