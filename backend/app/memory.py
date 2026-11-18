@@ -8,7 +8,14 @@ DEFAULT_LIMIT_MB = 512
 
 
 def limit_mb() -> int:
-    """The container's memory limit (cgroup v2 or v1), or 512 MB when it can't be read."""
+    """Memory the server may use: MEMORY_LIMIT_MB if set, else the container's limit (cgroup v2 / v1), else the machine's
+    total memory (a Docker container on your own server has no limit), else 512 MB."""
+    import os
+
+    env = os.environ.get("MEMORY_LIMIT_MB", "").strip()
+    if env.isdigit() and int(env) >= 64:
+        return int(env)
+    total = _total_mb()
     for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
         try:
             raw = Path(path).read_text().strip()
@@ -16,9 +23,21 @@ def limit_mb() -> int:
             continue
         if raw.isdigit():
             mb = int(raw) // (1024 * 1024)
-            if 64 <= mb <= 64 * 1024:  # "no limit" shows up as a huge number
+            if 64 <= mb <= (total or 64 * 1024):  # "no limit" shows up as a huge number
                 return mb
-    return DEFAULT_LIMIT_MB
+    if os.environ.get("RENDER"):  # Render sets RENDER=true; its free instance has 512 MB whatever the host machine has
+        return DEFAULT_LIMIT_MB
+    return total or DEFAULT_LIMIT_MB
+
+
+def _total_mb() -> int | None:
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemTotal:"):
+                return int(line.split()[1]) // 1024
+    except OSError:
+        pass
+    return None
 
 
 def rss_mb() -> int:

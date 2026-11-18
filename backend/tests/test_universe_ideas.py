@@ -908,3 +908,14 @@ def test_premium_gets_every_idea_pro_a_mix_of_ten():
     pro = _plan_cut(rows, {"ideas_limit": 10, "ideas_shorts": False})
     kinds = [r.timeframe for r in pro]
     assert len(pro) == 10 and kinds.count("TRADE") >= 2 and kinds.count("INVEST") >= 2
+
+
+def test_memory_limit_sources(monkeypatch):
+    from app import memory
+
+    monkeypatch.setenv("MEMORY_LIMIT_MB", "12000")
+    assert memory.limit_mb() == 12000
+    monkeypatch.delenv("MEMORY_LIMIT_MB")
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setattr(memory, "Path", lambda p: type("P", (), {"read_text": lambda self: (_ for _ in ()).throw(OSError())})())
+    assert memory.limit_mb() == 512  # on Render without a readable limit: its 512 MB

@@ -9,3 +9,8 @@ frontend/.next/
 frontend/.env*.local
 frontend/out/
 backend/static/
+
+# Oracle / own-server deploy: secrets and backups stay on the server
+deploy/oracle/.env
+deploy/oracle/backups/
+deploy/oracle/*.log
