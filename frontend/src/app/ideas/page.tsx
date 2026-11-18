@@ -16,10 +16,12 @@ const SORTABLE: Record<string, "ai" | "rr" | "status"> = { "R/R": "rr", vnicornA
 
 type Idea = {
   id: number; date: string; symbol: string; sector?: string; industry?: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
-  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; rr_now?: number | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
+  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; rr_now?: number | null; gap?: { price: number; change_pct: number; session: string; text: string } | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
+type MarketEvent = { kind: "earnings" | "fed" | "move" | "market"; symbol: string | null; when: string; text: string };
 type Resp = {
+  events?: MarketEvent[];
   updated: string | null; ideas: Idea[];
   summary: { open: number; active: number; unrealized_pct: number | null; closed: number; win_rate: number | null; avg_r: number | null; by_timeframe: Record<string, number>; ai_closed?: number; ai_avg_r?: number | null; rules_avg_r?: number | null };
 };
@@ -68,6 +70,7 @@ function Ideas() {
       .catch((e) => (e instanceof ApiError && e.status === 403 ? setLocked(e.message) : null));
   const take = async (i: Idea) => {
     const verb = i.side === "short" ? "Short" : "Buy";
+    if (i.gap && !confirm(`${i.gap.text}\n\nTake it anyway?`)) return;
     if (!confirm(`${verb} ${i.symbol} now at the current price?\nStop ${i.stop} · ${i.trim ? `trim ${i.trim} · ` : ""}target ${i.target}\n\nIt is followed in Backtest → My trades.`)) return;
     try {
       await post("/api/paper-trades", { idea_id: i.id });
@@ -133,6 +136,16 @@ function Ideas() {
           </div>
         </div>
 
+        {(data?.events?.length ?? 0) > 0 && (
+          <div className="mb-4 space-y-1.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-amber-300">High-impact events</div>
+            {data!.events!.map((e) => (
+              <p key={`${e.kind}-${e.symbol}-${e.when}`} className="text-sm text-amber-100/90">
+                {e.kind === "earnings" ? "📅" : e.kind === "fed" ? "🏛" : "⚡"} {e.text}
+              </p>
+            ))}
+          </div>
+        )}
         <div className="grid gap-5 2xl:grid-cols-[1fr_300px]">
           <section className="min-w-0 rounded-xl border border-line bg-panel">
             <div className="flex gap-1 border-b border-line p-2">
@@ -201,6 +214,11 @@ function Ideas() {
                               </Link>
                               <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${TF_STYLE[i.timeframe]}`}>{i.timeframe}</span>
                               <EarningsBadge days={i.earnings_in} />
+                              {i.gap && (
+                                <span title={i.gap.text} className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                                  Gap {i.gap.change_pct > 0 ? "+" : ""}{i.gap.change_pct}%
+                                </span>
+                              )}
                             </div>
                             <div className="mt-0.5 text-[10px] text-muted" title={`Suggested weight ${i.weight}% of the account`}>{i.date.slice(5)} · {i.weight}%</div>
                             {i.industry && <div className="max-w-[150px] truncate text-[10px] text-muted/80" title={i.sector}>{i.industry}</div>}

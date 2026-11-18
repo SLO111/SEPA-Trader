@@ -417,6 +417,44 @@ def last_completed_session(now: datetime | None = None) -> date | None:
     return days[len(days) // 2]
 
 
+def earnings_dates(symbols: list[str]) -> dict[str, date | None]:
+    """Next earnings date per symbol, from the stored earnings calendar."""
+    out: dict[str, date | None] = {}
+    for s in symbols:
+        nd = (market_data.cached("earnings", s) or {}).get("next_date")
+        try:
+            out[s] = date.fromisoformat(str(nd)[:10]) if nd else None
+        except ValueError:
+            out[s] = None
+    return out
+
+
+def extended_quotes(symbols: list[str]) -> dict[str, dict]:
+    """Pre-market / after-hours quotes by symbol, outside the regular session only (cached 5 minutes)."""
+    from .data_store import market_session_open
+
+    if not symbols or market_session_open():
+        return {}
+    try:
+        return {r["symbol"]: r for r in market_data.extended_hours(sorted(set(symbols)))}
+    except Exception:
+        log.debug("Extended-hours quotes failed", exc_info=True)
+        return {}
+
+
+def market_events(extra_symbols: list[str] | None = None, now: datetime | None = None) -> tuple[dict[str, dict], list[dict]]:
+    """(extended quotes, high-impact events) for Signals: mega-cap reports and Fed decisions due, big moves after hours."""
+    from engine import events as ev
+    from engine.data.fed import FOMC_MEETINGS
+
+    today = (now or datetime.now(timezone.utc)).astimezone(ET).date()
+    ext = extended_quotes(list(extra_symbols or []) + ev.MEGA_CAPS + ev.INDEXES)
+    return ext, ev.high_impact(today, earnings_dates(ev.MEGA_CAPS), FOMC_MEETINGS, ext)
+
+
+EVENT_DELAY_MINUTES = 17 * 60  # on a mega-cap report day the batch waits until 5:00 PM New York, after the report
+
+
 def due_for_ideas(db: Session, now: datetime | None = None) -> bool:
     """When the stored prices hold a completed trading day newer than the last batch. Driven by the data, not the clock,
     so a server that slept through the close (Render's free plan) catches up at the next wake-up, weekends included."""
@@ -426,7 +464,15 @@ def due_for_ideas(db: Session, now: datetime | None = None) -> bool:
     if last is None:
         return True
     sess = last_completed_session(now)
-    return sess is not None and sess > last
+    if sess is None or sess <= last:
+        return False
+    # a mega-cap (NVIDIA, Apple…) reports after today's close: publish after the report, with the gap flags ready
+    from engine.events import reports_today
+
+    t = (now or datetime.now(timezone.utc)).astimezone(ET)
+    if sess == t.date() and t.hour * 60 + t.minute < EVENT_DELAY_MINUTES and reports_today(t.date(), earnings_dates(["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "AVGO"])):
+        return False
+    return True
 
 
 def _final_close_bars() -> None:

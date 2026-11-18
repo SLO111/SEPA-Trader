@@ -801,3 +801,48 @@ def test_low_memory_rates_todays_ideas_only(monkeypatch):
         assert vs.rate_and_create(db, date(2026, 11, 17), hist, bench, [], {k: 2 for k in hist}) == []
     assert "low memory" in vs.last_error
     vs.last_error = None
+
+
+def test_gap_flags_and_events():
+    from datetime import date
+
+    from engine import events as ev
+
+    idea = {"side": "long", "entry": 100.0, "stop": 95.0, "status": "BUY"}
+    assert ev.idea_gap(idea, {"price": 101, "change_pct": 1.0, "session": "after_hours"}) is None
+    g = ev.idea_gap(idea, {"price": 108, "change_pct": 6.0, "session": "after_hours"})
+    assert g and "+6.0% after hours" in g["text"]
+    assert "through the stop" in ev.idea_gap(idea, {"price": 94, "change_pct": -3.0, "session": "pre_market"})["text"]
+    waiting = {**idea, "status": "WAIT"}
+    assert "past the entry" in ev.idea_gap(waiting, {"price": 103, "change_pct": 2.5, "session": "pre_market"})["text"]
+    short = {"side": "short", "entry": 50.0, "stop": 53.0, "status": "BUY"}
+    assert "through the stop" in ev.idea_gap(short, {"price": 54, "change_pct": 3.0, "session": "after_hours"})["text"]
+
+    ext = {"SPY": {"change_pct": -0.4, "session": "after_hours"}, "QQQ": {"change_pct": -1.6, "session": "after_hours"},
+           "NVDA": {"change_pct": 7.2, "session": "after_hours"}}
+    assert ev.market_gap(ext)["symbol"] == "QQQ"
+    wed = date(2026, 11, 18)
+    out = ev.high_impact(wed, {"NVDA": wed, "AAPL": date(2026, 11, 19), "MSFT": date(2026, 12, 20)}, ["2026-12-09", "2026-11-19"], ext)
+    kinds = [(e["kind"], e.get("symbol"), e["when"]) for e in out]
+    assert ("earnings", "NVDA", "today") in kinds and ("earnings", "AAPL", "tomorrow") in kinds
+    assert ("fed", None, "tomorrow") in kinds and ("move", "NVDA", "now") in kinds and ("market", "QQQ", "now") in kinds
+    assert not any(e.get("symbol") == "MSFT" for e in out)
+    fri = date(2026, 11, 20)
+    assert ev.high_impact(fri, {"NVDA": date(2026, 11, 23)}, [])[0]["when"] == "next trading day"
+
+
+def test_batch_waits_for_megacap_report(monkeypatch):
+    from datetime import date, datetime, timezone
+
+    from app import data_store, ideas_service
+
+    monkeypatch.setattr(ideas_service, "latest_batch", lambda db: date(2026, 11, 17))
+    s = _store_with_prices("2026-11-18")
+    monkeypatch.setattr(data_store, "get_store", lambda: s)
+    monkeypatch.setattr(ideas_service, "earnings_dates", lambda syms: {"NVDA": date(2026, 11, 18)})
+    at_1630 = datetime(2026, 11, 18, 21, 30, tzinfo=timezone.utc)  # 4:30 PM New York
+    at_1705 = datetime(2026, 11, 18, 22, 5, tzinfo=timezone.utc)
+    assert not ideas_service.due_for_ideas(None, at_1630)  # NVIDIA reports tonight: wait
+    assert ideas_service.due_for_ideas(None, at_1705)
+    monkeypatch.setattr(ideas_service, "earnings_dates", lambda syms: {})
+    assert ideas_service.due_for_ideas(None, at_1630)  # no big report: at the usual time
