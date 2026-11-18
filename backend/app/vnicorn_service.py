@@ -100,7 +100,7 @@ def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFra
     fresh = _trained_at is not None and datetime.now(timezone.utc) - _trained_at < timedelta(days=RETRAIN_DAYS)
     from .config import settings
 
-    subset = _liquid(hist, settings.vnicorn_train_stocks or TRAIN_SYMBOLS)
+    subset = _liquid(hist, settings.vnicorn_train_stocks or len(hist))  # 0 = every stock with enough history
     # the universe grew (e.g. 36 -> 850 stocks): a model that learned from far fewer stocks than it could is retrained now
     grown = bundle is not None and (bundle.get("symbols") or 0) < 0.8 * len(subset)
     if bundle is not None and fresh and not force and not grown:
@@ -146,6 +146,7 @@ def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFra
 
 
 SAFETY_MB = 100  # never plan to use the last 100 MB
+LOW_MEMORY_MB = 40  # below this, rating covers the day's ideas only
 FIXED_MB_LOADED, FIXED_MB_COLD = 50, 130  # measured: training's fixed cost with scikit-learn already loaded / not yet
 PER_SAMPLE_MB = 0.015  # measured ~0.011 MB per sample date (800 stocks), with margin
 MIN_SAMPLES = 500
@@ -182,12 +183,22 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
     feats: dict[str, pd.DataFrame] = {}
 
     def f(sym: str) -> pd.DataFrame | None:
+        # only today's row is needed to rate a stock: keep that (a 1-row frame), not the whole feature table
+        # (~0.16 MB per stock, ~135 MB for the universe on a 512 MB server)
         if sym not in feats:
             try:
-                feats[sym] = ai.features(hist[sym], bench)
+                feats[sym] = ai.features(hist[sym], bench).iloc[[-1]].copy()
             except Exception:
                 feats[sym] = None
+            if len(feats) % 100 == 0:
+                import gc
+
+                gc.collect()
         return feats[sym]
+
+    from . import memory
+
+    low_memory = memory.free_mb() < LOW_MEMORY_MB
 
     # 1) rate every rules-based idea, the idea's own plan included as a candidate
     for i in ideas:
@@ -207,6 +218,12 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
                             target=plan["target"], rr=plan["rr"], pick=plan["pick"] and bundle.get("trusted", {}).get(i.side, False)))
 
     # 2) its own ideas: longs in Stage 2, shorts in Stage 4, best expected value first
+    global last_error
+    if low_memory:  # not enough memory to look at the whole universe this time: the day's ideas are rated, that's all
+        last_error = f"low memory ({memory.free_mb()} MB free): rated today's ideas only, no new AI ideas or move probabilities"
+        log.warning("vnicornAI: %s", last_error)
+        db.commit()
+        return []
     taken = {i.symbol for i in ideas}
     cands = []
     for sym, df in hist.items():

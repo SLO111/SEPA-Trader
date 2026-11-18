@@ -87,6 +87,10 @@ def _rebuild_screens() -> None:
     from .routers import markets as mk
     from .routers.sepa import cached_scan
 
+    from . import regen_status
+
+    if regen_status.running_here():
+        return  # a regeneration is rebuilding everything already, with the memory to itself
     if not _rebuild_lock.acquire(blocking=False):
         return  # a rebuild is already running
     market_data._tls.rebuilding = True
@@ -112,7 +116,9 @@ def _warm_loop() -> None:
     time.sleep(20)
     while True:
         store = get_store()
-        if store is not None and store.prices:
+        from . import regen_status
+
+        if store is not None and store.prices and not regen_status.running_here():  # paused during a regeneration
             for fn in (cached_scan, mk._rows, mk._screen_rows, mk._fear_greed, mk._indices, mk._cycle, pulse_map):
                 try:
                     fn()

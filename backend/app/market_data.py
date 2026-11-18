@@ -260,6 +260,8 @@ def _fast(key: str, ttl: float, loader, stale_ok: bool = False):
         value = loader()
         with _lock:
             _fast_cache[key] = (time.monotonic(), value)
+            if _is_per_stock(key):
+                _trim_cache()
         return value
 
 
@@ -299,6 +301,31 @@ def in_background() -> bool:
     """Inside a background rebuild: nested shared screens are computed fresh (a rebuilt screener table must not be
     made from a stale movers table), instead of returning their previous value."""
     return getattr(_tls, "rebuilding", False)
+
+
+PER_STOCK = ("company:", "analysis:", "keyfacts:", "scorecard:", "tech:", "intraday:", "pulse1:", "tktplan:", "ideas-live:")
+MAX_PER_STOCK = 250  # stock pages people opened: kept for quick revisits, but not without limit
+
+
+def _is_per_stock(key: str) -> bool:
+    return any(p in key for p in PER_STOCK)
+
+
+def _trim_cache() -> None:
+    """Drop the oldest per-stock entries beyond the cap (market-wide screens are never dropped). Call with _lock held."""
+    keys = [k for k in _fast_cache if _is_per_stock(k)]
+    if len(keys) > MAX_PER_STOCK:
+        for k in sorted(keys, key=lambda k: _fast_cache[k][0])[: len(keys) - MAX_PER_STOCK]:
+            _fast_cache.pop(k, None)
+
+
+def drop_per_stock() -> int:
+    """Free memory before a heavy job: forget every cached stock page (they reload on the next visit)."""
+    with _lock:
+        keys = [k for k in _fast_cache if _is_per_stock(k)]
+        for k in keys:
+            _fast_cache.pop(k, None)
+    return len(keys)
 
 
 def _refresh(key: str, loader) -> None:

@@ -127,6 +127,11 @@ def _regenerate_job() -> None:
         from .. import vnicorn_service
 
         vnicorn_service.last_error = None  # report only what happens in this run
+        # make room: forget cached stock pages (they reload on the next visit); background jobs pause meanwhile
+        import gc
+
+        market_data.drop_per_stock()
+        gc.collect()
         # Move Detector first: a fresh scan from the last close (RS, Trend Template, Bull / Bear scores)
         regen_status.stage("Scanning Move Detector")
         market_data._tls.rebuilding = True

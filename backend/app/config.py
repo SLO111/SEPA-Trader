@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     alert_check_seconds: int = 300
     # Trade ideas + market feed background job interval in seconds (0 disables).
     ideas_interval_seconds: int = 600
-    vnicorn_train_stocks: int = 800  # vnicornAI learns from this many of the most liquid stocks
+    vnicorn_train_stocks: int = 0  # vnicornAI learns from this many of the most liquid stocks (0 = all of them)
     vnicorn_samples: int = 3000  # upper bound of sample dates; the server lowers it to what its free memory allows
     # Email notifications (optional): any SMTP provider, e.g. Gmail, Brevo, SendGrid.
     smtp_host: str = ""

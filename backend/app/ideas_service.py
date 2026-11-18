@@ -444,7 +444,11 @@ def _final_close_bars() -> None:
 
 
 def tick(db: Session) -> None:
-    """One pass of the background job (every 10 minutes)."""
+    """One pass of the background job (every 10 minutes). Skipped while an admin regeneration runs (memory)."""
+    from . import regen_status
+
+    if regen_status.running_here():
+        return
     if due_for_ideas(db):
         run_ideas(db)  # also publishes the daily summary
     refresh_statuses(db)

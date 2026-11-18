@@ -41,6 +41,15 @@ def _short(e: Exception) -> str:
     return f"{type(e).__name__}: {msg[:150]}".rstrip(": ")
 
 
+def _regenerating() -> bool:
+    try:
+        from . import regen_status
+
+        return regen_status.running_here()
+    except Exception:
+        return False
+
+
 def _universe_key() -> str:
     # "wide" (not "r1000"): a list saved by an earlier version after a failed mid-cap download is ignored
     return "universe:wide2" if settings.universe == "sp500+r1000" else "universe:sp500"
@@ -476,6 +485,8 @@ class DataStore:
                 for name, fn in steps:  # each step on its own: one failure doesn't skip the others
                     if stop.is_set():
                         break
+                    if name in ("fundamentals", "all-time highs") and _regenerating():
+                        continue  # left for the next pass: an admin regeneration needs the memory now
                     try:
                         fn()
                     except Exception as e:

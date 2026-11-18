@@ -751,10 +751,10 @@ def test_training_budget_follows_free_memory(monkeypatch):
     vs.last_error = None
 
 
-def test_default_train_stocks_is_800():
+def test_default_train_stocks_is_all():
     from app.config import Settings
 
-    assert Settings().vnicorn_train_stocks == 800
+    assert Settings().vnicorn_train_stocks == 0  # 0 = every stock
 
 
 def test_health_is_readable_with_summary(client):
@@ -766,3 +766,38 @@ def test_health_is_readable_with_summary(client):
     assert {"status", "universe_size", "config", "ideas", "memory"} <= set(h)
     assert h["memory"]["used_mb"] > 0 and "breakdown_mb" in h["memory"]
     assert any(line.startswith("Memory ") for line in h["summary"])
+
+
+def test_shared_cache_keeps_per_stock_pages_bounded(monkeypatch):
+    from app import market_data
+
+    monkeypatch.setattr(market_data, "MAX_PER_STOCK", 5)
+    market_data._fast_cache.clear()
+    market_data._fast("synthetic:movers", 999, lambda: ["screen"])
+    for i in range(12):
+        market_data._fast(f"synthetic:company:Z{i}", 999, lambda i=i: {"i": i})
+    per_stock = [k for k in market_data._fast_cache if ":company:" in k]
+    assert len(per_stock) == 5 and "synthetic:company:Z11" in market_data._fast_cache  # newest kept
+    assert "synthetic:movers" in market_data._fast_cache  # screens never dropped
+    assert market_data.drop_per_stock() == 5 and "synthetic:movers" in market_data._fast_cache
+    market_data._fast_cache.clear()
+
+
+def test_low_memory_rates_todays_ideas_only(monkeypatch):
+    from datetime import date
+
+    from app import memory
+    from app import vnicorn_service as vs
+    from engine import vnicorn_ai as ai
+
+    p = SyntheticProvider()
+    hist = {s: p.history(s) for s in universe.stock_symbols()[:12]}
+    bench = p.history("SPY")
+    bundle = ai.train(hist, bench, [], trade_histories=hist, budget=400)
+    bundle["trusted"] = {"long": True, "short": True}
+    monkeypatch.setattr(vs, "ensure_trained", lambda db, h, b, force=False: bundle)
+    monkeypatch.setattr(memory, "free_mb", lambda: 20)
+    with SessionLocal() as db:
+        assert vs.rate_and_create(db, date(2026, 11, 17), hist, bench, [], {k: 2 for k in hist}) == []
+    assert "low memory" in vs.last_error
+    vs.last_error = None
