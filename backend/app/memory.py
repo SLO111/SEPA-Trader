@@ -36,3 +36,55 @@ def rss_mb() -> int:
 
 def free_mb() -> int:
     return limit_mb() - rss_mb()
+
+
+_breakdown_cache: tuple[float, dict] | None = None
+
+
+def _approx_mb(obj) -> float:
+    """Rough size in MB: exact for DataFrames, the pickled size for other data (Python objects take ~2-3x that)."""
+    import pickle
+
+    import pandas as pd
+
+    if isinstance(obj, pd.DataFrame):
+        return float(obj.memory_usage(deep=True).sum()) / 1e6
+    if isinstance(obj, dict) and obj and all(isinstance(v, pd.DataFrame) for v in list(obj.values())[:5]):
+        return sum(_approx_mb(v) for v in obj.values() if isinstance(v, pd.DataFrame))
+    try:
+        return len(pickle.dumps(obj, protocol=5)) * 2.5 / 1e6
+    except Exception:
+        return 0.0
+
+
+def breakdown() -> dict:
+    """What takes the memory, roughly (MB), refreshed at most once a minute."""
+    import time
+
+    global _breakdown_cache
+    if _breakdown_cache and time.monotonic() - _breakdown_cache[0] < 60:
+        return _breakdown_cache[1]
+    from . import market_data
+    from .data_store import get_store
+
+    out: dict[str, float] = {}
+    store = get_store()
+    if store is not None:
+        out["stock prices"] = _approx_mb(store.prices)
+        out["fundamentals / earnings / ATH"] = sum(_approx_mb(v) for v in store.slow.values())
+        out["symbol directory (search)"] = _approx_mb(store.directory)
+    try:
+        out["shared screens cache"] = sum(_approx_mb(v) for _, v in list(market_data._fast_cache.values()))
+    except Exception:
+        pass
+    try:
+        from .routers import sepa
+
+        out["Move Detector scan"] = sum(_approx_mb(rows) for _, rows in list(sepa._scan_cache.values()))
+    except Exception:
+        pass
+    data = sum(out.values())
+    out["Python, libraries and the rest"] = max(0.0, rss_mb() - data)
+    result = {k: round(v) for k, v in sorted(out.items(), key=lambda kv: -kv[1])}
+    _breakdown_cache = (time.monotonic(), result)
+    return result

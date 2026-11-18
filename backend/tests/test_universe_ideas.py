@@ -755,3 +755,14 @@ def test_default_train_stocks_is_800():
     from app.config import Settings
 
     assert Settings().vnicorn_train_stocks == 800
+
+
+def test_health_is_readable_with_summary(client):
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    assert "\n  " in r.text  # indented, one value per line
+    h = r.json()
+    assert isinstance(h["summary"], list) and h["summary"] and h["summary"][-1].startswith(("No errors", "Errors"))
+    assert {"status", "universe_size", "config", "ideas", "memory"} <= set(h)
+    assert h["memory"]["used_mb"] > 0 and "breakdown_mb" in h["memory"]
+    assert any(line.startswith("Memory ") for line in h["summary"])
