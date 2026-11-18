@@ -108,17 +108,32 @@ def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFra
     if len(subset) < 10:
         return bundle
     trades = real_trades(db, hist)
-    log.info("Training vnicornAI on %d stocks and %d real trades", len(subset), len(trades))
     from . import regen_status
 
-    regen_status.stage(f"Training vnicornAI on {len(subset)} stocks")
     global last_error
+    samples, free = training_budget(settings.vnicorn_samples)
+    if samples is None:
+        last_error = f"not enough memory to retrain ({free} MB free); kept the previous model"
+        log.warning("vnicornAI: %s", last_error)
+        return bundle
+    log.info("Training vnicornAI on %d stocks, %d samples (%d MB free), %d real trades", len(subset), samples, free, len(trades))
+    regen_status.stage(f"Training vnicornAI on {len(subset)} stocks ({samples:,} samples, {free} MB free)")
     try:
         import gc
 
-        ai.SAMPLE_BUDGET = settings.vnicorn_samples
-        new = ai.train(subset, bench, trades, trade_histories=hist, budget=settings.vnicorn_samples)
+        try:  # one thread: on a shared server every extra thread keeps its own working memory
+            from threadpoolctl import threadpool_limits
+
+            limiter = threadpool_limits(1)
+        except Exception:
+            limiter = None
+        try:
+            new = ai.train(subset, bench, trades, trade_histories=hist, budget=samples)
+        finally:
+            if limiter is not None:
+                limiter.restore_original_limits()
         gc.collect()
+        last_error = None
     except Exception as e:
         log.exception("vnicornAI training failed")
         last_error = f"training: {type(e).__name__}: {str(e)[:120]}"
@@ -128,6 +143,28 @@ def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFra
     new["move_preds"] = _move
     _save(db, new)
     return new
+
+
+SAFETY_MB = 100  # never plan to use the last 100 MB
+FIXED_MB_LOADED, FIXED_MB_COLD = 50, 130  # measured: training's fixed cost with scikit-learn already loaded / not yet
+PER_SAMPLE_MB = 0.015  # measured ~0.011 MB per sample date (800 stocks), with margin
+MIN_SAMPLES = 500
+
+
+def training_budget(wanted: int) -> tuple[int | None, int]:
+    """Samples that fit in the memory left (None = too little to train now) and the free MB, measured right now."""
+    import gc
+    import sys
+
+    from . import memory
+
+    gc.collect()
+    free = memory.free_mb()
+    fixed = FIXED_MB_LOADED if "sklearn" in sys.modules else FIXED_MB_COLD
+    fit = int((free - SAFETY_MB - fixed) / PER_SAMPLE_MB)
+    if fit < MIN_SAMPLES:
+        return None, free
+    return min(wanted, fit), free
 
 
 def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.DataFrame | None, ideas: list[TradeIdea],

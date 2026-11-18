@@ -210,8 +210,10 @@ def health():
             ideas["regenerate"] = {k: rs.get(k) for k in ("running", "stage", "started_at", "finished_at", "generated", "error", "interrupted")}
     except Exception:
         ideas = None
+    from . import memory
+
     return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "config": config, "market_data": data,
-            "ideas": ideas}
+            "ideas": ideas, "memory": {"used_mb": memory.rss_mb(), "limit_mb": memory.limit_mb()}}
 
 
 # Frontend (static Next.js export), mounted last so it doesn't shadow /api routes.

@@ -124,6 +124,9 @@ def _regenerate_job() -> None:
     from . import sepa
 
     try:
+        from .. import vnicorn_service
+
+        vnicorn_service.last_error = None  # report only what happens in this run
         # Move Detector first: a fresh scan from the last close (RS, Trend Template, Bull / Bear scores)
         regen_status.stage("Scanning Move Detector")
         market_data._tls.rebuilding = True
@@ -139,7 +142,9 @@ def _regenerate_job() -> None:
             regen_status.stage("Updating idea statuses")
             refresh_statuses(db)
         market_data.mark_stale()
-        regen_status.finish(generated=len(rows), scanned=scanned)
+        from .. import vnicorn_service
+
+        regen_status.finish(generated=len(rows), scanned=scanned, note=vnicorn_service.last_error)
     except Exception as e:
         import logging
 

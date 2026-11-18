@@ -588,6 +588,7 @@ def test_vnicorn_retrains_when_universe_grew(monkeypatch):
     monkeypatch.setattr(vs, "real_trades", lambda db, hist: [])
     monkeypatch.setattr(vs.ai, "train", lambda subset, bench, trades, trade_histories=None, **k: trained.append(len(subset)) or {"models": {"y": 1}})
     monkeypatch.setattr(vs, "_save", lambda db, b: None)
+    monkeypatch.setattr(vs, "training_budget", lambda wanted: (1000, 300))  # enough memory
     vs.ensure_trained(None, {}, None)
     assert trained == [120]  # 36 << 120 available: retrained although trained this week
     trained.clear()
@@ -722,3 +723,35 @@ def test_regenerate_stages_and_interrupted_status(monkeypatch):
     with SessionLocal() as db:
         db.query(AppSetting).filter_by(key=regen_status.KEY).delete()
         db.commit()
+
+
+def test_training_budget_follows_free_memory(monkeypatch):
+    from app import memory
+    from app import vnicorn_service as vs
+
+    monkeypatch.setattr(memory, "limit_mb", lambda: 512)
+    monkeypatch.setattr(memory, "rss_mb", lambda: 250)  # 262 MB free
+    samples, free = vs.training_budget(3000)
+    assert free == 262 and samples is not None and samples <= 3000
+    monkeypatch.setattr(memory, "rss_mb", lambda: 300)  # 212 MB free: fewer samples
+    fewer, _ = vs.training_budget(3000)
+    assert fewer is not None and fewer < samples or samples == 3000
+    monkeypatch.setattr(memory, "rss_mb", lambda: 440)  # 72 MB free: too little
+    assert vs.training_budget(3000)[0] is None
+
+    # too little memory: training is skipped, the old model stays and the reason is recorded
+    trained = []
+    old = {"symbols": 36, "models": {"x": 1}}
+    monkeypatch.setattr(vs, "load", lambda db: old)
+    monkeypatch.setattr(vs, "_liquid", lambda hist, n: {f"S{i}": None for i in range(120)})
+    monkeypatch.setattr(vs, "real_trades", lambda db, hist: [])
+    monkeypatch.setattr(vs.ai, "train", lambda *a, **k: trained.append(1) or {"models": {"y": 1}})
+    assert vs.ensure_trained(None, {}, None) is old and trained == []
+    assert "not enough memory" in vs.last_error
+    vs.last_error = None
+
+
+def test_default_train_stocks_is_800():
+    from app.config import Settings
+
+    assert Settings().vnicorn_train_stocks == 800

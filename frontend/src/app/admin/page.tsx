@@ -53,7 +53,7 @@ function NewsSetting() {
 
 type Regen = {
   running: boolean; interrupted?: boolean; stage?: string; started_at?: string; stage_at?: string; finished_at?: string | null;
-  generated?: number | null; scanned?: number | null; error?: string | null;
+  generated?: number | null; scanned?: number | null; error?: string | null; note?: string | null;
 };
 
 const mmss = (ms: number) => {
@@ -125,6 +125,9 @@ function RegenerateSignals() {
             ? `Failed at “${st.stage}”: ${st.error}`
             : `Last run: Move Detector rescanned ${st.scanned ?? 0} stocks, ${st.generated ?? 0} new trade ideas, in ${mmss(took)} (${new Date(st.finished_at).toLocaleString("en-US")}).`}
         </p>
+      )}
+      {!st?.running && !st?.interrupted && st?.finished_at && st.note && (
+        <p className="mt-1 text-xs text-amber-300">vnicornAI: {st.note}.</p>
       )}
       {err && <p className="mt-2 text-xs text-down">{err}</p>}
     </div>

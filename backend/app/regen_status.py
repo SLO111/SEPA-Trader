@@ -46,10 +46,10 @@ def stage(name: str) -> None:
     _persist()
 
 
-def finish(generated: int | None = None, scanned: int | None = None, error: str | None = None) -> None:
+def finish(generated: int | None = None, scanned: int | None = None, error: str | None = None, note: str | None = None) -> None:
     with _lock:
         _state.update(running=False, finished_at=_now(), stage="Failed" if error else "Done", generated=generated,
-                      scanned=scanned, error=error)
+                      scanned=scanned, error=error, note=note)
         _alive.clear()
     _persist()
 
