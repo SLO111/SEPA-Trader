@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { BASE, api, clearApiCache, patch, post } from "@/lib/api";
+import ServerStatus from "@/components/admin/ServerStatus";
+import { api, clearApiCache, patch, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
@@ -46,76 +47,6 @@ function NewsSetting() {
         <p className="mt-2 text-xs text-muted">
           {cur.help} Headlines older than {cur.keep_days} days are removed.{saved && <span className="ml-2 text-up">Saved.</span>}
         </p>
-      )}
-    </div>
-  );
-}
-
-type Health = {
-  summary: string[]; universe_size: number;
-  market_data?: { state: string; symbols_with_prices: number; fundamentals_loaded: string; last_error?: string | null; screens_error?: string | null } | null;
-  memory?: { used_mb: number; limit_mb: number; breakdown_mb?: Record<string, number> };
-};
-
-function Bar({ value, max, tone }: { value: number; max: number; tone: string }) {
-  return (
-    <div className="h-1.5 w-full rounded bg-panel-2">
-      <div className={`h-full rounded ${tone}`} style={{ width: `${Math.min(100, (value / Math.max(1, max)) * 100)}%` }} />
-    </div>
-  );
-}
-
-/** The server's state in plain words (the same as /api/health), refreshed every 15 seconds. */
-function ServerStatus() {
-  const [h, setH] = useState<Health | null>(null);
-  useEffect(() => {
-    const load = () => fetch(`${BASE}/api/health`).then((r) => r.json()).then(setH).catch(() => {});
-    load();
-    const t = setInterval(() => { if (!document.hidden) load(); }, 15000);
-    return () => clearInterval(t);
-  }, []);
-  if (!h) return null;
-  const m = h.memory;
-  const pct = m ? (m.used_mb / m.limit_mb) * 100 : 0;
-  const md = h.market_data;
-  const [fd, ft] = (md?.fundamentals_loaded ?? "0/0").split("/").map(Number);
-  return (
-    <div className="mb-8 rounded-xl border border-line bg-panel p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Server status</h2>
-        <a href="/api/health" target="_blank" rel="noreferrer" className="text-xs text-muted hover:text-text">Raw /api/health ↗</a>
-      </div>
-      <ul className="mt-2 space-y-1 text-sm">
-        {h.summary.map((line) => (
-          <li key={line} className={line.startsWith("Errors:") || line.includes("interrupted") || line.includes("very high") ? "text-amber-300" : "text-muted"}>• {line}</li>
-        ))}
-      </ul>
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        {md && (
-          <div>
-            <div className="mb-1 flex justify-between text-xs text-muted"><span>Stocks with prices</span><span className="tabular">{md.symbols_with_prices} / {h.universe_size}</span></div>
-            <Bar value={md.symbols_with_prices} max={h.universe_size} tone="bg-accent" />
-          </div>
-        )}
-        {md && (
-          <div>
-            <div className="mb-1 flex justify-between text-xs text-muted"><span>Fundamentals loaded</span><span className="tabular">{fd} / {ft}</span></div>
-            <Bar value={fd} max={ft} tone="bg-accent" />
-          </div>
-        )}
-        {m && (
-          <div>
-            <div className="mb-1 flex justify-between text-xs text-muted"><span>Memory</span><span className="tabular">{m.used_mb} / {m.limit_mb} MB</span></div>
-            <Bar value={m.used_mb} max={m.limit_mb} tone={pct < 75 ? "bg-up" : pct < 90 ? "bg-amber-400" : "bg-down"} />
-          </div>
-        )}
-      </div>
-      {m?.breakdown_mb && (
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
-          {Object.entries(m.breakdown_mb).map(([k, v]) => (
-            <span key={k}>{k}: <span className="tabular text-text">≈{v} MB</span></span>
-          ))}
-        </div>
       )}
     </div>
   );
