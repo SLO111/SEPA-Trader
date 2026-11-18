@@ -54,10 +54,15 @@ $DOCKER compose up -d --build
 say "5/5 Daily backup and automatic updates"
 chmod +x backup.sh update.sh restore.sh migrate-from-render.sh
 HERE="$(pwd)"
-( crontab -l 2>/dev/null | grep -v "vnicorn-" ; \
-  echo "30 3 * * * cd ${HERE} && ./backup.sh >> ${HERE}/backup.log 2>&1 # vnicorn-backup" ; \
-  echo "*/5 * * * * cd ${HERE} && ./update.sh >> ${HERE}/update.log 2>&1 # vnicorn-update" ) | crontab -
+# keep any other scheduled jobs; a server with no crontab yet is fine (crontab -l / grep fail there, hence || true)
+OTHER="$( (crontab -l 2>/dev/null || true) | (grep -v "vnicorn-" || true) )"
+NEW="30 3 * * * cd ${HERE} && ./backup.sh >> ${HERE}/backup.log 2>&1 # vnicorn-backup
+*/5 * * * * cd ${HERE} && ./update.sh >> ${HERE}/update.log 2>&1 # vnicorn-update"
+printf '%s\n%s\n' "$OTHER" "$NEW" | sed '/^$/d' | crontab -
+crontab -l | grep "vnicorn-" || true
 
 DOMAIN="$(grep '^DOMAIN=' .env | cut -d= -f2)"
-say "Done. Open https://${DOMAIN} (the certificate can take a minute the first time)."
+say "Done. Open https://${DOMAIN}"
+echo "The HTTPS certificate is requested on the first start and can take 1-3 minutes; if the browser warns about the"
+echo "certificate, wait and reload. To see it:  sudo docker compose logs caddy --tail 30"
 echo "Status:  sudo docker compose ps      Logs:  sudo docker compose logs -f app"
