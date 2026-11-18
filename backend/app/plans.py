@@ -85,7 +85,7 @@ PLANS: dict[str, dict] = {
         "sepa_details": True,
         "ask_ai": True,
         "ask_ai_monthly": UNLIMITED,
-        "ideas_limit": 50,
+        "ideas_limit": UNLIMITED,  # every opportunity found
         "ideas_shorts": True,
         "ai_picks": True,
         "instant_alerts": True,

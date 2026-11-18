@@ -890,3 +890,21 @@ def test_usd_cap_check_fixes_local_currency_caps(saved_universe):
     entries = universe.merge_universe({"ZSQM": {"name": "SQM", "sector": "Materials", "exchange": ""}}, False,
                                       {"ZSQM": {"name": "x", "sector": "y", "exchange": "", "country": "Chile", "cap_usd_b": 16.2}}, 0)
     assert entries["ZSQM"]["cap_usd_b"] == 16.2 and entries["ZSQM"]["country"] == "Chile"
+
+
+def test_premium_gets_every_idea_pro_a_mix_of_ten():
+    from datetime import date
+    from types import SimpleNamespace as N
+
+    from app.plans import UNLIMITED
+    from app.routers.ideas import _plan_cut
+
+    d = date(2026, 11, 17)
+    rows = [N(batch_date=d, symbol=f"S{i}", side="long", timeframe="SWING", score=100 - i) for i in range(70)] + \
+           [N(batch_date=d, symbol=f"T{i}", side="long", timeframe="TRADE", score=20 - i) for i in range(5)] + \
+           [N(batch_date=d, symbol=f"I{i}", side="long", timeframe="INVEST", score=10 - i) for i in range(5)]
+    allr = _plan_cut(rows, {"ideas_limit": UNLIMITED, "ideas_shorts": True})
+    assert len(allr) == 80  # Premium: no daily cap
+    pro = _plan_cut(rows, {"ideas_limit": 10, "ideas_shorts": False})
+    kinds = [r.timeframe for r in pro]
+    assert len(pro) == 10 and kinds.count("TRADE") >= 2 and kinds.count("INVEST") >= 2

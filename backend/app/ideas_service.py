@@ -111,7 +111,7 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
             db.query(TradeIdea).filter(TradeIdea.id.in_(drop)).delete(synchronize_session="fetch")
         db.commit()
     scan = _scan([s for s, df in hist.items() if len(df) >= 260])  # the stocks long enough for the idea rules
-    ideas = generate(hist, scan, max_long=60, max_short=15, industry_of=industry_map(list(hist)))  # top 75 per day
+    ideas = generate(hist, scan, max_long=None, max_short=None, industry_of=industry_map(list(hist)))  # every opportunity
     ideas = [i for i in ideas if i.symbol not in kept]
     rows = []
     for i in ideas:

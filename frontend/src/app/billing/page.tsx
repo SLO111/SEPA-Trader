@@ -21,7 +21,7 @@ function features(l: PlanLimits): [string, boolean][] {
     [`${lim(l.max_portfolios)} portfolio${l.max_portfolios === 1 ? "" : "s"}`, true],
     ["Full Trend Template, VCP & vnicorn Pulse", !!l.sepa_details],
     ["Move Detector, screens & filters", l.move_detector],
-    [l.ideas_limit ? `Trade ideas: top ${l.ideas_limit} a day${l.ideas_shorts ? ", incl. shorts" : ", longs"}` : "Trade ideas", l.ideas_limit > 0],
+    [l.ideas_limit ? (l.ideas_limit >= 1e6 ? `Trade ideas: every one found${l.ideas_shorts ? ", incl. shorts" : ""}` : `Trade ideas: top ${l.ideas_limit} a day${l.ideas_shorts ? ", incl. shorts" : ", longs"}`) : "Trade ideas", l.ideas_limit > 0],
     ["Backtesting, TradeGrader & analytics", l.backtesting],
     ["Quarterly EPS & sales acceleration", l.eps_history],
     [`Email alerts${l.alerts ? ` (${lim(l.max_alert_rules)} rules)` : ""}`, l.alerts],

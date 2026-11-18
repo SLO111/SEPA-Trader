@@ -63,6 +63,10 @@ function Ideas() {
   const [sector, setSector] = useState("");
   // default: vnicornAI's expected value (best first); the R/R, vnicornAI and Status headers sort manually
   const [sort, setSort] = useState<{ key: "ai" | "rr" | "status"; dir: 1 | -1 }>({ key: "ai", dir: -1 });
+  const aiPlan = !!user?.limits.ai_picks;
+  useEffect(() => {
+    if (user && !aiPlan) setSort((s0) => (s0.key === "ai" ? { key: "rr", dir: -1 } : s0)); // no vnicornAI on this plan: best R/R first
+  }, [user, aiPlan]);
 
   const load = () =>
     api<Resp>(`/api/ideas?view=${view}`)
@@ -127,7 +131,7 @@ function Ideas() {
             <p className="text-sm text-muted">Generated every trading day after the close from daily, weekly and monthly trends and historical support/resistance. An idea leaves this list once the reward left is under 1.5× the risk.</p>
             {user && !user.limits.ai_picks && (
               <p className="mt-1 text-xs text-amber-300">
-                Your plan shows the top {user.limits.ideas_limit} long ideas a day. <Link href="/billing" className="underline">Premium</Link> shows all 50, shorts and vnicornAI picks.
+                Your plan shows the top {user.limits.ideas_limit} long ideas a day. <Link href="/billing" className="underline">Premium</Link> shows every idea found, shorts and vnicornAI picks.
               </p>
             )}
           </div>

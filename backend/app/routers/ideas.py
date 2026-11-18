@@ -56,9 +56,14 @@ def _plan_cut(rows: list, lim: dict) -> list:
             continue
         days.setdefault(r.batch_date, []).append(r)
     inds = industry_map(list({r.symbol for r in rows}))
+    from engine.ideas import _with_quotas
+
     out = []
     for day_rows in days.values():  # rows arrive newest day first, best score first
-        out += diversify(day_rows, inds)[: lim["ideas_limit"]]
+        n = lim["ideas_limit"]
+        ranked = diversify(day_rows, inds)
+        # a limited plan (Pro: 10 a day) gets a mix of setups, not only the highest-scoring SWINGs; Premium gets them all
+        out += ranked if n >= len(ranked) else _with_quotas(ranked, n)
     return out
 
 
@@ -71,9 +76,9 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
         q = q.where(TradeIdea.status.in_(OPEN))
     elif view == "closed":
         q = q.where(TradeIdea.status.notin_(OPEN))
-    rows = db.scalars(q.order_by(TradeIdea.batch_date.desc(), TradeIdea.score.desc()).limit(400)).all()
+    rows = db.scalars(q.order_by(TradeIdea.batch_date.desc(), TradeIdea.score.desc()).limit(5000)).all()
     lim = limits_for(user)
-    rows = _plan_cut(rows, lim)[:200]
+    rows = _plan_cut(rows, lim)
     from engine.ideas import MIN_RR_SIGNALS, rr_now
 
     def _rr(r):

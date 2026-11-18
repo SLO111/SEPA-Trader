@@ -19,7 +19,7 @@ def test_signup_trial_gives_premium_then_expires(client, monkeypatch):
     r = client.post("/api/auth/register", json={"email": "trial@test.ro", "password": "parola123", "accept_terms": True}).json()
     u = r["user"]
     assert u["plan"] == "free" and u["effective_plan"] == "premium" and u["trial_until"]
-    assert u["limits"]["ai_picks"] and u["limits"]["ideas_limit"] == 50
+    assert u["limits"]["ai_picks"] and u["limits"]["ideas_limit"] >= 10**6
     h = {"Authorization": f"Bearer {r['token']}"}
     me = client.get("/api/auth/me", headers=h).json()
     assert me["terms_accepted"] is True

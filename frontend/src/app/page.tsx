@@ -58,7 +58,7 @@ const STEPS = [
 const PLANS = [
   { name: "Free", price: "0", items: ["Charts, indicators & free screener", "1 watchlist, up to 10 tickers", "1 portfolio + TradeGrader", "Market overview, exposure & heatmap", "SEPA Academy"] },
   { name: "Pro", price: "19", items: ["Top 10 trade ideas a day + Move Detector", "vnicorn Pulse + Ask vnicornAI (20/month)", "Full Trend Template + VCP", "Backtesting, analytics, EPS & sales growth", "Email alerts & daily summary", "5 portfolios"], highlight: true },
-  { name: "Premium", price: "49", items: ["Everything in Pro", "All 50 ideas incl. shorts + vnicornAI picks", "Unlimited Ask vnicornAI", "Industry groups + weekly letter", "Strategy builder + CSV export", "Unlimited watchlists & portfolios"] },
+  { name: "Premium", price: "49", items: ["Everything in Pro", "Every trade idea found, incl. shorts + vnicornAI picks", "Unlimited Ask vnicornAI", "Industry groups + weekly letter", "Strategy builder + CSV export", "Unlimited watchlists & portfolios"] },
 ];
 
 const FAQ = [

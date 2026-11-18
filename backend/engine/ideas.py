@@ -135,7 +135,7 @@ def diversify(items: list, industry_of: dict[str, str] | None, per: int = PER_IN
     return first + rest
 
 
-def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long: int = 12, max_short: int = 5,
+def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long: int | None = 12, max_short: int | None = 5,
              industry_of: dict[str, str] | None = None) -> list[Idea]:
     """Daily idea list from price history and the Move Detector scan (rs_rating, template_passed, bull/bear scores, vcp)."""
     longs: list[Idea] = []
@@ -229,9 +229,12 @@ def generate(histories: dict[str, pd.DataFrame], scan: dict[str, dict], max_long
 SETUP_SHARE = {"SWING": 0.5, "TRADE": 0.25, "INVEST": 0.25}  # of the daily long slots
 
 
-def _with_quotas(longs: list, max_long: int) -> list:
+def _with_quotas(longs: list, max_long: int | None) -> list:
     """Each setup gets its share of the slots first (SWING scores run higher, so with a large universe it would take
-    every slot and TRADE / INVEST ideas would never show); unused slots go to the best remaining ideas."""
+    every slot and TRADE / INVEST ideas would never show); unused slots go to the best remaining ideas.
+    max_long None = keep them all (only the order changes)."""
+    if max_long is None:
+        max_long = len(longs)
     quota = {k: max(1, int(max_long * v)) for k, v in SETUP_SHARE.items()}
     first, rest, used = [], [], {}
     for i in longs:
