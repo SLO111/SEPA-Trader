@@ -52,7 +52,7 @@ def _regenerating() -> bool:
 
 def _universe_key() -> str:
     # "wide" (not "r1000"): a list saved by an earlier version after a failed mid-cap download is ignored
-    return "universe:wide2" if settings.universe == "sp500+r1000" else "universe:sp500"
+    return "universe:wide3" if settings.universe == "sp500+r1000" else "universe:sp500"
 CHUNK = 100
 SLOW_PAUSE = 1.2  # seconds between per-symbol requests, to stay polite with the provider
 BREAKER_FAILURES = 5  # consecutive refusals before backing off

@@ -117,7 +117,8 @@ def extend(entries: dict[str, dict]) -> int:
     new = [s for s in entries if s not in SYMBOLS]
     for s, meta in entries.items():
         if s in SYMBOLS:
-            SYMBOLS[s] = {**SYMBOLS[s], "sector": SYMBOLS[s]["sector"] if SYMBOLS[s]["sector"] in NON_STOCK_SECTORS else meta["sector"]}
+            extra = {k: meta[k] for k in ("cap_usd_b", "country", "industry") if meta.get(k)}
+            SYMBOLS[s] = {**SYMBOLS[s], **extra, "sector": SYMBOLS[s]["sector"] if SYMBOLS[s]["sector"] in NON_STOCK_SECTORS else meta["sector"]}
         else:
             SYMBOLS[s] = meta
     return len(new)
@@ -228,6 +229,13 @@ def merge_universe(sp500: dict[str, dict], plus: bool, r1000: dict[str, dict] | 
     if plus:
         entries.update(NASDAQ100_EXTRA)
     entries.update(sp500)
+    if r1000:  # the US-dollar market cap and country from the list (Nasdaq's caps are in USD, also for ADRs)
+        for sym, meta in entries.items():
+            src = r1000.get(sym)
+            if src:
+                for k in ("cap_usd_b", "country"):
+                    if src.get(k) and not meta.get(k):
+                        entries[sym] = meta = {**meta, k: src[k]}
     if r1000 and extra > 0:
         added = 0
         for s, meta in r1000.items():  # ordered by weight
@@ -268,7 +276,8 @@ def parse_nasdaq_screener(payload: dict, min_price: float = 5.0) -> dict[str, di
                 break
         sector = (r.get("sector") or "").strip() or "Other"
         out.append((cap, sym, {"name": name.strip() or sym, "sector": NASDAQ_SECTORS.get(sector, sector), "exchange": "",
-                               "industry": (r.get("industry") or "").strip(), "country": (r.get("country") or "").strip()}))
+                               "industry": (r.get("industry") or "").strip(), "country": (r.get("country") or "").strip(),
+                               "cap_usd_b": round(cap / 1e9, 2)}))
     out.sort(key=lambda x: -x[0])
     return {s: m for _, s, m in out}
 
@@ -277,3 +286,14 @@ def is_foreign(symbol: str) -> bool:
     """A company based outside the US (its Finnhub figures may be in its own currency)."""
     c = (SYMBOLS.get(symbol.upper(), {}).get("country") or "").strip()
     return bool(c) and c not in ("United States", "USA", "US")
+
+
+def usd_cap_check(symbol: str, cap_b: float | None) -> float | None:
+    """A market cap from Finnhub can be in the company's own currency (Chilean pesos for SQM, yen for Toyota) even when
+    it says USD. When the list's US-dollar cap disagrees by more than 3x, the list's value is used."""
+    ref = SYMBOLS.get(symbol.upper(), {}).get("cap_usd_b")
+    if not ref:
+        return cap_b
+    if not cap_b or cap_b <= 0 or cap_b / ref > 3 or ref / cap_b > 3:
+        return round(float(ref), 1)
+    return cap_b

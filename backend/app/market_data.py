@@ -145,10 +145,16 @@ def cached(kind: str, symbol: str) -> dict | None:
 def _usd_guard(symbol: str, f: dict | None) -> dict | None:
     """Fundamentals stored before amounts were converted to US dollars: a foreign company's market cap may be in its
     own currency (yen, rupees...), so it is hidden until the background refresh replaces it."""
-    if not f or f.get("ccy") == "USD" or f.get("market_cap_b") is None:
+    if not f:
         return f
-    from engine.data.universe import is_foreign
+    from engine.data.universe import is_foreign, usd_cap_check
 
+    cap = f.get("market_cap_b")
+    checked = usd_cap_check(symbol, cap)
+    if checked != cap:
+        return {**f, "market_cap_b": checked}
+    if f.get("ccy") == "USD" or cap is None:
+        return f
     return {**f, "market_cap_b": None} if is_foreign(symbol) else f
 
 

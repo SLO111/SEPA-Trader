@@ -197,3 +197,12 @@ def test_screener_pages_of_50_sorted_server_side(client, register):
         universe.SYMBOLS.clear()
         universe.SYMBOLS.update(saved)
         market_data._fast_cache.clear()
+
+
+def test_screener_search(client, register):
+    h, _ = register("screen-search@test.ro")
+    r = client.get("/api/markets/screener?q=nvd", headers=h).json()  # free plan may search
+    assert r["results"] and r["results"][0]["symbol"] == "NVDA"
+    by_name = client.get("/api/markets/screener?q=apple", headers=h).json()["results"]
+    assert any(x["symbol"] == "AAPL" for x in by_name)
+    assert client.get("/api/markets/screener?q=zzzzqq", headers=h).json()["count"] == 0

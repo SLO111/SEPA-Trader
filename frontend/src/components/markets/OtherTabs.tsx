@@ -380,6 +380,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
   const [preset, setPreset] = useState(paid ? initialPreset : "");
   const ext = EXT_PRESETS.find((p) => p.id === preset);
   const [filters, setFilters] = useState({ sector: "", min_cap_b: "", max_pe: "", min_yield: "", min_rs: "", template_only: false, above_ma50: false });
+  const [search, setSearch] = useState("");
   const [rows, setRows] = useState<ScreenRow[] | null>(null);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -407,11 +408,12 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
         else if (v) qs.set(k, String(v));
       });
     }
+    if (search.trim()) qs.set("q", search.trim()); // ticker or company name, every plan
     qs.set("sort", sort?.key ?? "market_cap_b");
     qs.set("dir", sort ? (sort.dir === 1 ? "asc" : "desc") : "desc");
     qs.set("limit", "50");
     return qs.toString();
-  }, [preset, filters, paid, sort]);
+  }, [preset, filters, paid, sort, search]);
 
   type Page = { results: ScreenRow[]; count: number; has_more: boolean; loading?: { ready: number; total: number } | null };
   useEffect(() => {
@@ -524,6 +526,19 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
           <Link href="/billing" className="ml-auto rounded-md bg-amber-500 px-3 py-1 text-xs font-semibold text-black hover:bg-amber-400">Unlock with Pro</Link>
         </div>
       )}
+      <div className="relative">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search ticker or company…"
+          aria-label="Search ticker or company"
+          className="w-full rounded-lg border border-line bg-panel px-3 py-2 pl-9 text-sm outline-none focus:border-accent sm:w-80"
+        />
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">⌕</span>
+        {search && (
+          <button onClick={() => setSearch("")} className="absolute left-[calc(100%-2rem)] top-1/2 -translate-y-1/2 text-muted hover:text-text sm:left-72" aria-label="Clear search">✕</button>
+        )}
+      </div>
       {error && <Failed msg={error} />}
       {warming && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">

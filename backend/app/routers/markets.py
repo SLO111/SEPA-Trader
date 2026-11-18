@@ -182,6 +182,7 @@ def screener(
     min_growth: float | None = None,
     template_only: bool = False,
     above_ma50: bool = False,
+    q: str | None = Query(None, max_length=40),
     sort: str = "market_cap_b",
     dir: Literal["asc", "desc"] = "desc",
     offset: int = Query(0, ge=0),
@@ -195,6 +196,9 @@ def screener(
     if not paid and (preset or sector or min_cap_b or max_pe or min_yield or min_rs or min_growth is not None or template_only or above_ma50):
         raise HTTPException(403, "Screens and filters are available on the Pro and Premium plans.")
     out = mt.screen(_screen_rows(), preset, sector, min_cap_b, max_pe, min_yield, min_rs, min_growth, template_only, above_ma50)
+    if q and q.strip():  # search by ticker or company name (every plan)
+        needle = q.strip().upper()
+        out = [r for r in out if needle in r["symbol"].upper() or needle in (r.get("name") or "").upper()]
     groups = limits_for(user)["industry_groups"]
     if groups:
         from engine.industry import symbol_ranks
@@ -207,6 +211,9 @@ def screener(
     missing = [r for r in out if r.get(key) is None]  # empty values always last
     present.sort(key=lambda r: (str(r[key]).upper() if key == "symbol" else r[key]), reverse=dir == "desc")
     out = present + missing
+    if q and q.strip():  # the exact ticker first, then tickers starting with the search, then name matches
+        needle = q.strip().upper()
+        out.sort(key=lambda r: (r["symbol"].upper() != needle, not r["symbol"].upper().startswith(needle)))
     page = out[offset:offset + limit]
     if not paid:  # Free: the general information only (price, market cap, valuation, dividend)
         page = [{k: v for k, v in r.items() if k not in mt.PAID_SCREEN_FIELDS} for r in page]

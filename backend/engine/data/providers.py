@@ -340,6 +340,10 @@ class YFinanceProvider(DataProvider):
             co = fh.enrich_company(co)
         # still missing (Yahoo's profile blocked, foreign company): from the US price history itself
         st = co.setdefault("stats", {})
+        from .universe import usd_cap_check
+
+        if st.get("market_cap_b") is not None or SYMBOLS.get(symbol.upper(), {}).get("cap_usd_b"):
+            st["market_cap_b"] = usd_cap_check(symbol, st.get("market_cap_b"))
         if len(hist):
             last = hist.iloc[-252:]
             st["week52_high"] = st.get("week52_high") or round(float(last["high"].max()), 2)

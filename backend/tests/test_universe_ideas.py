@@ -92,7 +92,7 @@ def _wide_row(delete=False):
     from app.models import MarketCache
 
     with SessionLocal() as db:
-        row = db.scalar(select(MarketCache).where(MarketCache.key == "universe:wide2"))
+        row = db.scalar(select(MarketCache).where(MarketCache.key == "universe:wide3"))
         payload = ds._unpack(row.payload) if row else None
         if row and delete:
             db.delete(row)
@@ -129,7 +129,7 @@ def test_refresh_universe_falls_back_to_nasdaq(monkeypatch, saved_universe):
     s.refresh_universe()
     fake = [x for x in universe.SYMBOLS if x.startswith("ZN")]
     assert len(fake) == 40 and "ZNAAA" in fake
-    assert universe.SYMBOLS["ZNAAA"] == {"name": "Fake 0", "sector": "Financials", "exchange": "", "industry": "Banks", "country": ""}
+    assert universe.SYMBOLS["ZNAAA"] == {"name": "Fake 0", "sector": "Financials", "exchange": "", "industry": "Banks", "country": "", "cap_usd_b": 1.6}
     assert s.status["universe_source"] == "nasdaq (40 mid caps)"
     _wide_row(delete=True)
 
@@ -148,7 +148,7 @@ def test_failed_midcaps_keep_universe_and_retry(monkeypatch, saved_universe):
     assert "ZKEEP" in universe.SYMBOLS and len(universe.stock_symbols()) >= n
     assert "ishares ConnectError" in s.status["universe_source"] and "nasdaq ReadTimeout" in s.status["universe_source"]
     assert _wide_row() is None  # nothing saved ...
-    assert s.stale("universe:wide2", ds.UNIVERSE_TTL)  # ... so the next pass tries again
+    assert s.stale("universe:wide3", ds.UNIVERSE_TTL)  # ... so the next pass tries again
 
 
 def test_parse_nasdaq_screener_filters():
@@ -514,18 +514,18 @@ def test_saved_universe_restored_on_startup(monkeypatch, saved_universe):
 
     monkeypatch.setattr(settings, "universe", "sp500+r1000")
     s = ds.DataStore(SyntheticProvider, SessionLocal)
-    s._save("universe:wide2", {"ZREST": {"name": "Restored", "sector": "Energy", "exchange": ""}})
+    s._save("universe:wide3", {"ZREST": {"name": "Restored", "sector": "Energy", "exchange": ""}})
     s._save("universe:wide", {"ZOLD": {"name": "Old", "sector": "Energy", "exchange": ""}})  # an older key: ignored
     try:
         fresh = ds.DataStore(SyntheticProvider, SessionLocal)
         fresh.load_all()
         assert "ZREST" in universe.SYMBOLS and "ZOLD" not in universe.SYMBOLS
-        assert not fresh.stale("universe:wide2", ds.UNIVERSE_TTL)
+        assert not fresh.stale("universe:wide3", ds.UNIVERSE_TTL)
     finally:
         from app.models import MarketCache
 
         with SessionLocal() as db:
-            db.query(MarketCache).filter(MarketCache.key.in_(["universe:wide2", "universe:wide"])).delete(synchronize_session=False)
+            db.query(MarketCache).filter(MarketCache.key.in_(["universe:wide3", "universe:wide"])).delete(synchronize_session=False)
             db.commit()
 
 
@@ -870,3 +870,23 @@ def test_bad_bars_are_cleaned_and_scan_keeps_the_stock():
     hist = {"ZNVD": s.get_prices("ZNVD"), "AAPL": p.history("AAPL"), "MSFT": p.history("MSFT")}
     rows = {r["symbol"]: r for r in scan_universe(lambda x: hist[x] if x in hist else p.history(x), list(hist))}
     assert rows["ZNVD"]["rs_rating"] is not None and rows["ZNVD"]["bull_score"] is not None
+
+
+def test_usd_cap_check_fixes_local_currency_caps(saved_universe):
+    from app import data_store, market_data
+
+    universe.SYMBOLS["ZSQM"] = {"name": "Sociedad Quimica", "sector": "Materials", "exchange": "", "country": "Chile", "cap_usd_b": 16.2}
+    assert universe.usd_cap_check("ZSQM", 15130.0) == 16.2  # pesos shown as dollars -> the US-dollar list value
+    assert universe.usd_cap_check("ZSQM", 17.0) == 17.0  # close enough: keep Finnhub's
+    assert universe.usd_cap_check("AAPL", 3500.0) == 3500.0  # no list value: unchanged
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    s.slow["fundamentals"]["ZSQM"] = {"market_cap_b": 15130.0, "pe": 19.2, "source": "finnhub", "ccy": "USD"}
+    orig = market_data.get_store
+    market_data.get_store = lambda: s
+    try:
+        assert market_data.cached("fundamentals", "ZSQM")["market_cap_b"] == 16.2
+    finally:
+        market_data.get_store = orig
+    entries = universe.merge_universe({"ZSQM": {"name": "SQM", "sector": "Materials", "exchange": ""}}, False,
+                                      {"ZSQM": {"name": "x", "sector": "y", "exchange": "", "country": "Chile", "cap_usd_b": 16.2}}, 0)
+    assert entries["ZSQM"]["cap_usd_b"] == 16.2 and entries["ZSQM"]["country"] == "Chile"
