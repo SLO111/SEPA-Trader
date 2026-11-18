@@ -6,6 +6,7 @@ import AddToWatchlist from "@/components/AddToWatchlist";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import RegionSwitch, { CurrencyTag, useRegion } from "@/components/RegionSwitch";
 import { ScoreBar } from "@/components/ScoreBadge";
 import { ApiError, api } from "@/lib/api";
 import { compactUsd, fmt, pct, tone } from "@/lib/format";
@@ -381,6 +382,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
   const ext = EXT_PRESETS.find((p) => p.id === preset);
   const [filters, setFilters] = useState({ sector: "", min_cap_b: "", max_pe: "", min_yield: "", min_rs: "", template_only: false, above_ma50: false });
   const [search, setSearch] = useState("");
+  const [region, setRegion, regions] = useRegion();
   const [rows, setRows] = useState<ScreenRow[] | null>(null);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -409,11 +411,12 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
       });
     }
     if (search.trim()) qs.set("q", search.trim()); // ticker or company name, every plan
+    if (region !== "US") qs.set("region", region);
     qs.set("sort", sort?.key ?? "market_cap_b");
     qs.set("dir", sort ? (sort.dir === 1 ? "asc" : "desc") : "desc");
     qs.set("limit", "50");
     return qs.toString();
-  }, [preset, filters, paid, sort, search]);
+  }, [preset, filters, paid, sort, search, region]);
 
   type Page = { results: ScreenRow[]; count: number; has_more: boolean; loading?: { ready: number; total: number } | null };
   useEffect(() => {
@@ -526,6 +529,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
           <Link href="/billing" className="ml-auto rounded-md bg-amber-500 px-3 py-1 text-xs font-semibold text-black hover:bg-amber-400">Unlock with Pro</Link>
         </div>
       )}
+      <RegionSwitch region={region} onChange={setRegion} regions={regions} />
       <div className="relative">
         <input
           value={search}
@@ -584,7 +588,7 @@ export function ScreenerTab({ allowed, initialPreset = "undervalued" }: { allowe
                   {r.name && r.name !== r.symbol && <div className="max-w-[170px] truncate text-[11px] text-muted/90" title={r.name}>{r.name}</div>}
                   <div className="max-w-[170px] truncate text-[10px] text-muted/60">{r.sector}</div>
                 </td>
-                <td className="tabular px-3 py-2 text-right">{fmt(r.price)}</td>
+                <td className="tabular px-3 py-2 text-right">{fmt(r.price)}<CurrencyTag currency={r.currency} /></td>
                 <td className={`tabular px-3 py-2 text-right ${tone(r.change_pct)}`}>{pct(r.change_pct)}</td>
                 <td className="tabular px-3 py-2 text-right">{compactUsd(r.market_cap_b ? r.market_cap_b * 1e9 : null)}</td>
                 <td className="tabular px-3 py-2 text-right">{fmt(r.pe, 1)}</td>

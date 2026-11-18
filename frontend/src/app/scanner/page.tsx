@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LoadMoreRow, ShowingCount, useInfiniteServer } from "@/lib/useInfinite";
+import RegionSwitch, { CurrencyTag, useRegion } from "@/components/RegionSwitch";
 import AddToWatchlist from "@/components/AddToWatchlist";
 import AppShell from "@/components/AppShell";
 import { ScoreBar } from "@/components/ScoreBadge";
@@ -33,10 +34,11 @@ function Scanner() {
   const [locked, setLocked] = useState("");
   // order: vnicornAI by default when it has rated the stocks (the server decides), else the tab's score; headers sort manually
   const [order, setOrder] = useState<{ key: Order; dir: "asc" | "desc" } | null>(null);
+  const [region, setRegion, regions] = useRegion();
   useEffect(() => setOrder(null), [tab]);
   const qs = new URLSearchParams({
     sort: tab, min_score: String(minScore), template_only: String(templateOnly), vcp_only: String(vcpOnly), limit: "50",
-    order: order?.key ?? "default", dir: order?.dir ?? "desc",
+    order: order?.key ?? "default", dir: order?.dir ?? "desc", region,
   }).toString();
   const scan = useInfiniteServer<ScanRow>(
     (offset) => api<{ results: ScanRow[]; count: number; has_more: boolean; order?: Order; dir?: "asc" | "desc" }>(`/api/sepa/scan?${qs}&offset=${offset}`),
@@ -101,6 +103,8 @@ function Scanner() {
           <span className="text-xs text-muted">Scores refresh every 5 minutes</span>
         </div>
         <p className="mb-5 text-sm text-muted">{TABS.find((t) => t.id === tab)?.hint}</p>
+        <div className="mb-3"><RegionSwitch region={region} onChange={setRegion} regions={regions} /></div>
+        {region !== "US" && <p className="mb-3 text-xs text-muted">RS ratings and scores rank stocks within this region, against its own index. vnicornAI learns from US stocks, so its probabilities show for the US only.</p>}
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {TABS.map((t) => t.id === "ai" && user && !user.limits.ai_picks ? (
@@ -185,7 +189,7 @@ function Scanner() {
                       </span>
                       <div className="max-w-[200px] truncate text-xs text-muted">{r.name}</div>
                     </td>
-                    <td className="tabular px-4 py-2.5 text-right">{r.price.toFixed(2)}</td>
+                    <td className="tabular px-4 py-2.5 text-right">{r.price.toFixed(2)}<CurrencyTag currency={(r as { currency?: string }).currency} /></td>
                     <td className={`tabular px-4 py-2.5 text-right ${r.change_pct >= 0 ? "text-up" : "text-down"}`}>
                       {r.change_pct >= 0 ? "+" : ""}
                       {r.change_pct.toFixed(2)}%

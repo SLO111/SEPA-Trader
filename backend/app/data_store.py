@@ -51,8 +51,11 @@ def _regenerating() -> bool:
 
 
 def _universe_key() -> str:
-    # "wide" (not "r1000"): a list saved by an earlier version after a failed mid-cap download is ignored
-    return "universe:wide3" if settings.universe == "sp500+r1000" else "universe:sp500"
+    # the settings are part of the key, so changing UNIVERSE_EXTRA or INTL_MARKETS rebuilds the list right away
+    intl = (settings.intl_markets or "").replace(",", "+").replace(" ", "").upper()
+    if settings.universe == "sp500+r1000":
+        return f"universe:w4-{settings.universe_extra}-{intl or 'us'}"
+    return f"universe:sp500-{intl}" if intl else "universe:sp500"
 CHUNK = 100
 SLOW_PAUSE = 1.2  # seconds between per-symbol requests, to stay polite with the provider
 BREAKER_FAILURES = 5  # consecutive refusals before backing off
@@ -331,6 +334,9 @@ class DataStore:
         if settings.universe == "sp500+r1000":
             mids, source = self._fetch_midcaps(httpx)
         entries = merge_universe(sp500, settings.universe != "sp500", mids, settings.universe_extra if mids else 0)
+        from engine.data import intl
+
+        entries.update(intl.entries(settings.intl_markets))  # Europe / Asia (region-tagged), when configured
         if settings.universe == "sp500+r1000" and mids is None:
             # never drop names because of a failed download, and don't save: try again on the next pass, not in a week
             entries = {**{s: m for s, m in SYMBOLS.items() if m["sector"] not in NON_STOCK_SECTORS}, **entries}
@@ -437,7 +443,12 @@ class DataStore:
             for sym, v in list(self.slow["fundamentals"].items()):
                 if v.get("partial") or v.get("market_cap_b") is None or v.get("source") != "finnhub" or v.get("ccy") != "USD":
                     self.updated.pop(f"fundamentals:{sym}", None)
-        todo = [s for s in symbols if self.stale(f"fundamentals:{s}", SLOW_TTL) or self.stale(f"earnings:{s}", SLOW_TTL)]
+        from engine.data.universe import region_of
+
+        def kinds_for(sym: str) -> tuple[str, ...]:  # no earnings calendar outside the US on the free data plans
+            return ("fundamentals", "earnings") if region_of(sym) == "US" else ("fundamentals",)
+
+        todo = [s for s in symbols if any(self.stale(f"{k}:{s}", SLOW_TTL) for k in kinds_for(s))]
         from engine.data.universe import is_foreign
 
         # foreign companies still holding local-currency amounts first, so wrong market caps are fixed within minutes
@@ -449,7 +460,7 @@ class DataStore:
             if stop is not None and stop.is_set():
                 break
             for kind, fn in (("fundamentals", provider.fundamentals), ("earnings", provider.earnings)):
-                if self.stale(f"{kind}:{s}", SLOW_TTL):
+                if kind in kinds_for(s) and self.stale(f"{kind}:{s}", SLOW_TTL):
                     try:
                         value = fn(s)
                         empty = not value or (kind == "earnings" and not value.get("history") and not value.get("next_date"))

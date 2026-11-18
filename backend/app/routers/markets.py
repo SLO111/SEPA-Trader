@@ -36,8 +36,10 @@ def _opt(symbol: str) -> pd.DataFrame | None:
         return None
 
 
-def _rows() -> list[dict]:
-    return market_data._fast(f"{settings.data_provider}:movers", market_data.screen_ttl(300), lambda: mt.mover_rows(_histories(stock_symbols()), SYMBOLS), stale_ok=True)
+def _rows(region: str = "US") -> list[dict]:
+    """Price / change / volume rows for one region's stocks (US by default)."""
+    key = f"{settings.data_provider}:movers" + ("" if region == "US" else f":{region}")
+    return market_data._fast(key, market_data.screen_ttl(300), lambda: mt.mover_rows(_histories(stock_symbols(region)), SYMBOLS), stale_ok=True)
 
 
 def _fear_greed() -> dict:
@@ -167,7 +169,8 @@ def fed(user: User = Depends(current_user)):
 
 @router.get("/screener/presets")
 def screener_presets(user: User = Depends(current_user)):
-    sectors = sorted({m["sector"] for s, m in SYMBOLS.items() if s in stock_symbols()})
+    stocks = set(stock_symbols(None))
+    sectors = sorted({m["sector"] for s, m in SYMBOLS.items() if s in stocks})
     return {"presets": [{"id": k, **v} for k, v in mt.PRESETS.items()], "sectors": sectors}
 
 
@@ -183,6 +186,7 @@ def screener(
     template_only: bool = False,
     above_ma50: bool = False,
     q: str | None = Query(None, max_length=40),
+    region: Literal["US", "EU", "ASIA"] = "US",
     sort: str = "market_cap_b",
     dir: Literal["asc", "desc"] = "desc",
     offset: int = Query(0, ge=0),
@@ -195,7 +199,7 @@ def screener(
         raise HTTPException(400, f"Unknown preset: {preset}")
     if not paid and (preset or sector or min_cap_b or max_pe or min_yield or min_rs or min_growth is not None or template_only or above_ma50):
         raise HTTPException(403, "Screens and filters are available on the Pro and Premium plans.")
-    out = mt.screen(_screen_rows(), preset, sector, min_cap_b, max_pe, min_yield, min_rs, min_growth, template_only, above_ma50)
+    out = mt.screen(_screen_rows(region), preset, sector, min_cap_b, max_pe, min_yield, min_rs, min_growth, template_only, above_ma50)
     if q and q.strip():  # search by ticker or company name (every plan)
         needle = q.strip().upper()
         out = [r for r in out if needle in r["symbol"].upper() or needle in (r.get("name") or "").upper()]
@@ -225,15 +229,26 @@ SCREEN_SORT_FREE = {"symbol", "price", "change_pct", "market_cap_b", "pe", "pe_v
 SCREEN_SORT_PAID = {"rsi14", "rs_rating", "template_passed", "from_ath_pct", "bull_score"}
 
 
-def _screen_rows() -> list[dict]:
-    """The screener table for the whole universe, shared by every user (refreshed in the background every 2 minutes)."""
+def _screen_rows(region: str = "US") -> list[dict]:
+    """The screener table for one region, shared by every user (refreshed in the background every 2 minutes)."""
     def build():
-        fundamentals = {s: market_data.cached("fundamentals", s) or {} for s in stock_symbols()}
-        aths = {s: market_data.cached("ath", s) for s in stock_symbols()}
-        return mt.screen_rows(_rows(), cached_scan(), fundamentals, aths)
+        syms = stock_symbols(region)
+        fundamentals = {s: market_data.cached("fundamentals", s) or {} for s in syms}
+        aths = {s: market_data.cached("ath", s) for s in syms}
+        rows = mt.screen_rows(_rows(region), cached_scan(region), fundamentals, aths)
+        return [{**r, "currency": SYMBOLS.get(r["symbol"], {}).get("currency", "USD"),
+                 "country": SYMBOLS.get(r["symbol"], {}).get("country", "")} for r in rows]
 
-    return market_data._fast(f"{settings.data_provider}:screen-rows", market_data.screen_ttl(120), build, stale_ok=True)
+    key = f"{settings.data_provider}:screen-rows" + ("" if region == "US" else f":{region}")
+    return market_data._fast(key, market_data.screen_ttl(120), build, stale_ok=True)
 
+
+@router.get("/regions")
+def regions(user: User = Depends(current_user)):
+    """The regions this server scans (US always; Europe / Asia when INTL_MARKETS is set)."""
+    from engine.data.intl import REGION_NAMES, enabled_regions
+
+    return {"regions": [{"id": r, "name": REGION_NAMES[r], "stocks": len(stock_symbols(r))} for r in enabled_regions(settings.intl_markets)]}
 
 
 # ------------------------------------------------------------------ exposure meter & industry groups

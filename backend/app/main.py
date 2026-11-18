@@ -73,7 +73,7 @@ def _start_market_data() -> None:
         return
     store.on_prices_refreshed(invalidate_scan)
     store.on_prices_refreshed(lambda: threading.Thread(target=_rebuild_screens, name="screens-rebuild", daemon=True).start())
-    store.start(lambda: list(SYMBOLS), stock_symbols)
+    store.start(lambda: list(SYMBOLS), lambda: stock_symbols(None))  # fundamentals / ATH for every region
     threading.Thread(target=_warm_loop, name="cache-warmer", daemon=True).start()
 
 
@@ -119,7 +119,12 @@ def _warm_loop() -> None:
         from . import regen_status
 
         if store is not None and store.prices and not regen_status.running_here():  # paused during a regeneration
-            for fn in (cached_scan, mk._rows, mk._screen_rows, mk._fear_greed, mk._indices, mk._cycle, pulse_map):
+            from engine.data.intl import enabled_regions
+
+            extra = []
+            for region in enabled_regions(settings.intl_markets)[1:]:  # Europe / Asia screens stay warm too
+                extra += [lambda r=region: cached_scan(r), lambda r=region: mk._screen_rows(r), lambda r=region: pulse_map(r)]
+            for fn in (cached_scan, mk._rows, mk._screen_rows, mk._fear_greed, mk._indices, mk._cycle, pulse_map, *extra):
                 try:
                     fn()
                 except Exception:

@@ -50,9 +50,18 @@ SYMBOLS: dict[str, dict] = {
 NON_STOCK_SECTORS = {"ETF", "Index"}
 
 
-def stock_symbols() -> list[str]:
-    """Individual stocks only (no ETFs or indices): the universe for scans, screens and breadth."""
-    return [s for s, m in SYMBOLS.items() if m["sector"] not in NON_STOCK_SECTORS]
+def stock_symbols(region: str | None = "US") -> list[str]:
+    """Individual stocks only (no ETFs or indices): the universe for scans, screens and breadth.
+    region "US" (default), "EU" or "ASIA"; None = every region."""
+    return [s for s, m in SYMBOLS.items() if m["sector"] not in NON_STOCK_SECTORS and (region is None or m.get("region", "US") == region)]
+
+
+def region_of(symbol: str) -> str:
+    return SYMBOLS.get(symbol.upper(), {}).get("region", "US")
+
+
+def currency_of(symbol: str) -> str:
+    return SYMBOLS.get(symbol.upper(), {}).get("currency", "USD")
 
 
 def search(query: str, limit: int = 10) -> list[dict]:
@@ -117,7 +126,7 @@ def extend(entries: dict[str, dict]) -> int:
     new = [s for s in entries if s not in SYMBOLS]
     for s, meta in entries.items():
         if s in SYMBOLS:
-            extra = {k: meta[k] for k in ("cap_usd_b", "country", "industry") if meta.get(k)}
+            extra = {k: meta[k] for k in ("cap_usd_b", "country", "industry", "region", "currency") if meta.get(k)}
             SYMBOLS[s] = {**SYMBOLS[s], **extra, "sector": SYMBOLS[s]["sector"] if SYMBOLS[s]["sector"] in NON_STOCK_SECTORS else meta["sector"]}
         else:
             SYMBOLS[s] = meta

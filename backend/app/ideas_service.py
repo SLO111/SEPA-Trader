@@ -31,9 +31,9 @@ log = logging.getLogger("sepa.ideas")
 ET = ZoneInfo("America/New_York")
 
 
-def _histories() -> dict[str, pd.DataFrame]:
+def _histories(region: str | None = "US") -> dict[str, pd.DataFrame]:
     out = {}
-    for s in stock_symbols():
+    for s in stock_symbols(region):
         try:
             out[s] = market_data.stored_history(s)
         except Exception:
@@ -41,14 +41,14 @@ def _histories() -> dict[str, pd.DataFrame]:
     return out
 
 
-def _scan(symbols: list[str] | None = None) -> dict[str, dict]:
+def _scan(symbols: list[str] | None = None, region: str = "US") -> dict[str, dict]:
     """The Move Detector scan (RS, Trend Template, Bull / Bear scores) by symbol. With `symbols`, it must cover them:
     a scan built for a smaller universe (or served stale) is rebuilt now, or new stocks would get default scores
     and never pass the idea rules."""
     from . import market_data
     from .routers import sepa
 
-    rows = sepa.cached_scan()
+    rows = sepa.cached_scan(region)
     if symbols:
         have = {r["symbol"] for r in rows}
         if len(have & set(symbols)) < 0.9 * len(symbols):
@@ -56,7 +56,7 @@ def _scan(symbols: list[str] | None = None) -> dict[str, dict]:
             market_data._tls.rebuilding = True  # compute it here instead of returning the previous scan
             try:
                 sepa.invalidate_scan()
-                rows = sepa.cached_scan()
+                rows = sepa.cached_scan(region)
             finally:
                 market_data._tls.rebuilding = prev
     return {r["symbol"]: r for r in rows}
@@ -71,6 +71,25 @@ def classify(symbol: str) -> tuple[str, str]:
 
 def industry_map(symbols: list[str]) -> dict[str, str]:
     return {s: classify(s)[1] for s in symbols}
+
+
+def _intl_ideas(kept: set[str]) -> list:
+    """Ideas for the European / Asian stocks (when configured): the same rules, with RS and scores from each region's own
+    scan. Their sessions closed hours before the US close, so the latest bars are complete."""
+    from engine.data.intl import enabled_regions
+
+    out = []
+    for region in enabled_regions(settings.intl_markets)[1:]:
+        try:
+            hist = {s: df for s, df in _histories(region).items() if len(df)}
+            if not hist:
+                continue
+            scan = _scan([s for s, df in hist.items() if len(df) >= 260], region)
+            found = generate(hist, scan, max_long=None, max_short=None, industry_of=industry_map(list(hist)))
+            out += [i for i in found if i.symbol not in kept]
+        except Exception:
+            log.exception("Ideas for %s failed", region)
+    return out
 
 
 def latest_batch(db: Session) -> date | None:
@@ -92,7 +111,7 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
     Forced: the day's ideas that are still waiting and that nobody took are replaced; triggered or taken ideas stay."""
     if not force:
         _final_close_bars()
-    hist = _completed_sessions(_histories())
+    hist = _completed_sessions(_histories())  # US: drives the batch date, vnicornAI and the feed
     if not hist:
         return []
     day = max(df.index[-1] for df in hist.values()).date()
@@ -112,6 +131,7 @@ def run_ideas(db: Session, force: bool = False) -> list[TradeIdea]:
         db.commit()
     scan = _scan([s for s, df in hist.items() if len(df) >= 260])  # the stocks long enough for the idea rules
     ideas = generate(hist, scan, max_long=None, max_short=None, industry_of=industry_map(list(hist)))  # every opportunity
+    ideas += _intl_ideas(kept)  # Europe / Asia, each scored within its own region
     ideas = [i for i in ideas if i.symbol not in kept]
     rows = []
     for i in ideas:
@@ -484,7 +504,7 @@ def _final_close_bars() -> None:
     if store is None:
         return
     try:
-        store.refresh_live(stock_symbols(), persist=True)
+        store.refresh_live(stock_symbols(None), persist=True)
     except Exception:
         log.warning("Final close-bar refresh failed; using the stored prices", exc_info=True)
 

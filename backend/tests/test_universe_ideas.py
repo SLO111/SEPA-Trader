@@ -92,7 +92,7 @@ def _wide_row(delete=False):
     from app.models import MarketCache
 
     with SessionLocal() as db:
-        row = db.scalar(select(MarketCache).where(MarketCache.key == "universe:wide3"))
+        row = db.scalar(select(MarketCache).where(MarketCache.key == ds._universe_key()))
         payload = ds._unpack(row.payload) if row else None
         if row and delete:
             db.delete(row)
@@ -148,7 +148,7 @@ def test_failed_midcaps_keep_universe_and_retry(monkeypatch, saved_universe):
     assert "ZKEEP" in universe.SYMBOLS and len(universe.stock_symbols()) >= n
     assert "ishares ConnectError" in s.status["universe_source"] and "nasdaq ReadTimeout" in s.status["universe_source"]
     assert _wide_row() is None  # nothing saved ...
-    assert s.stale("universe:wide3", ds.UNIVERSE_TTL)  # ... so the next pass tries again
+    assert s.stale(ds._universe_key(), ds.UNIVERSE_TTL)  # ... so the next pass tries again
 
 
 def test_parse_nasdaq_screener_filters():
@@ -514,18 +514,18 @@ def test_saved_universe_restored_on_startup(monkeypatch, saved_universe):
 
     monkeypatch.setattr(settings, "universe", "sp500+r1000")
     s = ds.DataStore(SyntheticProvider, SessionLocal)
-    s._save("universe:wide3", {"ZREST": {"name": "Restored", "sector": "Energy", "exchange": ""}})
+    s._save(ds._universe_key(), {"ZREST": {"name": "Restored", "sector": "Energy", "exchange": ""}})
     s._save("universe:wide", {"ZOLD": {"name": "Old", "sector": "Energy", "exchange": ""}})  # an older key: ignored
     try:
         fresh = ds.DataStore(SyntheticProvider, SessionLocal)
         fresh.load_all()
         assert "ZREST" in universe.SYMBOLS and "ZOLD" not in universe.SYMBOLS
-        assert not fresh.stale("universe:wide3", ds.UNIVERSE_TTL)
+        assert not fresh.stale(ds._universe_key(), ds.UNIVERSE_TTL)
     finally:
         from app.models import MarketCache
 
         with SessionLocal() as db:
-            db.query(MarketCache).filter(MarketCache.key.in_(["universe:wide3", "universe:wide"])).delete(synchronize_session=False)
+            db.query(MarketCache).filter(MarketCache.key.in_([ds._universe_key(), "universe:wide"])).delete(synchronize_session=False)
             db.commit()
 
 
@@ -562,7 +562,7 @@ def test_ideas_scan_rebuilt_when_it_misses_stocks(monkeypatch):
     syms = ["AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "AVGO", "AMD", "JPM", "KO"]
     calls = {"n": 0}
 
-    def fake_scan(history, symbols=None):
+    def fake_scan(history, symbols=None, benchmark="SPY"):
         calls["n"] += 1
         return [{"symbol": s, "rs_rating": 80} for s in (syms[:2] if calls["n"] == 1 else syms)]
 
@@ -919,3 +919,53 @@ def test_memory_limit_sources(monkeypatch):
     monkeypatch.setenv("RENDER", "true")
     monkeypatch.setattr(memory, "Path", lambda p: type("P", (), {"read_text": lambda self: (_ for _ in ()).throw(OSError())})())
     assert memory.limit_mb() == 512  # on Render without a readable limit: its 512 MB
+
+
+def test_intl_entries_and_regions(monkeypatch, saved_universe):
+    from engine.data import intl
+
+    e = intl.entries("EU,ASIA")
+    assert e["ASML.AS"]["region"] == "EU" and e["ASML.AS"]["currency"] == "EUR" and e["ASML.AS"]["country"] == "Netherlands"
+    assert e["7203.T"]["region"] == "ASIA" and e["7203.T"]["currency"] == "JPY"
+    assert e["AZN.L"]["currency"] == "GBp" and "^STOXX50E" in e and e["^STOXX50E"]["sector"] == "Index"
+    assert 140 <= sum(1 for m in e.values() if m.get("region") == "EU" and m["sector"] not in ("ETF", "Index")) <= 200
+    assert intl.entries("") == {} and intl.enabled_regions("EU") == ["US", "EU"]
+    universe.extend(intl.entries("EU"))
+    assert "ASML.AS" in universe.stock_symbols("EU") and "ASML.AS" not in universe.stock_symbols()  # US by default
+    assert "^STOXX50E" not in universe.stock_symbols("EU")  # benchmarks aren't stocks
+    assert universe.region_of("ASML.AS") == "EU" and universe.region_of("AAPL") == "US"
+
+
+def test_scan_and_screener_by_region(client, register, monkeypatch, saved_universe):
+    from app import market_data
+    from app.config import settings
+    from app.models import User
+    from app.routers import sepa
+
+    p = SyntheticProvider()
+    universe.SYMBOLS["ZEU1.DE"] = {"name": "Euro One", "sector": "Industrials", "exchange": "Xetra", "region": "EU", "currency": "EUR", "country": "Germany"}
+    universe.SYMBOLS["ZEU2.PA"] = {"name": "Euro Two", "sector": "Technology", "exchange": "Paris", "region": "EU", "currency": "EUR", "country": "France"}
+    universe.SYMBOLS["^STOXX50E"] = {"name": "Euro Stoxx 50", "sector": "Index", "exchange": "", "region": "EU", "currency": "EUR"}
+    fake = {"ZEU1.DE": "AAPL", "ZEU2.PA": "MSFT", "^STOXX50E": "SPY"}
+    orig = market_data.stored_history
+    monkeypatch.setattr(market_data, "stored_history", lambda s: p.history(fake[s]) if s in fake else orig(s))
+    monkeypatch.setattr(settings, "intl_markets", "EU")
+    market_data._fast_cache.clear()
+    sepa._scan_cache.clear()
+    h, _ = register("regions-user@test.ro")
+    with SessionLocal() as db:
+        db.query(User).filter_by(email="regions-user@test.ro").one().plan = "premium"
+        db.commit()
+    try:
+        eu = client.get("/api/sepa/scan?region=EU&limit=200", headers=h).json()["results"]
+        assert {r["symbol"] for r in eu} == {"ZEU1.DE", "ZEU2.PA"} and all(r["currency"] == "EUR" for r in eu)
+        assert all(r["ai_prob"] is None for r in eu)  # vnicornAI is US-only
+        us = {r["symbol"] for r in client.get("/api/sepa/scan?limit=200", headers=h).json()["results"]}
+        assert "ZEU1.DE" not in us and "AAPL" in us
+        sc = client.get("/api/markets/screener?region=EU", headers=h).json()["results"]
+        assert {r["symbol"] for r in sc} == {"ZEU1.DE", "ZEU2.PA"} and sc[0]["currency"] == "EUR"
+        regs = client.get("/api/markets/regions", headers=h).json()["regions"]
+        assert [r["id"] for r in regs] == ["US", "EU"] and regs[1]["stocks"] == 2
+    finally:
+        market_data._fast_cache.clear()
+        sepa._scan_cache.clear()

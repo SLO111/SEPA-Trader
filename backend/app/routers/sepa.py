@@ -21,57 +21,64 @@ _lock = Lock()
 
 
 _build_lock = Lock()  # one scan build at a time
-_rebuilding = False
+_rebuilding: set[str] = set()
 
 
 def invalidate_scan() -> None:
-    """New prices: mark the scan stale. Requests keep getting the previous scan while a new one is built."""
+    """New prices: mark every region's scan stale. Requests keep getting the previous scan while a new one is built."""
     with _lock:
         for k, (_, rows) in list(_scan_cache.items()):
             _scan_cache[k] = (float("-inf"), rows)  # stale whatever the clock (monotonic time can be small after boot)
 
 
-def _build_scan(key: str) -> list[dict]:
+def _scan_key(region: str) -> str:
+    return settings.data_provider if region == "US" else f"{settings.data_provider}:{region}"
+
+
+def _build_scan(key: str, region: str = "US") -> list[dict]:
+    from engine.data.intl import BENCHMARKS
+    from engine.data.universe import stock_symbols
+
     with _build_lock:
-        rows = scan_universe(market_data.stored_history)
+        syms = stock_symbols(region)
+        rows = scan_universe(market_data.stored_history, syms, BENCHMARKS.get(region, "SPY")) if syms else []
         with _lock:
             _scan_cache[key] = (time.monotonic(), rows)
         return rows
 
 
-def _rebuild_in_background(key: str) -> None:
-    global _rebuilding
+def _rebuild_in_background(key: str, region: str) -> None:
     try:
-        _build_scan(key)
+        _build_scan(key, region)
     except Exception:
         import logging
 
         logging.getLogger("sepa.scan").warning("Scan rebuild failed; serving the previous scan", exc_info=True)
     finally:
-        _rebuilding = False
+        _rebuilding.discard(key)
 
 
-def cached_scan() -> list[dict]:
-    """The Move Detector scan of the whole universe, shared by every user (stale-while-revalidate, single build)."""
-    global _rebuilding
-    key = settings.data_provider
+def cached_scan(region: str = "US") -> list[dict]:
+    """The Move Detector scan of one region (US by default), shared by every user (stale-while-revalidate, single build).
+    RS ratings rank stocks within their own region, against its benchmark."""
+    key = _scan_key(region)
     with _lock:
         hit = _scan_cache.get(key)
         if hit and time.monotonic() - hit[0] < market_data.screen_ttl(_TTL):
             return hit[1]
         if hit and hit[1] and not market_data.in_background():
-            if not _rebuilding:
-                _rebuilding = True
+            if key not in _rebuilding:
+                _rebuilding.add(key)
                 import threading
 
-                threading.Thread(target=_rebuild_in_background, args=(key,), name="scan-rebuild", daemon=True).start()
+                threading.Thread(target=_rebuild_in_background, args=(key, region), name=f"scan-rebuild-{region}", daemon=True).start()
             return hit[1]
     with _build_lock:  # first build: concurrent requests wait for one computation
         with _lock:
             hit = _scan_cache.get(key)
             if hit and time.monotonic() - hit[0] < market_data.screen_ttl(_TTL):
                 return hit[1]
-    return _build_scan(key)
+    return _build_scan(key, region)
 
 
 def _rs_for(symbol: str) -> int | None:
@@ -90,18 +97,19 @@ def _rs_for(symbol: str) -> int | None:
     return rs_ratings(raws).get(symbol)
 
 
-def pulse_map() -> dict[str, dict]:
-    """Confirmations / warnings over the last 10 days for every stock (refreshed every 30 minutes)."""
+def pulse_map(region: str = "US") -> dict[str, dict]:
+    """Confirmations / warnings over the last 10 days for every stock of a region (refreshed every 30 minutes)."""
     from engine import pulse
+    from engine.data.intl import BENCHMARKS
     from engine.data.universe import stock_symbols
 
     def build():
         try:
-            bench = market_data.history("SPY")
+            bench = market_data.stored_history(BENCHMARKS.get(region, "SPY"))
         except Exception:
             bench = None
         out = {}
-        for s in stock_symbols():
+        for s in stock_symbols(region):
             try:
                 p = pulse.summary(market_data.stored_history(s), bench)
                 out[s] = {"conf": p["conf"], "warn": p["warn"], "tone": p["tone"]}
@@ -109,7 +117,8 @@ def pulse_map() -> dict[str, dict]:
                 continue
         return out
 
-    return market_data._fast(f"{settings.data_provider}:pulse-map", 1800, build, stale_ok=True)
+    key = f"{settings.data_provider}:pulse-map" + ("" if region == "US" else f":{region}")
+    return market_data._fast(key, 1800, build, stale_ok=True)
 
 
 @router.get("/scan")
@@ -120,6 +129,7 @@ def scan(
     vcp_only: bool = False,
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    region: Literal["US", "EU", "ASIA"] = "US",
     order: Literal["default", "ai", "bull", "bear", "rs", "tt", "change", "price", "pivot", "symbol"] = "default",
     dir: Literal["asc", "desc"] = "desc",
     user: User = Depends(current_user),
@@ -133,11 +143,14 @@ def scan(
 
     with SessionLocal() as db:
         vnicorn_service.load(db)  # makes the stored major-move probabilities available after a restart
-    pm = pulse_map() if limits_for(user)["pulse"] else {}
-    ai = limits_for(user)["ai_picks"]
+    pm = pulse_map(region) if limits_for(user)["pulse"] else {}
+    ai = limits_for(user)["ai_picks"] and region == "US"  # vnicornAI learns from US stocks
     if sort == "ai" and not ai:
         raise HTTPException(403, "vnicornAI move probabilities are part of Premium.")
-    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"]) if ai else None} for r in cached_scan()]
+    from engine.data.universe import currency_of
+
+    rows = [{**r, "ai_prob": vnicorn_service.move_prob(r["symbol"]) if ai else None, "currency": currency_of(r["symbol"])}
+            for r in cached_scan(region)]
     key = {"bull": "bull_score", "bear": "bear_score", "rs": "rs_rating", "ai": "ai_prob"}[sort]
     out = [
         r
@@ -169,22 +182,23 @@ def scan(
 
 
 @router.get("/pulse/leaders")
-def pulse_leaders(limit: int = Query(25, ge=5, le=100), user: User = Depends(current_user)):
-    """vnicorn Pulse across the market: stocks acting best (most confirmations) and worst (most warnings) over 10 days."""
+def pulse_leaders(limit: int = Query(25, ge=5, le=100), region: Literal["US", "EU", "ASIA"] = "US",
+                  user: User = Depends(current_user)):
+    """vnicorn Pulse across a region: stocks acting best (most confirmations) and worst (most warnings) over 10 days."""
     from engine.data.universe import SYMBOLS
 
     if not limits_for(user)["pulse"]:
         raise HTTPException(403, "vnicorn Pulse is available on the Pro and Premium plans.")
-    rows = [{"symbol": s, "name": SYMBOLS.get(s, {}).get("name", s), "sector": SYMBOLS.get(s, {}).get("sector", ""), **p,
-             "net": p["conf"] - p["warn"]} for s, p in pulse_map().items()]
-    for r in rows:
+    rows = [{"symbol": s, "name": SYMBOLS.get(s, {}).get("name", s), "sector": SYMBOLS.get(s, {}).get("sector", ""),
+             "currency": SYMBOLS.get(s, {}).get("currency", "USD"), **p, "net": p["conf"] - p["warn"]} for s, p in pulse_map(region).items()]
+    best = sorted(rows, key=lambda r: (-r["net"], -r["conf"]))[:limit]
+    worst = sorted(rows, key=lambda r: (r["net"], -r["warn"]))[:limit]
+    for r in {id(x): x for x in best + worst}.values():  # quotes only for the rows shown
         try:
             q = market_data.quote(r["symbol"])
             r["price"], r["change_pct"] = q["price"], q["change_pct"]
         except Exception:
             r["price"] = r["change_pct"] = None
-    best = sorted(rows, key=lambda r: (-r["net"], -r["conf"]))[:limit]
-    worst = sorted(rows, key=lambda r: (r["net"], -r["warn"]))[:limit]
     return {"constructive": best, "warning": worst, "count": len(rows)}
 
 

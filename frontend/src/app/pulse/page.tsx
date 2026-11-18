@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import Locked from "@/components/Locked";
 import { ApiError, api } from "@/lib/api";
 import { pct, tone } from "@/lib/format";
+import RegionSwitch, { useRegion } from "@/components/RegionSwitch";
 import { SortTh, useSort } from "@/lib/useSort";
 
 type Row = { symbol: string; name: string; sector: string; conf: number; warn: number; net: number; tone: string; price: number | null; change_pct: number | null };
@@ -67,11 +68,13 @@ function Pulse() {
   const [data, setData] = useState<Resp | null>(null);
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState("");
+  const [region, setRegion, regions] = useRegion();
   useEffect(() => {
-    api<Resp>("/api/sepa/pulse/leaders?limit=25")
+    setData(null);
+    api<Resp>(`/api/sepa/pulse/leaders?limit=25&region=${region}`)
       .then(setData)
       .catch((e) => (e instanceof ApiError && e.status === 403 ? setLocked(true) : setError(e.message)));
-  }, []);
+  }, [region]);
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-7xl p-3 sm:p-6">
@@ -85,6 +88,7 @@ function Pulse() {
             <Locked feature="vnicorn Pulse" text="The stocks acting best and worst across the market, every day, plus Pulse on every chart and in the Move Detector." />
           </div>
         )}
+        <div className="mb-4"><RegionSwitch region={region} onChange={setRegion} regions={regions} /></div>
         {error && <p className="text-sm text-down">{error}</p>}
         {!data && !locked && !error && <p className="text-sm text-muted">Reading the market…</p>}
         {data && (

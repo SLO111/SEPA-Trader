@@ -280,7 +280,7 @@ def mark_stale() -> None:
     keys = {f"{settings.data_provider}:{k}" for k in UNIVERSE_KEYS}
     with _lock:
         for k in list(_fast_cache):
-            if k in keys:
+            if k in keys or k.rsplit(":", 1)[0] in keys:  # per-region keys end in ":EU" / ":ASIA"
                 _fast_cache[k] = (float("-inf"), _fast_cache[k][1])
 
 

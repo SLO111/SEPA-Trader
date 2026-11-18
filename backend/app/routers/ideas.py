@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from .. import market_data
 from ..db import get_db
+from engine.data.universe import currency_of, region_of
+
 from ..ideas_service import classify, latest_batch, refresh_statuses, run_ideas
 from ..models import DailyDigest, FeedItem, TradeIdea, User
 from ..plans import limits_for
@@ -116,6 +118,7 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
         "plan": {"ideas_limit": lim["ideas_limit"], "shorts": lim["ideas_shorts"], "ai_picks": lim["ai_picks"], "min_rr": MIN_RR_SIGNALS},
         "ideas": [{**idea_out(r, with_structure=r.status in OPEN), "taken": r.id in taken, "ai": ai_of.get(r.id),
                    **dict(zip(("sector", "industry"), classify(r.symbol))), "gap": gap_of.get(r.id),
+                   "region": region_of(r.symbol), "currency": currency_of(r.symbol),
                    "rr_now": _rr(r) if r.status in OPEN else None,
                    "earnings_in": market_data.earnings_in_days(r.symbol) if r.status in OPEN else None} for r in rows],
         "summary": {

@@ -14,10 +14,11 @@ from .vcp import detect_vcp
 BENCHMARK = "SPY"
 
 
-def scan_universe(history: Callable[[str], pd.DataFrame], symbols: list[str] | None = None) -> list[dict]:
+def scan_universe(history: Callable[[str], pd.DataFrame], symbols: list[str] | None = None, benchmark: str = BENCHMARK) -> list[dict]:
+    """RS ratings, Trend Template, VCP and Bull / Bear scores for `symbols` (RS ranks within that list, against `benchmark`)."""
     symbols = symbols or stock_symbols()
     try:
-        bench = history(BENCHMARK)
+        bench = history(benchmark)
     except Exception:
         bench = None
 

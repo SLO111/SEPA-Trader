@@ -290,6 +290,8 @@ class YFinanceProvider(DataProvider):
 
     def fundamentals(self, symbol: str) -> dict:
         fh = _finnhub()
+        if SYMBOLS.get(symbol.upper(), {}).get("region", "US") != "US":
+            return self._yahoo_fundamentals(symbol)  # Finnhub's free plan covers US listings only
         if fh is not None:
             meta = SYMBOLS.get(symbol.upper(), {})
             try:
@@ -315,6 +317,9 @@ class YFinanceProvider(DataProvider):
             # Fall back to data served by the chart endpoint, which keeps working.
             return {**base, **self._fallback_fundamentals(t, symbol)}
         cap = info.get("marketCap")
+        if cap:  # Yahoo gives a foreign listing's market cap in its own currency
+            cur = info.get("currency") or meta.get("currency")
+            cap = to_usd(cap, "GBP" if cur in ("GBp", "GBX") else cur)  # London caps are quoted in pounds, prices in pence
         div = info.get("trailingAnnualDividendYield")  # a fraction, e.g. 0.027
         growth = info.get("earningsGrowth")  # a fraction
         live = {
@@ -476,7 +481,9 @@ class YFinanceProvider(DataProvider):
             fi = t.fast_info
             cap = fi.get("marketCap") if hasattr(fi, "get") else getattr(fi, "market_cap", None)
             if cap:
-                out["market_cap_b"] = round(float(cap) / 1e9, 1)
+                cap = to_usd(float(cap), SYMBOLS.get(symbol.upper(), {}).get("currency"))
+                if cap:
+                    out["market_cap_b"] = round(float(cap) / 1e9, 1)
         except Exception:
             pass
         try:
@@ -514,3 +521,19 @@ def get_provider(name: str) -> DataProvider:
 
 def known_symbol(symbol: str) -> bool:
     return symbol.upper() in SYMBOLS
+
+
+def to_usd(amount: float | None, currency: str | None) -> float | None:
+    """An amount in a listing's currency, in US dollars (GBp = pence). None when the exchange rate is unknown."""
+    if amount is None:
+        return None
+    cur = (currency or "USD").strip()
+    if cur.upper() == "USD":
+        return amount
+    factor = 1.0
+    if cur in ("GBp", "GBX"):
+        cur, factor = "GBP", 0.01
+    from .finnhub import usd_rate
+
+    rate = usd_rate(cur)
+    return amount * factor * rate if rate else None

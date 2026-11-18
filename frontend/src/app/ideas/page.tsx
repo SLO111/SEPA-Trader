@@ -6,6 +6,7 @@ import EarningsBadge from "@/components/EarningsBadge";
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 import { LoadMoreRow, ShowingCount, useShowMore } from "@/lib/useInfinite";
+import RegionSwitch, { CurrencyTag, useRegion } from "@/components/RegionSwitch";
 import AppShell from "@/components/AppShell";
 import VnicornAICard from "@/components/VnicornAICard";
 import { ApiError, api, post } from "@/lib/api";
@@ -16,7 +17,7 @@ const SORTABLE: Record<string, "ai" | "rr" | "status"> = { "R/R": "rr", vnicornA
 
 type Idea = {
   id: number; date: string; symbol: string; sector?: string; industry?: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
-  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; rr_now?: number | null; gap?: { price: number; change_pct: number; session: string; text: string } | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
+  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; rr_now?: number | null; region?: "US" | "EU" | "ASIA"; currency?: string; gap?: { price: number; change_pct: number; session: string; text: string } | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
 type MarketEvent = { kind: "earnings" | "fed" | "move" | "market"; symbol: string | null; when: string; text: string };
@@ -61,6 +62,7 @@ function Ideas() {
   const [open, setOpen] = useState<number | null>(null);
   const [tf, setTf] = useState<"ALL" | "AIPICKS" | "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI">("ALL");
   const [sector, setSector] = useState("");
+  const [region, setRegion, regions] = useRegion();
   // default: vnicornAI's expected value (best first); the R/R, vnicornAI and Status headers sort manually
   const [sort, setSort] = useState<{ key: "ai" | "rr" | "status"; dir: 1 | -1 }>({ key: "ai", dir: -1 });
   const aiPlan = !!user?.limits.ai_picks;
@@ -94,7 +96,7 @@ function Ideas() {
   const STATUS_ORDER: Record<string, number> = { BUY: 0, TRIM: 1, WAIT: 2, TARGET: 3, STOPPED: 4, CANCEL: 5 };
   const rrOf = (i: Idea) => (i.rr_now ?? i.rr ?? 0);
   const listed = (data?.ideas ?? [])
-    .filter((i) => match(i, tf) && (!sector || i.sector === sector))
+    .filter((i) => match(i, tf) && (!sector || i.sector === sector) && (i.region ?? "US") === region)
     .sort((a, b) => {
       let d = 0;
       if (sort.key === "ai") {
@@ -106,7 +108,7 @@ function Ideas() {
       else d = ((STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)) * sort.dir || rrOf(b) - rrOf(a);
       return d;
     });
-  const page = useShowMore(listed, `${tf}|${sector}|${view}|${sort.key}|${sort.dir}`);
+  const page = useShowMore(listed, `${tf}|${sector}|${view}|${sort.key}|${sort.dir}|${region}`);
   const clickSort = (key: "ai" | "rr" | "status") =>
     setSort((s0) => (s0.key === key ? { key, dir: (s0.dir * -1) as 1 | -1 } : { key, dir: key === "status" ? 1 : -1 }));
 
@@ -140,6 +142,7 @@ function Ideas() {
           </div>
         </div>
 
+        <div className="mb-3"><RegionSwitch region={region} onChange={setRegion} regions={regions} /></div>
         {(data?.events?.length ?? 0) > 0 && (
           <div className="mb-4 space-y-1.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-amber-300">High-impact events</div>
@@ -228,7 +231,7 @@ function Ideas() {
                             {i.industry && <div className="max-w-[150px] truncate text-[10px] text-muted/80" title={i.sector}>{i.industry}</div>}
                           </td>
                           <td className="tabular whitespace-nowrap px-2 py-2 text-right">
-                            <div>${fmt(i.entry)}</div>
+                            <div>{(i.currency ?? "USD") === "USD" ? "$" : ""}{fmt(i.entry)}<CurrencyTag currency={i.currency} /></div>
                             <div className="text-[11px] text-muted">
                               {i.current !== null ? `$${fmt(i.current)} ` : ""}
                               <span className={tone(i.pnl_pct ?? move)}>{pct(i.pnl_pct ?? move, 1)}</span>
