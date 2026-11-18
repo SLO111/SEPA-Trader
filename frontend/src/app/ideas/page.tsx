@@ -13,11 +13,14 @@ import { ApiError, api, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmt, pct, tone } from "@/lib/format";
 
+const TIMING_TONE = { up: "text-up", down: "text-down", warn: "text-amber-300", muted: "text-muted" } as const;
+const TIMING_RANK = { up: 0, muted: 1, warn: 2, down: 3 } as const;
+const timingRank = (i: { timing?: { tone: keyof typeof TIMING_RANK } | null }) => (i.timing ? TIMING_RANK[i.timing.tone] : 4);
 const SORTABLE: Record<string, "ai" | "rr" | "status"> = { "R/R": "rr", vnicornAI: "ai", Status: "status" };
 
 type Idea = {
   id: number; date: string; symbol: string; sector?: string; industry?: string; timeframe: "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI"; side: "long" | "short";
-  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; rr_now?: number | null; region?: "US" | "EU" | "ASIA"; currency?: string; gap?: { price: number; change_pct: number; session: string; text: string } | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
+  entry: number; stop: number; trim: number | null; target: number; rr: number; weight: number; score: number; reason: string; taken?: boolean; earnings_in?: number | null; rr_now?: number | null; timing?: { label: string; tone: "up" | "down" | "warn" | "muted" } | null; region?: "US" | "EU" | "ASIA"; currency?: string; gap?: { price: number; change_pct: number; session: string; text: string } | null; ai?: { prob: number; ev: number; stop: number; trim: number | null; target: number; rr: number; pick: boolean } | null; stage?: { stage: number; name: string; weeks: number } | null; structure?: { text: string; side: "bull" | "bear" | null; step: number; defence: number | null } | null;
   status: "WAIT" | "BUY" | "TRIM" | "TARGET" | "STOPPED" | "CANCEL"; current: number | null; pnl_pct: number | null; r_multiple: number | null; closed_at: string | null;
 };
 type MarketEvent = { kind: "earnings" | "fed" | "move" | "market"; symbol: string | null; when: string; text: string };
@@ -105,7 +108,7 @@ function Ideas() {
         if (y === null && x !== null) return -1;
         d = ((x ?? 0) - (y ?? 0)) * sort.dir || (rrOf(a) - rrOf(b)) * -1;
       } else if (sort.key === "rr") d = (rrOf(a) - rrOf(b)) * sort.dir;
-      else d = ((STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)) * sort.dir || rrOf(b) - rrOf(a);
+      else d = ((STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)) * sort.dir || timingRank(a) - timingRank(b) || rrOf(b) - rrOf(a);
       return d;
     });
   const page = useShowMore(listed, `${tf}|${sector}|${view}|${sort.key}|${sort.dir}|${region}`);
@@ -275,6 +278,7 @@ function Ideas() {
                           <td className="whitespace-nowrap px-2 py-2">
                             <span className={`rounded px-1.5 py-1 text-[11px] font-semibold ${STATUS[i.status][1]}`}>{STATUS[i.status][0]}</span>
                             {i.r_multiple !== null && i.status !== "WAIT" && <span className={`tabular ml-1.5 text-xs ${tone(i.r_multiple)}`}>{i.r_multiple > 0 ? "+" : ""}{i.r_multiple}R</span>}
+                            {i.timing && <div className={`mt-1 text-[10px] ${TIMING_TONE[i.timing.tone]}`}>{i.timing.label}</div>}
                           </td>
                           <td className="sticky right-0 z-[1] bg-panel px-2 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                             {["WAIT", "BUY", "TRIM"].includes(i.status) &&

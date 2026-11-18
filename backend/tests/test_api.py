@@ -129,6 +129,11 @@ def test_account_settings(client, register):
     p = client.put("/api/auth/prefs", headers=h, json={"theme": "light", "default_interval": "1wk", "bogus": 1}).json()
     assert p["theme"] == "light" and p["default_interval"] == "1wk" and "bogus" not in p
     assert client.put("/api/auth/prefs", headers=h, json={"theme": "pink"}).status_code == 400
+    p = client.get("/api/auth/prefs", headers=h).json()
+    assert p["popup_feed"] == "important" and p["popup_alerts"] is True
+    p = client.put("/api/auth/prefs", headers=h, json={"popup_feed": "off", "popup_alerts": False}).json()
+    assert p["popup_feed"] == "off" and p["popup_alerts"] is False
+    assert client.put("/api/auth/prefs", headers=h, json={"popup_feed": "loud"}).status_code == 400
     assert client.request("DELETE", "/api/auth/me", headers=h, json={"password": "nope"}).status_code == 400
     assert client.request("DELETE", "/api/auth/me", headers=h, json={"password": "newpass123"}).status_code == 204
     assert client.post("/api/auth/login", json={"email": "settings2@test.ro", "password": "newpass123"}).status_code == 401

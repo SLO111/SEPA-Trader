@@ -97,6 +97,16 @@ def test_earnings_calendar_reaction():
     assert cal["recent"][0]["reaction_pct"] == pytest.approx(10.0)
 
 
+def test_earnings_calendar_range():
+    h = _df(np.full(30, 100.0), start="2026-10-01")
+    entries = {"AAA": {"next_date": "2026-11-20", "history": [{"date": "2026-11-05", "eps_estimate": 1, "eps_actual": 1.1, "surprise_pct": 10}]},
+               "BBB": {"next_date": "2026-12-20", "history": [{"date": "2026-10-02", "eps_estimate": 1, "eps_actual": 1.1, "surprise_pct": 10}]}}
+    meta = {"AAA": {"name": "A"}, "BBB": {"name": "B"}}
+    cal = mt.earnings_calendar(entries, {"AAA": h, "BBB": h}, meta, pd.Timestamp("2026-11-18"),
+                               start=pd.Timestamp("2026-11-02"), end=pd.Timestamp("2026-11-29"))
+    assert [r["symbol"] for r in cal["upcoming"]] == ["AAA"] and [r["symbol"] for r in cal["recent"]] == ["AAA"]
+
+
 def test_fed_summary_and_decisions():
     d = fed.demo(date(2026, 11, 15))
     assert d["demo"] and d["target_range"]["upper"] - d["target_range"]["lower"] == pytest.approx(0.25)
@@ -128,8 +138,14 @@ def test_markets_api(client, register):
     fg = client.get("/api/markets/fear-greed", headers=h).json()
     assert len(fg["components"]) == 6
     assert client.get("/api/markets/extended-hours", headers=h).json()["available"] is False
-    e = client.get("/api/markets/earnings", headers=h).json()
-    assert e["upcoming"] and e["recent"]
+    e = client.get("/api/markets/earnings", headers=h).json()  # default: this week and next week
+    monday = date.today() - pd.Timedelta(days=date.today().weekday())
+    assert e["start"] == str(monday) and e["end"] == str(monday + pd.Timedelta(days=13))
+    assert all(e["start"] <= r["date"] <= e["end"] for r in e["upcoming"] + e["recent"])
+    day = lambda n: (date.today() + pd.Timedelta(days=n)).isoformat()
+    assert client.get(f"/api/markets/earnings?start={day(-30)}&end={day(0)}", headers=h).json()["recent"]
+    assert client.get(f"/api/markets/earnings?start={day(0)}&end={day(90)}", headers=h).json()["upcoming"]
+    assert client.get(f"/api/markets/earnings?start={day(-60)}&end={day(60)}", headers=h).status_code == 400
     assert client.get("/api/markets/fed", headers=h).json()["next_meeting"]
     assert client.get("/api/markets/screener?preset=dividend", headers=h).status_code == 403  # free plan: screens are Pro
     assert client.get("/api/markets/screener", headers=h).status_code == 200  # the plain list is free

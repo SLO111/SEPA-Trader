@@ -145,9 +145,21 @@ class DeleteIn(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
-PREF_DEFAULTS = {"theme": "dark", "default_interval": "1d", "start_page": "/chart", "compact_tables": False}
+PREF_DEFAULTS = {"theme": "dark", "default_interval": "1d", "start_page": "/chart", "compact_tables": False,
+                 "popup_feed": "important", "popup_alerts": True}
 PREF_CHOICES = {"theme": {"dark", "light", "system"}, "default_interval": {"5m", "15m", "1h", "1d", "1wk", "1mo"},
-                "start_page": {"/chart", "/markets", "/ideas", "/portfolios", "/feed"}}
+                "start_page": {"/chart", "/markets", "/ideas", "/portfolios", "/feed"}, "popup_feed": {"important", "all", "watchlist", "off"}}
+
+
+def load_prefs(db: Session, user_id: int) -> dict:
+    """The user's display and notification preferences, with the defaults for anything not set."""
+    import json
+
+    from ..models import UserPrefs
+
+    row = db.get(UserPrefs, user_id)
+    saved = json.loads(row.data) if row else {}
+    return {k: saved.get(k, v) for k, v in PREF_DEFAULTS.items()}
 
 
 @router.patch("/me")
@@ -180,13 +192,7 @@ def change_email(body: EmailIn, user: User = Depends(current_user), db: Session 
 
 @router.get("/prefs")
 def get_prefs(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    import json
-
-    from ..models import UserPrefs
-
-    row = db.get(UserPrefs, user.id)
-    saved = json.loads(row.data) if row else {}
-    return {k: saved.get(k, v) for k, v in PREF_DEFAULTS.items()}
+    return load_prefs(db, user.id)
 
 
 @router.put("/prefs")
@@ -201,7 +207,7 @@ def set_prefs(body: dict, user: User = Depends(current_user), db: Session = Depe
             continue
         if k in PREF_CHOICES and v not in PREF_CHOICES[k]:
             raise HTTPException(400, f"Invalid value for {k}")
-        if k == "compact_tables":
+        if k in ("compact_tables", "popup_alerts"):
             v = bool(v)
         clean[k] = v
     row = db.get(UserPrefs, user.id)

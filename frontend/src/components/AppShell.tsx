@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import Logo from "./Logo";
 import SymbolSearch from "./SymbolSearch";
+import NotificationToasts from "./NotificationToasts";
 import { useAuth } from "@/lib/auth";
 
 // Compact navigation: related pages share one top-level hub with sub-tabs.
@@ -220,6 +221,7 @@ export default function AppShell({ children, adminOnly = false }: { children: Re
         </div>
       )}
       <main className="min-h-0 flex-1">{children}</main>
+      <NotificationToasts />
       <LegalFooter />
     </div>
   );

@@ -34,6 +34,8 @@ export type Overview = {
 
 export type EarningsCal = {
   demo: boolean;
+  start?: string;
+  end?: string;
   upcoming: { symbol: string; name: string; date: string; days_until: number; eps_estimate: number | null; last_surprise_pct: number | null }[];
   recent: { symbol: string; name: string; date: string; eps_estimate: number | null; eps_actual: number | null; surprise_pct: number | null; reaction_pct: number | null }[];
 };

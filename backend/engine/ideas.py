@@ -261,6 +261,40 @@ def rr_now(idea: dict, price: float | None, status: str = "WAIT") -> float | Non
     return round(max(reward, 0.0) / risk, 2)
 
 
+def timing(idea: dict, price: float | None, status: str, days_open: int, max_wait_days: int = 10) -> dict | None:
+    """How well-timed an open idea is right now, like a trade grader would say it:
+    Near stop > Near target > Late entry > Expires soon > On time / Waiting.
+    tone: down (red), up (green), warn (amber), muted."""
+    if status not in ("WAIT", "BUY", "TRIM") or price is None or not price:
+        return None
+    sgn = 1 if idea["side"] != "short" else -1
+    entry, stop, target = idea["entry"], idea["stop"], idea["target"]
+    risk = abs(entry - stop)
+    if not risk:
+        return None
+    to_stop = (price - stop) * sgn  # how far the price still is from the stop (in price units)
+    to_target = (target - price) * sgn
+    if to_stop <= 0.25 * risk:
+        return {"label": "Near stop", "tone": "down"}
+    if status != "WAIT" and (to_target <= 0.25 * risk or status == "TRIM"):
+        return {"label": "Near target", "tone": "up"}
+    planned = idea.get("rr")
+    past_entry = (price - entry) * sgn
+    if status != "WAIT" or past_entry > 0:
+        now = rr_now(idea, price, "BUY")
+        if planned and now is not None and now < 0.8 * planned:
+            return {"label": f"Late entry · R/R now {now:.1f}", "tone": "warn"}
+    if status == "WAIT":
+        left = max_wait_days - days_open
+        if left <= 2:
+            return {"label": "Expires today" if left <= 0 else f"Expires in {left} day{'s' if left != 1 else ''}", "tone": "warn"}
+        away = -past_entry / entry * 100
+        if away <= 1:
+            return {"label": "On time · entry zone", "tone": "up"}
+        return {"label": f"Waiting · {away:.1f}% to entry", "tone": "muted"}
+    return {"label": "On time", "tone": "up"}
+
+
 def update_status(idea: dict, df: pd.DataFrame, created: pd.Timestamp, max_wait_days: int = 10) -> dict:
     """Follow an idea after it was published: WAIT -> BUY -> TRIM -> TARGET, or STOPPED / CANCEL."""
     after = df[df.index > created]

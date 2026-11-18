@@ -109,16 +109,50 @@ export function FearGreedTab() {
 
 // ------------------------------------------------------------------ Earnings
 
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const mondayOf = (d: Date) => {
+  const m = new Date(d);
+  m.setHours(12, 0, 0, 0);
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
+};
+const shortDay = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
 export function EarningsTab() {
-  const { data, error } = useLoad<EarningsCal>("/api/markets/earnings");
-  if (error) return <Failed msg={error.message} />;
-  if (!data) return <Loading />;
+  // two weeks at a time: this week and next by default; arrows move a week, the date picker jumps to any week
+  const [monday, setMonday] = useState(() => mondayOf(new Date()));
+  const end = new Date(monday);
+  end.setDate(end.getDate() + 13);
+  const { data, error } = useLoad<EarningsCal>(`/api/markets/earnings?start=${isoDay(monday)}&end=${isoDay(end)}`);
+  const shift = (weeks: number) => setMonday((m) => {
+    const n = new Date(m);
+    n.setDate(n.getDate() + 7 * weeks);
+    return n;
+  });
+  const isThisWeek = isoDay(monday) === isoDay(mondayOf(new Date()));
+  const nav = (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <button onClick={() => shift(-1)} className="rounded-md border border-line px-2.5 py-1 text-muted hover:text-text" aria-label="Previous week">◀</button>
+      <span className="font-medium">{shortDay(monday)} – {shortDay(end)}, {end.getFullYear()}</span>
+      <button onClick={() => shift(1)} className="rounded-md border border-line px-2.5 py-1 text-muted hover:text-text" aria-label="Next week">▶</button>
+      {!isThisWeek && <button onClick={() => setMonday(mondayOf(new Date()))} className="rounded-md border border-line px-2.5 py-1 text-xs text-muted hover:text-text">This week</button>}
+      <label className="ml-auto flex items-center gap-2 text-xs text-muted">
+        Go to week of
+        <input type="date" value={isoDay(monday)} onChange={(e) => e.target.value && setMonday(mondayOf(new Date(e.target.value + "T12:00:00")))}
+          className="rounded border border-line bg-bg px-2 py-1 text-text" />
+      </label>
+    </div>
+  );
+  if (error) return <div className="space-y-4">{nav}<Failed msg={error.message} /></div>;
+  if (!data) return <div className="space-y-4">{nav}<Loading /></div>;
   const groups = data.upcoming.reduce<Record<string, EarningsCal["upcoming"]>>((acc, r) => ((acc[r.date] ||= []).push(r), acc), {});
   return (
+    <div className="space-y-4">
+    {nav}
     <div className="grid gap-5 xl:grid-cols-2">
-      <Panel title="Upcoming earnings (next 90 days)">
+      <Panel title="Upcoming reports">
         {data.upcoming.length === 0 ? (
-          <p className="text-sm text-muted">No scheduled reports in the next 90 days.</p>
+          <p className="text-sm text-muted">No scheduled reports in these two weeks.</p>
         ) : (
           <div className="space-y-4">
             {Object.entries(groups).map(([day, rows]) => (
@@ -144,9 +178,9 @@ export function EarningsTab() {
           </div>
         )}
       </Panel>
-      <Panel title="Recent reports (last 30 days)">
+      <Panel title="Reported">
         {data.recent.length === 0 ? (
-          <p className="text-sm text-muted">No reports in the last 30 days.</p>
+          <p className="text-sm text-muted">No reports in these two weeks yet.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
@@ -175,6 +209,7 @@ export function EarningsTab() {
         )}
         <p className="mt-2 text-[11px] text-muted">Reaction: price change from the close before the report to the first close after it.</p>
       </Panel>
+    </div>
     </div>
   );
 }

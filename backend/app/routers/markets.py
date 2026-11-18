@@ -147,16 +147,27 @@ def extended_hours(user: User = Depends(current_user)):
 
 
 @router.get("/earnings")
-def earnings(user: User = Depends(current_user)):
+def earnings(start: date | None = None, end: date | None = None, user: User = Depends(current_user)):
+    """Earnings calendar for a date range: this week and next week by default (Monday to Sunday)."""
+    today = date.today()
+    if start is None or end is None:
+        from datetime import timedelta
+
+        monday = today - timedelta(days=today.weekday())
+        start, end = monday, monday + timedelta(days=13)
+    if (end - start).days > 92:
+        raise HTTPException(400, "Pick a range of at most three months.")
+
     def build():
         entries = {}
         for s in stock_symbols():
             e = market_data.cached("earnings", s)
             if e:
                 entries[s] = e
-        return mt.earnings_calendar(entries, _histories(list(entries)), SYMBOLS, pd.Timestamp(date.today()))
+        return mt.earnings_calendar(entries, _histories(list(entries)), SYMBOLS, pd.Timestamp(today), start=pd.Timestamp(start), end=pd.Timestamp(end))
 
-    return {"demo": settings.data_provider == "synthetic", **market_data._fast(f"{settings.data_provider}:earnings", 900, build, stale_ok=True)}
+    data = market_data._fast(f"{settings.data_provider}:earnings:{start}:{end}", 900, build, stale_ok=True)
+    return {"demo": settings.data_provider == "synthetic", "start": str(start), "end": str(end), **data}
 
 
 @router.get("/fed")

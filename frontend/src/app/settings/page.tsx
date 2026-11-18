@@ -9,7 +9,7 @@ import { api, patch, post, put } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { applyTheme, getThemePref, type ThemePref } from "@/lib/theme";
 
-type Prefs = { theme: ThemePref; default_interval: string; start_page: string; compact_tables: boolean };
+type Prefs = { theme: ThemePref; default_interval: string; start_page: string; compact_tables: boolean; popup_feed: "important" | "all" | "watchlist" | "off"; popup_alerts: boolean };
 type Sub = { status: string; plan: string; interval?: string | null; amount?: number; current_period_end?: string | null; cancel_at_period_end?: boolean };
 type Digest = { enabled: boolean; email: string; email_configured: boolean };
 
@@ -151,6 +151,27 @@ function Settings() {
                   <select value={prefs.start_page} onChange={(e) => savePrefs({ start_page: e.target.value })} className={`${input} mt-1`}>
                     {[["/chart", "Charts"], ["/markets", "Markets"], ["/ideas", "Trade ideas"], ["/portfolios", "Portfolio"], ["/feed", "Alerts & feed"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
+                </label>
+              </div>
+            )}
+            <Msg m={msgs.prefs ?? null} />
+          </Section>
+
+          <Section id="popups" title="Pop-up notifications" desc="Small pop-ups in the corner while you use the app (not on the Feed page, where you see everything anyway).">
+            {prefs && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-xs text-muted">
+                  New feed items
+                  <select value={prefs.popup_feed} onChange={(e) => savePrefs({ popup_feed: e.target.value as Prefs["popup_feed"] })} className={`${input} mt-1`}>
+                    <option value="important">Important only (your stocks, market-moving news, daily summary)</option>
+                    <option value="watchlist">Only my watchlist and portfolio stocks</option>
+                    <option value="all">Everything</option>
+                    <option value="off">Off</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                  <input type="checkbox" checked={prefs.popup_alerts} className="accent-blue-500" onChange={(e) => savePrefs({ popup_alerts: e.target.checked })} />
+                  Pop up my new alerts
                 </label>
               </div>
             )}

@@ -291,18 +291,25 @@ def screen(rows: list[dict], preset: str | None = None, sector: str | None = Non
 # ------------------------------------------------------------------ earnings calendar
 
 def earnings_calendar(entries: dict[str, dict], histories: dict[str, pd.DataFrame], meta: dict[str, dict], today: pd.Timestamp,
-                      ahead_days: int = 90, back_days: int = 30) -> dict:
+                      ahead_days: int = 90, back_days: int = 30, start: pd.Timestamp | None = None, end: pd.Timestamp | None = None) -> dict:
+    """Upcoming reports and reported results. With start / end: only those dates (upcoming from today on, reported up to
+    today); without: the next `ahead_days` and the last `back_days`."""
+    up_from, up_to = today, today + pd.Timedelta(days=ahead_days)
+    back_from, back_to = today - pd.Timedelta(days=back_days), today
+    if start is not None and end is not None:
+        up_from, up_to = max(start, today), end
+        back_from, back_to = start, min(end, today)
     upcoming, recent = [], []
     for s, e in entries.items():
         name = meta.get(s, {}).get("name", s)
         nd = e.get("next_date")
-        if nd and today <= pd.Timestamp(nd) <= today + pd.Timedelta(days=ahead_days):
+        if nd and up_from <= pd.Timestamp(nd) <= up_to:
             last = (e.get("history") or [{}])[0]
             upcoming.append({"symbol": s, "name": name, "date": nd, "days_until": (pd.Timestamp(nd) - today).days,
                              "eps_estimate": e.get("next_eps_estimate"), "last_surprise_pct": last.get("surprise_pct")})
         for h in e.get("history") or []:
             d = pd.Timestamp(h["date"])
-            if today - pd.Timedelta(days=back_days) <= d <= today:
+            if back_from <= d <= back_to:
                 reaction = None
                 c = histories.get(s, pd.DataFrame()).get("close")
                 if c is not None and len(c):

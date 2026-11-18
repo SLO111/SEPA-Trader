@@ -47,7 +47,23 @@ function loadActive(): ActiveStrategy[] {
 function ChartWorkspace() {
   const { user } = useAuth();
   const params = useSearchParams();
-  const [symbol, setSymbol] = useState((params.get("s") ?? "AAPL").toUpperCase());
+  // opens the ticker from the link, otherwise the last one you looked at
+  const [symbol, setSymbol] = useState(() => {
+    let last: string | null = null;
+    try {
+      last = localStorage.getItem("vn_last_symbol");
+    } catch {
+      /* storage unavailable */
+    }
+    return (params.get("s") ?? last ?? "AAPL").toUpperCase();
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("vn_last_symbol", symbol);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [symbol]);
   const [interval, setIntervalId] = useState(() => {
     try {
       return (JSON.parse(localStorage.getItem("vn_prefs") || "{}").default_interval as string) || "1d";

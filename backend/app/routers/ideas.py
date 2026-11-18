@@ -1,3 +1,5 @@
+import re
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -81,7 +83,7 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     rows = db.scalars(q.order_by(TradeIdea.batch_date.desc(), TradeIdea.score.desc()).limit(5000)).all()
     lim = limits_for(user)
     rows = _plan_cut(rows, lim)
-    from engine.ideas import MIN_RR_SIGNALS, rr_now
+    from engine.ideas import MIN_RR_SIGNALS, rr_now, timing
 
     def _rr(r):
         return rr_now({"side": r.side, "stop": r.stop, "target": r.target, "rr": r.rr}, r.current, r.status)
@@ -120,6 +122,8 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
                    **dict(zip(("sector", "industry"), classify(r.symbol))), "gap": gap_of.get(r.id),
                    "region": region_of(r.symbol), "currency": currency_of(r.symbol),
                    "rr_now": _rr(r) if r.status in OPEN else None,
+                   "timing": timing({"side": r.side, "entry": r.entry, "stop": r.stop, "target": r.target, "rr": r.rr}, r.current, r.status,
+                                    (date.today() - r.batch_date).days) if r.status in OPEN else None,
                    "earnings_in": market_data.earnings_in_days(r.symbol) if r.status in OPEN else None} for r in rows],
         "summary": {
             "open": len(open_rows),
@@ -235,6 +239,58 @@ def feed(
          "created_at": r.created_at.isoformat()}
         for r in rows
     ]
+
+
+# news that tends to move a stock or the market (the same words the Feed marks as "Market-moving")
+MOVING = re.compile(
+    r"\b(FDA|SEC|antitrust|lawsuit|investigation|probe|recall|bankrupt\w*|acquir\w*|acquisition|merger|buyout|takeover|guidance|outlook|"
+    r"warns?|layoffs?|CEO|CFO|resign\w*|upgrade\w*|downgrade\w*|beats?|miss(es|ed)?|tariffs?|Fed|FOMC|rate (cut|hike)s?|CPI|inflation|"
+    r"jobs report|payrolls|recession|stock split|buyback)\b", re.I)
+
+
+def _my_symbols(db: Session, user_id: int) -> set[str]:
+    from ..models import Portfolio, PortfolioTxn, Watchlist, WatchlistItem
+
+    w = db.scalars(select(WatchlistItem.symbol).join(Watchlist).where(Watchlist.user_id == user_id)).all()
+    p = db.scalars(select(PortfolioTxn.symbol).join(Portfolio).where(Portfolio.user_id == user_id)).all()
+    return {x.upper() for x in [*w, *p]}
+
+
+def popup_worthy(kind: str, symbol: str | None, title: str, mode: str, mine: set[str]) -> bool:
+    """Which new feed items pop up, by the user's setting: important (default), all, watchlist, off."""
+    if mode == "off":
+        return False
+    if mode == "all":
+        return True
+    own = bool(symbol) and symbol.upper() in mine
+    if mode == "watchlist":
+        return own
+    return kind in ("summary", "letter") or own or (kind == "news" and bool(MOVING.search(title or "")))
+
+
+@router.get("/notifications/popups")
+def popups(feed_after: int | None = None, alert_after: int | None = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """New feed items and alerts since the ids the browser saw last, filtered by the pop-up settings.
+    Without the ids (first visit) it only returns the latest ids, so the first page load does not flood the screen."""
+    from sqlalchemy import func
+
+    from ..models import Alert
+    from .auth import load_prefs
+
+    prefs = load_prefs(db, user.id)
+    feed_last = db.scalar(select(func.max(FeedItem.id))) or 0
+    alert_last = db.scalar(select(func.max(Alert.id)).where(Alert.user_id == user.id)) or 0
+    feed, alerts = [], []
+    if feed_after is not None and prefs["popup_feed"] != "off":
+        mine = _my_symbols(db, user.id)
+        rows = db.scalars(select(FeedItem).where(FeedItem.id > feed_after).order_by(FeedItem.id.desc()).limit(100)).all()
+        feed = [{"id": r.id, "kind": r.kind, "symbol": r.symbol, "severity": r.severity, "title": r.title, "url": r.url}
+                for r in rows if popup_worthy(r.kind, r.symbol, r.title, prefs["popup_feed"], mine)][:20]
+    if alert_after is not None and prefs["popup_alerts"]:
+        rows = db.scalars(select(Alert).where(Alert.user_id == user.id, Alert.id > alert_after, Alert.read.is_(False))
+                          .order_by(Alert.id.desc()).limit(20)).all()
+        alerts = [{"id": a.id, "symbol": a.symbol, "severity": a.severity, "title": a.title} for a in rows]
+    return {"feed_last": feed_last, "alert_last": alert_last, "feed": feed, "alerts": alerts}
 
 
 @router.get("/feed/summary")

@@ -1,3 +1,4 @@
+import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -141,6 +142,20 @@ def _sentiment(db, symbol: str, user_id: int | None = None) -> dict:
     return {"votes": n, "bullish_pct": round(bull / n * 100) if n else None, "bearish_pct": round((n - bull) / n * 100) if n else None, "mine": mine}
 
 
+def _with_fundamentals(co: dict, funds: dict, price: float | None) -> dict:
+    """Fill the earnings per share and EPS growth the fair value needs from the screener's fundamentals when the company
+    overview lacks them (Yahoo's company details sometimes fail on servers; the screener data comes from Finnhub)."""
+    co = dict(co or {})
+    stats, prof = dict(co.get("stats") or {}), dict(co.get("profitability") or {})
+    pe = funds.get("pe")
+    if stats.get("eps_ttm") is None and pe and pe > 0 and price:
+        stats["eps_ttm"] = round(price / pe, 2)
+    if prof.get("eps_growth") is None and funds.get("eps_growth") is not None:
+        prof["eps_growth"] = funds["eps_growth"]
+    co["stats"], co["profitability"] = stats, prof
+    return co
+
+
 @router.get("/{symbol}/scorecard")
 def scorecard(symbol: str, user: User = Depends(current_user)):
     """Company's health (everyone; categories on Pro), fair value (label on Free, price on Pro) and members' sentiment."""
@@ -176,9 +191,14 @@ def scorecard(symbol: str, user: User = Depends(current_user)):
             sector_pe = row.get("sector_pe") if row else None
         except Exception:
             pass
+        co = _with_fundamentals(co, market_data.cached("fundamentals", sym) or {}, price)
         return {"health": health(co, sepa, st["stage"] if st else None), "fair_value": fair_value(co, price, sector_pe), "price": price}
 
-    data = market_data._fast(f"scorecard:{sym}", 6 * 3600, build)
+    key = f"scorecard:{sym}"
+    hit = market_data._fast_cache.get(key)
+    if hit and not (hit[1].get("fair_value") or {}).get("fair") and time.monotonic() - hit[0] > 900:
+        market_data._fast_cache.pop(key, None)  # no fair value yet (company data was missing): try again after 15 minutes
+    data = market_data._fast(key, 6 * 3600, build)
     h, fv = dict(data["health"]), dict(data["fair_value"])
     if not lim["sepa_details"]:
         h = {"score": h["score"], "label": h["label"], "categories_locked": True}

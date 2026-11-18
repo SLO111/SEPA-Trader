@@ -94,12 +94,14 @@ function Markets() {
 
   return (
     <div ref={scroller} className="h-full overflow-y-auto">
-      <div className={`mx-auto px-3 pb-6 pt-3 sm:px-6 sm:pt-6 ${tab === "heatmap" ? "max-w-none" : "max-w-7xl"}`}>
-        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+      {/* the title and tabs keep the same width on every tab; only the heatmap below spreads over the whole screen */}
+      <div className="px-3 pb-6 pt-3 sm:px-6 sm:pt-6">
+        <div className="mx-auto mb-4 flex max-w-7xl flex-wrap items-baseline justify-between gap-2">
           <h1 className="text-xl font-semibold">Markets</h1>
           {overview?.demo && <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-200">Demo data</span>}
         </div>
         <div className="sticky top-0 z-20 -mx-3 mb-5 bg-bg/95 px-3 backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="mx-auto max-w-7xl">
           <nav className="flex gap-1 overflow-x-auto border-b border-line">
             {TABS.map((t) => (
               <button
@@ -127,7 +129,9 @@ function Markets() {
               ))}
             </nav>
           )}
+          </div>
         </div>
+        <div className={tab === "heatmap" ? "" : "mx-auto max-w-7xl"}>
         {tab === "overview" &&
           (error ? (
             <p className="text-sm text-down">{error}</p>
@@ -156,6 +160,7 @@ function Markets() {
         {tab === "screener" && <ScreenerTab allowed={!!user?.limits.move_detector} initialPreset={preset} />}
         {tab === "groups" && <GroupsTab allowed={!!user?.limits.industry_groups} />}
         <p className="mt-6 text-xs text-muted">For educational purposes only. Not financial advice.</p>
+        </div>
       </div>
     </div>
   );
