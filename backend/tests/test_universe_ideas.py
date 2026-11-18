@@ -730,12 +730,14 @@ def test_training_budget_follows_free_memory(monkeypatch):
     from app import vnicorn_service as vs
 
     monkeypatch.setattr(memory, "limit_mb", lambda: 512)
+    monkeypatch.setattr(vs, "FIXED_MB_LOADED", 50)
+    monkeypatch.setattr(vs, "FIXED_MB_COLD", 50)  # same either way, whatever this test process has imported
     monkeypatch.setattr(memory, "rss_mb", lambda: 250)  # 262 MB free
     samples, free = vs.training_budget(3000)
     assert free == 262 and samples is not None and samples <= 3000
     monkeypatch.setattr(memory, "rss_mb", lambda: 300)  # 212 MB free: fewer samples
     fewer, _ = vs.training_budget(3000)
-    assert fewer is not None and fewer < samples or samples == 3000
+    assert fewer is not None and (fewer < samples or samples == 3000)
     monkeypatch.setattr(memory, "rss_mb", lambda: 440)  # 72 MB free: too little
     assert vs.training_budget(3000)[0] is None
 
@@ -846,3 +848,25 @@ def test_batch_waits_for_megacap_report(monkeypatch):
     assert ideas_service.due_for_ideas(None, at_1705)
     monkeypatch.setattr(ideas_service, "earnings_dates", lambda syms: {})
     assert ideas_service.due_for_ideas(None, at_1630)  # no big report: at the usual time
+
+
+def test_bad_bars_are_cleaned_and_scan_keeps_the_stock():
+    import numpy as np
+
+    from engine.scanner import scan_universe
+
+    p = SyntheticProvider()
+    df = p.history("NVDA").copy()
+    df.iloc[-1, df.columns.get_loc("close")] = np.nan  # an empty live bar
+    df.iloc[-50, df.columns.get_loc("close")] = 0.0  # a broken row
+    df.iloc[-20, df.columns.get_loc("high")] = np.nan
+    clean = ds.clean_prices(df)
+    assert clean["close"].notna().all() and (clean["close"] > 0).all() and clean["high"].notna().all()
+    s = ds.DataStore(SyntheticProvider, SessionLocal)
+    s.put_prices("ZNVD", df, persist=False)
+    assert s.get_prices("ZNVD")["close"].notna().all()
+    s.merge_bar("ZNVD", {"date": str(s.get_prices("ZNVD").index[-1].date()), "open": 1, "high": 1, "low": 1, "close": float("nan"), "volume": 0})
+    assert s.get_prices("ZNVD")["close"].notna().all()  # an empty live bar is ignored
+    hist = {"ZNVD": s.get_prices("ZNVD"), "AAPL": p.history("AAPL"), "MSFT": p.history("MSFT")}
+    rows = {r["symbol"]: r for r in scan_universe(lambda x: hist[x] if x in hist else p.history(x), list(hist))}
+    assert rows["ZNVD"]["rs_rating"] is not None and rows["ZNVD"]["bull_score"] is not None

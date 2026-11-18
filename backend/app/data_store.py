@@ -75,10 +75,25 @@ def df_to_obj(df: pd.DataFrame) -> dict:
     return json.loads(df.to_json(orient="split", date_format="iso"))
 
 
+def clean_prices(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop bars without a usable close (Yahoo sometimes sends empty or zero rows) and fill the other gaps, so one bad bar
+    can't break RS, the Trend Template or the scores for that stock."""
+    if df is None or df.empty:
+        return df
+    df = df[df["close"].notna() & (df["close"] > 0)]
+    if df.empty:
+        return df
+    df = df.copy()
+    for col in ("open", "high", "low"):
+        df[col] = df[col].where(df[col].notna() & (df[col] > 0), df["close"])
+    df["volume"] = df["volume"].fillna(0)
+    return df[~df.index.duplicated(keep="last")].sort_index()
+
+
 def obj_to_df(obj: dict) -> pd.DataFrame:
     df = pd.read_json(io.StringIO(json.dumps(obj)), orient="split")
     df.index = pd.DatetimeIndex(pd.to_datetime(df.index).tz_localize(None).normalize(), name="date")
-    return df[["open", "high", "low", "close", "volume"]].astype(float)
+    return clean_prices(df[["open", "high", "low", "close", "volume"]].astype(float))
 
 
 class DataStore:
@@ -170,6 +185,9 @@ class DataStore:
             return self.prices.get(symbol)
 
     def put_prices(self, symbol: str, df: pd.DataFrame, persist: bool = True) -> None:
+        df = clean_prices(df)
+        if df is None or df.empty:
+            return
         with self._lock:
             self.prices[symbol] = df
             self.updated[f"prices:{symbol}"] = _now()
@@ -206,6 +224,9 @@ class DataStore:
                 return
             day = pd.Timestamp(bar["date"])
             if day < df.index[-1]:
+                return
+            c = bar.get("close")
+            if c is None or c != c or c <= 0:  # an empty live bar would wipe out today's row
                 return
             row = pd.DataFrame([{k: bar[k] for k in ("open", "high", "low", "close", "volume")}], index=pd.DatetimeIndex([day], name="date"))
             self.prices[symbol] = pd.concat([df[df.index < day], row])
