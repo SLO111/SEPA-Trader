@@ -51,37 +51,48 @@ function NewsSetting() {
   );
 }
 
-type Regen = { running: boolean; generated: number | null; scanned: number | null; error: string | null; finished_at: string | null };
+type Regen = {
+  running: boolean; interrupted?: boolean; stage?: string; started_at?: string; stage_at?: string; finished_at?: string | null;
+  generated?: number | null; scanned?: number | null; error?: string | null;
+};
 
-/** Admin only: rebuild Move Detector and today's trade ideas (vnicornAI ratings included) from the last close.
- *  Everyone else gets them automatically after each market close. */
+const mmss = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/** Admin only: rebuild Move Detector and the trade ideas (vnicornAI ratings included) from the last close.
+ *  Everyone else gets them automatically after each market close. Shows the current step and the time elapsed. */
 function RegenerateSignals() {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [st, setSt] = useState<Regen | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [err, setErr] = useState("");
+  const poll = () => {
+    clearApiCache();
+    return api<Regen>("/api/ideas/regenerate").then(setSt).catch(() => {});
+  };
   useEffect(() => {
-    api<Regen>("/api/ideas/regenerate").then((st) => st.running && setMsg("A regeneration is already running…")).catch(() => {});
+    poll();
   }, []);
+  useEffect(() => {
+    if (!st?.running) return;
+    const t1 = setInterval(poll, 5000);
+    const t2 = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      clearInterval(t1);
+      clearInterval(t2);
+    };
+  }, [st?.running]);
   const run = async () => {
-    setBusy(true);
-    setMsg("Regenerating Move Detector and trade ideas from the last close… this takes a minute or two.");
+    setErr("");
     try {
-      await post("/api/ideas/regenerate", {});
-      for (let i = 0; i < 120; i++) {
-        await new Promise((r) => setTimeout(r, 5000));
-        clearApiCache();
-        const st = await api<Regen>("/api/ideas/regenerate");
-        if (!st.running) {
-          setMsg(st.error ? `Failed: ${st.error}` : `Done: Move Detector rescanned ${st.scanned ?? 0} stocks, ${st.generated ?? 0} new trade ideas.`);
-          break;
-        }
-      }
-      clearApiCache();
+      setSt(await post<Regen>("/api/ideas/regenerate", {}));
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setErr(e instanceof Error ? e.message : String(e));
     }
   };
+  const elapsed = st?.started_at ? now - new Date(st.started_at).getTime() : 0;
+  const took = st?.started_at && st?.finished_at ? new Date(st.finished_at).getTime() - new Date(st.started_at).getTime() : 0;
   return (
     <div className="mb-8 rounded-xl border border-line bg-panel p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -89,13 +100,33 @@ function RegenerateSignals() {
           <h2 className="font-semibold">Regenerate signals</h2>
           <p className="text-xs text-muted">
             Rebuilds Move Detector and the trade ideas (with vnicornAI) from the last market close. Users get them automatically after each close.
+            Usually 5–15 minutes on the free server (longer when vnicornAI retrains).
           </p>
         </div>
-        <button onClick={run} disabled={busy} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
-          {busy ? "Regenerating…" : "Regenerate now"}
+        <button onClick={run} disabled={!!st?.running} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
+          {st?.running ? "Regenerating…" : "Regenerate now"}
         </button>
       </div>
-      {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
+      {st?.running && (
+        <p className="mt-2 flex items-center gap-2 text-xs text-text">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+          {st.stage ?? "Starting"}… <span className="tabular text-muted">{mmss(elapsed)}</span>
+        </p>
+      )}
+      {!st?.running && st?.interrupted && (
+        <p className="mt-2 text-xs text-amber-300">
+          The server restarted during the last regeneration (at “{st.stage}”), often because it ran low on memory. Try again, or lower
+          VNICORN_SAMPLES / VNICORN_TRAIN_STOCKS in Render.
+        </p>
+      )}
+      {!st?.running && !st?.interrupted && st?.finished_at && (
+        <p className={`mt-2 text-xs ${st.error ? "text-down" : "text-muted"}`}>
+          {st.error
+            ? `Failed at “${st.stage}”: ${st.error}`
+            : `Last run: Move Detector rescanned ${st.scanned ?? 0} stocks, ${st.generated ?? 0} new trade ideas, in ${mmss(took)} (${new Date(st.finished_at).toLocaleString("en-US")}).`}
+        </p>
+      )}
+      {err && <p className="mt-2 text-xs text-down">{err}</p>}
     </div>
   );
 }

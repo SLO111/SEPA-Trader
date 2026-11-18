@@ -698,3 +698,27 @@ def test_scan_order_ai_default_and_columns(client, register, monkeypatch):
     assert r2["order"] == "bull"
     b = [x["bull_score"] or 0 for x in r2["results"]]
     assert b == sorted(b, reverse=True)
+
+
+def test_regenerate_stages_and_interrupted_status(monkeypatch):
+    from app import app_settings, regen_status
+    from app.models import AppSetting
+
+    regen_status.start()
+    regen_status.stage("Scanning Move Detector")
+    regen_status.stage("Building trade ideas")
+    st = regen_status.status()
+    assert st["running"] and st["stage"] == "Building trade ideas" and [x["stage"] for x in st["stages"]] == ["Scanning Move Detector", "Building trade ideas"]
+    # a restart: the job is gone from this process, the database still says running
+    regen_status._alive.clear()
+    st2 = regen_status.status()
+    assert st2["interrupted"] and not st2["running"] and st2["stage"] == "Building trade ideas"
+    regen_status.start()
+    regen_status.finish(generated=4, scanned=36)
+    st3 = regen_status.status()
+    assert not st3["running"] and not st3["interrupted"] and st3["generated"] == 4 and st3["stage"] == "Done"
+    regen_status.stage("ignored")  # no job running: no-op
+    assert regen_status.status()["stage"] == "Done"
+    with SessionLocal() as db:
+        db.query(AppSetting).filter_by(key=regen_status.KEY).delete()
+        db.commit()

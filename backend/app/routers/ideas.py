@@ -118,19 +118,14 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     }
 
 
-_regen: dict = {"running": False, "started_at": None, "finished_at": None, "generated": None, "scanned": None, "error": None}
-
-
 def _regenerate_job() -> None:
-    from datetime import datetime, timezone
-
+    from .. import market_data, regen_status
     from ..db import SessionLocal
+    from . import sepa
 
     try:
-        from .. import market_data
-        from . import sepa
-
         # Move Detector first: a fresh scan from the last close (RS, Trend Template, Bull / Bear scores)
+        regen_status.stage("Scanning Move Detector")
         market_data._tls.rebuilding = True
         try:
             sepa.invalidate_scan()
@@ -138,18 +133,18 @@ def _regenerate_job() -> None:
         finally:
             market_data._tls.rebuilding = False
         # then the ideas, with vnicornAI's ratings and its major-move probabilities (shown in Move Detector)
+        regen_status.stage("Building trade ideas")
         with SessionLocal() as db:
             rows = run_ideas(db, force=True)
+            regen_status.stage("Updating idea statuses")
             refresh_statuses(db)
         market_data.mark_stale()
-        _regen.update(generated=len(rows), scanned=scanned, error=None)
+        regen_status.finish(generated=len(rows), scanned=scanned)
     except Exception as e:
         import logging
 
         logging.getLogger("sepa.ideas").exception("Regenerate failed")
-        _regen.update(error=f"{type(e).__name__}: {str(e)[:150]}")
-    finally:
-        _regen.update(running=False, finished_at=datetime.now(timezone.utc).isoformat())
+        regen_status.finish(error=f"{type(e).__name__}: {str(e)[:150]}")
 
 
 @router.post("/ideas/regenerate")
@@ -157,21 +152,23 @@ def regenerate(_: User = Depends(admin_user)):
     """Admin: rebuild Move Detector and the latest ideas batch from the last completed close, in the background
     (a few minutes over the whole universe). Users otherwise get them automatically after each close."""
     import threading
-    from datetime import datetime, timezone
 
+    from .. import regen_status
     from ..ideas_service import _data_ready
 
     if not _data_ready():
         raise HTTPException(409, "Market data is still loading after a restart. Try again in a few minutes.")
-    if not _regen["running"]:
-        _regen.update(running=True, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None, generated=None, scanned=None, error=None)
+    if not regen_status.running_here():
+        regen_status.start()
         threading.Thread(target=_regenerate_job, name="ideas-regenerate", daemon=True).start()
-    return {"started": True, **_regen}
+    return {"started": True, **regen_status.status()}
 
 
 @router.get("/ideas/regenerate")
 def regenerate_status(_: User = Depends(admin_user)):
-    return dict(_regen)
+    from .. import regen_status
+
+    return regen_status.status()
 
 
 @router.get("/feed")

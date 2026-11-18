@@ -109,6 +109,9 @@ def ensure_trained(db: Session, hist: dict[str, pd.DataFrame], bench: pd.DataFra
         return bundle
     trades = real_trades(db, hist)
     log.info("Training vnicornAI on %d stocks and %d real trades", len(subset), len(trades))
+    from . import regen_status
+
+    regen_status.stage(f"Training vnicornAI on {len(subset)} stocks")
     global last_error
     try:
         import gc
@@ -132,9 +135,13 @@ def rate_and_create(db: Session, day, hist: dict[str, pd.DataFrame], bench: pd.D
     """Rate today's ideas, publish vnicornAI's own ideas (only if the model passed its walk-forward test),
     and refresh the major-move probabilities. Returns the new AI ideas."""
     global _move
+    from . import regen_status
+
+    regen_status.stage("Checking the vnicornAI model")
     bundle = ensure_trained(db, hist, bench)
     if bundle is None:
         return []
+    regen_status.stage("vnicornAI rating ideas and move probabilities")
     feats: dict[str, pd.DataFrame] = {}
 
     def f(sym: str) -> pd.DataFrame | None:

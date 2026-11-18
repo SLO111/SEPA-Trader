@@ -204,6 +204,10 @@ def health():
             ideas = {"last_batch": lb.isoformat() if lb else None, "due": due_for_ideas(db),
                      "vnicorn": {"trained": st.get("trained"), "stocks": st.get("symbols"), "trained_at": st.get("trained_at"),
                                  "error": vs.last_error}}
+            from . import regen_status
+
+            rs = regen_status.status()
+            ideas["regenerate"] = {k: rs.get(k) for k in ("running", "stage", "started_at", "finished_at", "generated", "error", "interrupted")}
     except Exception:
         ideas = None
     return {"status": "ok", "data_provider": settings.data_provider, "universe_size": len(SYMBOLS), "config": config, "market_data": data,
