@@ -8,7 +8,7 @@ import { Fragment, useEffect, useState } from "react";
 import { LoadMoreRow, ShowingCount, useShowMore } from "@/lib/useInfinite";
 import AppShell from "@/components/AppShell";
 import VnicornAICard from "@/components/VnicornAICard";
-import { ApiError, api, clearApiCache, post } from "@/lib/api";
+import { ApiError, api, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmt, pct, tone } from "@/lib/format";
 
@@ -56,31 +56,6 @@ function Ideas() {
   const [view, setView] = useState<"open" | "closed" | "all">("open");
   const [data, setData] = useState<Resp | null>(null);
   const [locked, setLocked] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [regenMsg, setRegenMsg] = useState("");
-  type Regen = { running: boolean; generated: number | null; error: string | null };
-  const regenerate = async () => {
-    setBusy(true);
-    setRegenMsg("Regenerating… new ideas appear in a minute or two.");
-    try {
-      await post("/api/ideas/regenerate", {});
-      for (let i = 0; i < 120; i++) {  // up to 10 minutes
-        await new Promise((r) => setTimeout(r, 5000));
-        clearApiCache();
-        const st = await api<Regen>("/api/ideas/regenerate");
-        if (!st.running) {
-          setRegenMsg(st.error ? `Regenerate failed: ${st.error}` : `Done: ${st.generated ?? 0} new ideas.`);
-          break;
-        }
-      }
-      clearApiCache();
-      await load();
-    } catch (e) {
-      setRegenMsg(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
   const [open, setOpen] = useState<number | null>(null);
   const [tf, setTf] = useState<"ALL" | "AIPICKS" | "SWING" | "TRADE" | "INVEST" | "SHORT" | "AI">("ALL");
   const [sector, setSector] = useState("");
@@ -155,16 +130,6 @@ function Ideas() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             {data?.updated && <span className="text-xs text-muted">Updated for {data.updated} close</span>}
-            {user?.role === "admin" && (
-              <button
-                disabled={busy}
-                onClick={regenerate}
-                className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-text disabled:opacity-50"
-              >
-                {busy ? "Regenerating…" : "Regenerate now"}
-              </button>
-            )}
-            {regenMsg && <span className="basis-full text-right text-xs text-muted">{regenMsg}</span>}
           </div>
         </div>
 

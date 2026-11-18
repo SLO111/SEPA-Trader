@@ -15,6 +15,7 @@ import { ApiError, api, post } from "@/lib/api";
 import type { ScanRow } from "@/lib/types";
 
 type Tab = "bull" | "bear" | "rs" | "ai";
+type Order = "ai" | "bull" | "bear" | "rs" | "tt" | "change" | "price" | "pivot" | "symbol";
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "bull", label: "Upside candidates", hint: "Stocks set up for a major move up (Bull Score)." },
   { id: "bear", label: "Downside risk", hint: "Stocks showing signs of deterioration (Bear Score)." },
@@ -30,13 +31,31 @@ function Scanner() {
   const [templateOnly, setTemplateOnly] = useState(false);
   const [vcpOnly, setVcpOnly] = useState(false);
   const [locked, setLocked] = useState("");
-  const qs = new URLSearchParams({ sort: tab, min_score: String(minScore), template_only: String(templateOnly), vcp_only: String(vcpOnly), limit: "50" }).toString();
+  // order: vnicornAI by default when it has rated the stocks (the server decides), else the tab's score; headers sort manually
+  const [order, setOrder] = useState<{ key: Order; dir: "asc" | "desc" } | null>(null);
+  useEffect(() => setOrder(null), [tab]);
+  const qs = new URLSearchParams({
+    sort: tab, min_score: String(minScore), template_only: String(templateOnly), vcp_only: String(vcpOnly), limit: "50",
+    order: order?.key ?? "default", dir: order?.dir ?? "desc",
+  }).toString();
   const scan = useInfiniteServer<ScanRow>(
-    (offset) => api<{ results: ScanRow[]; count: number; has_more: boolean }>(`/api/sepa/scan?${qs}&offset=${offset}`),
+    (offset) => api<{ results: ScanRow[]; count: number; has_more: boolean; order?: Order; dir?: "asc" | "desc" }>(`/api/sepa/scan?${qs}&offset=${offset}`),
     qs,
     (r) => r.symbol,
   );
   const rows = scan.rows ?? [];
+  const active = order?.key ?? scan.order;
+  const activeDir = order?.dir ?? scan.dir ?? "desc";
+  const clickSort = (k: Order) =>
+    setOrder(active === k ? { key: k, dir: activeDir === "desc" ? "asc" : "desc" } : { key: k, dir: k === "symbol" || k === "pivot" ? "asc" : "desc" });
+  const Th = ({ k, label, title, left = false }: { k: Order; label: string; title?: string; left?: boolean }) => (
+    <th className={`px-4 py-3 ${left ? "" : "text-right"}`} title={title}>
+      <button onClick={() => clickSort(k)} className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-text ${active === k ? "text-text" : ""}`}>
+        {label}
+        <span className="w-2 text-[9px]">{active === k ? (activeDir === "asc" ? "▲" : "▼") : ""}</span>
+      </button>
+    </th>
+  );
   const loading = scan.rows === null && !scan.error;
   const error = scan.error && !(scan.error instanceof ApiError && scan.error.status === 403) ? (scan.error as Error).message : "";
   useEffect(() => {
@@ -128,15 +147,15 @@ function Scanner() {
           <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">
               <tr>
-                <th className="px-4 py-3">Symbol</th>
-                <th className="px-4 py-3 text-right">Price</th>
-                <th className="px-4 py-3 text-right">Chg.</th>
-                <th className="px-4 py-3">Bull</th>
-                <th className="px-4 py-3">Bear</th>
-                <th className="px-4 py-3 text-right" title="vnicornAI: chance of +20% before -10% within 3 months">AI +20%</th>
-                <th className="px-4 py-3 text-right">RS</th>
-                <th className="px-4 py-3 text-right">TT</th>
-                <th className="px-4 py-3 text-right">Pivot</th>
+                <Th k="symbol" label="Symbol" left />
+                <Th k="price" label="Price" />
+                <Th k="change" label="Chg." />
+                <Th k="bull" label="Bull" left />
+                <Th k="bear" label="Bear" left />
+                <Th k="ai" label="AI +20%" title="vnicornAI: chance of +20% before -10% within 3 months" />
+                <Th k="rs" label="RS" />
+                <Th k="tt" label="TT" />
+                <Th k="pivot" label="Pivot" title="Distance to the VCP pivot" />
                 <th className="hidden px-4 py-3 2xl:table-cell">Signals</th>
                 <th className="px-3 py-3" title="Confirmations / warnings over the last 10 days">Pulse 10d</th>
                 <th className="sticky right-0 z-[1] bg-panel px-3 py-3" />

@@ -276,7 +276,8 @@ def test_ideas_use_completed_sessions_only():
     assert _completed_sessions({"X": df}, after)["X"].index[-1] == pd.Timestamp("2026-11-17")
 
 
-def test_forced_regenerate_keeps_triggered_and_taken_ideas(monkeypatch):
+def test_forced_regenerate_keeps_triggered_and_taken_ideas(monkeypatch, register):
+    register("regen-keep@test.ro")  # a user to own the taken trade
     from datetime import date
 
     from app import ideas_service
@@ -671,3 +672,29 @@ def test_scan_and_alerts_pages(client, register):
     a2 = client.get("/api/alerts?offset=50&limit=50", headers=h).json()
     assert len(a2["results"]) == 10 and not a2["has_more"]
     assert isinstance(client.get("/api/alerts", headers=h).json(), list)  # without offset: the plain list, as before
+
+
+def test_scan_order_ai_default_and_columns(client, register, monkeypatch):
+    from app import vnicorn_service
+    from app.models import User
+
+    h, _ = register("scan-order@test.ro")
+    with SessionLocal() as db:
+        db.query(User).filter_by(email="scan-order@test.ro").one().plan = "premium"
+        db.commit()
+    syms = [r["symbol"] for r in client.get("/api/sepa/scan?limit=200", headers=h).json()["results"]]
+    probs = {s: (i % 10) / 10 for i, s in enumerate(syms)}
+    monkeypatch.setattr(vnicorn_service, "move_prob", lambda s: probs.get(s))
+    r = client.get("/api/sepa/scan?limit=200", headers=h).json()
+    assert r["order"] == "ai"
+    ai = [x["ai_prob"] for x in r["results"]]
+    assert ai == sorted(ai, reverse=True)
+    rs = client.get("/api/sepa/scan?limit=200&order=rs&dir=asc", headers=h).json()["results"]
+    vals = [x["rs_rating"] for x in rs if x["rs_rating"] is not None]
+    assert vals == sorted(vals)
+    # without vnicornAI ratings: the tab's score
+    monkeypatch.setattr(vnicorn_service, "move_prob", lambda s: None)
+    r2 = client.get("/api/sepa/scan?limit=200", headers=h).json()
+    assert r2["order"] == "bull"
+    b = [x["bull_score"] or 0 for x in r2["results"]]
+    assert b == sorted(b, reverse=True)

@@ -8,21 +8,28 @@ import AppShell from "@/components/AppShell";
 import Locked from "@/components/Locked";
 import { ApiError, api } from "@/lib/api";
 import { pct, tone } from "@/lib/format";
+import { SortTh, useSort } from "@/lib/useSort";
 
 type Row = { symbol: string; name: string; sector: string; conf: number; warn: number; net: number; tone: string; price: number | null; change_pct: number | null };
 type Resp = { constructive: Row[]; warning: Row[]; count: number };
 
-function Table({ rows, kind }: { rows: Row[]; kind: "constructive" | "warning" }) {
+function Table({ rows: input, kind }: { rows: Row[]; kind: "constructive" | "warning" }) {
+  // default: most confirmations (or most warnings) first; Stock, Price, Today and the count sort on click
+  const srt = useSort(input, {
+    symbol: (r: Row) => r.symbol, price: (r: Row) => r.price, change: (r: Row) => r.change_pct,
+    net: (r: Row) => (kind === "constructive" ? r.net : -r.net),
+  }, "net");
+  const rows = srt.sorted;
   const max = Math.max(1, ...rows.map((r) => Math.max(r.conf, r.warn)));
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[520px] text-sm">
         <thead className="text-left text-[11px] uppercase tracking-wide text-muted">
           <tr>
-            <th className="py-2 pl-1">Stock</th>
-            <th className="py-2 text-right">Price</th>
-            <th className="py-2 text-right">Today</th>
-            <th className="w-44 py-2 pl-4">Confirmations / warnings</th>
+            <SortTh k="symbol" label="Stock" sort={srt.sort} onClick={srt.click} text className="py-2 pl-1" />
+            <SortTh k="price" label="Price" sort={srt.sort} onClick={srt.click} right className="py-2" />
+            <SortTh k="change" label="Today" sort={srt.sort} onClick={srt.click} right className="py-2" />
+            <SortTh k="net" label="Confirmations / warnings" sort={srt.sort} onClick={srt.click} className="w-44 py-2 pl-4" />
           </tr>
         </thead>
         <tbody>

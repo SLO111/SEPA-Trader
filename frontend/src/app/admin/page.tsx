@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { api, patch } from "@/lib/api";
+import { api, clearApiCache, patch, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
@@ -51,6 +51,55 @@ function NewsSetting() {
   );
 }
 
+type Regen = { running: boolean; generated: number | null; scanned: number | null; error: string | null; finished_at: string | null };
+
+/** Admin only: rebuild Move Detector and today's trade ideas (vnicornAI ratings included) from the last close.
+ *  Everyone else gets them automatically after each market close. */
+function RegenerateSignals() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    api<Regen>("/api/ideas/regenerate").then((st) => st.running && setMsg("A regeneration is already running…")).catch(() => {});
+  }, []);
+  const run = async () => {
+    setBusy(true);
+    setMsg("Regenerating Move Detector and trade ideas from the last close… this takes a minute or two.");
+    try {
+      await post("/api/ideas/regenerate", {});
+      for (let i = 0; i < 120; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        clearApiCache();
+        const st = await api<Regen>("/api/ideas/regenerate");
+        if (!st.running) {
+          setMsg(st.error ? `Failed: ${st.error}` : `Done: Move Detector rescanned ${st.scanned ?? 0} stocks, ${st.generated ?? 0} new trade ideas.`);
+          break;
+        }
+      }
+      clearApiCache();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mb-8 rounded-xl border border-line bg-panel p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-semibold">Regenerate signals</h2>
+          <p className="text-xs text-muted">
+            Rebuilds Move Detector and the trade ideas (with vnicornAI) from the last market close. Users get them automatically after each close.
+          </p>
+        </div>
+        <button onClick={run} disabled={busy} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
+          {busy ? "Regenerating…" : "Regenerate now"}
+        </button>
+      </div>
+      {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
+    </div>
+  );
+}
+
 const money = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 function AdminPanel() {
@@ -94,6 +143,7 @@ function AdminPanel() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
         <h1 className="mb-6 text-xl font-semibold">Admin panel</h1>
+        <RegenerateSignals />
         <NewsSetting />
         <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
           {tiles.map((t) => (

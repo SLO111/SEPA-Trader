@@ -19,7 +19,7 @@ export function useSentinel(onVisible: () => void, active: boolean) {
   return ref;
 }
 
-type Page<T> = { results: T[]; count: number; has_more: boolean; loading?: { ready: number; total: number } | null };
+type Page<T> = { results: T[]; count: number; has_more: boolean; loading?: { ready: number; total: number } | null; order?: string; dir?: "asc" | "desc" };
 
 /** A list paged by the server: 50 rows first, the next 50 when you scroll to the end. `key` changes reset it. */
 export function useInfiniteServer<T>(fetchPage: (offset: number) => Promise<Page<T>>, key: string, idOf: (row: T) => string | number) {
@@ -29,6 +29,7 @@ export function useInfiniteServer<T>(fetchPage: (offset: number) => Promise<Page
   const [loadingMore, setLoadingMore] = useState(false);
   const [warming, setWarming] = useState<Page<T>["loading"]>(null);
   const [error, setError] = useState<unknown>(null);
+  const [meta, setMeta] = useState<{ order?: string; dir?: "asc" | "desc" }>({});
   const req = useRef(0);
   const fetchRef = useRef(fetchPage);
   fetchRef.current = fetchPage;
@@ -45,6 +46,7 @@ export function useInfiniteServer<T>(fetchPage: (offset: number) => Promise<Page
           setTotal(r.count);
           setHasMore(r.has_more);
           setWarming(r.loading ?? null);
+          setMeta({ order: r.order, dir: r.dir });
         })
         .catch((e) => id === req.current && setError(e));
     }, 150);
@@ -69,7 +71,7 @@ export function useInfiniteServer<T>(fetchPage: (offset: number) => Promise<Page
       .finally(() => setLoadingMore(false));
   };
   const sentinel = useSentinel(loadMore, hasMore);
-  return { rows, setRows, total, hasMore, loadingMore, loadMore, sentinel, warming, error };
+  return { rows, setRows, total, hasMore, loadingMore, loadMore, sentinel, warming, error, order: meta.order, dir: meta.dir };
 }
 
 /** A list already fetched in full: shows 50, then 50 more each time the end scrolls into view. */

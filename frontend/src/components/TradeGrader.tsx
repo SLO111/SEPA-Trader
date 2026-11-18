@@ -2,6 +2,7 @@
 
 import ExportButton from "@/components/ExportButton";
 import { LoadMoreRow, ShowingCount, useShowMore } from "@/lib/useInfinite";
+import { SortTh, useSort } from "@/lib/useSort";
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -71,15 +72,28 @@ function TradeChart({ t }: { t: Graded }) {
 function GradeTable({ rows, open, setOpen, noted, onNote, stickyTop }: {
   rows: Graded[]; open: string | null; setOpen: (v: string | null) => void; noted?: Set<string>; onNote?: () => void; stickyTop: string;
 }) {
-  const page = useShowMore(rows, String(rows.length > 0 ? rows[0].ref : "")); // 50 trades at a time
+  // default: newest trades first; Grade, Ticker, Entry, Exit, Result and Left on table sort on click
+  const GRADE: Record<string, number> = { "A+": 6, A: 5, B: 4, C: 3, D: 2, F: 1 };
+  const srt = useSort(rows, {
+    grade: (t: Graded) => (t.grade ? GRADE[t.grade] ?? 0 : null), ticker: (t: Graded) => t.symbol,
+    entry: (t: Graded) => t.entry_date, exit: (t: Graded) => t.exit_date ?? "9999", result: (t: Graded) => t.r_multiple ?? t.pnl_pct ?? null,
+    left: (t: Graded) => t.left_on_table_pct ?? null, recent: (t: Graded) => t.exit_date ?? t.entry_date,
+  }, "recent");
+  const page = useShowMore(srt.sorted, `${rows.length}|${srt.resetKey}`); // 50 trades at a time
   return (
           <div className="overflow-x-auto rounded-xl border border-line lg:overflow-visible">
             <table className="w-full min-w-[820px] text-sm">
               <thead className={`sticky z-[5] bg-panel text-left text-[11px] uppercase tracking-wide text-muted shadow-[0_1px_0_var(--color-line)] ${stickyTop}`}>
                 <tr>
-                  {["Grade", "Ticker", "Source", "Entry", "Exit", "Result", "Buy timing", "Sell timing", "Left on table"].map((h) => (
-                    <th key={h} className={`px-3 py-2.5 ${["Result", "Left on table"].includes(h) ? "text-right" : ""}`}>{h}</th>
-                  ))}
+                  {["Grade", "Ticker", "Source", "Entry", "Exit", "Result", "Buy timing", "Sell timing", "Left on table"].map((h) => {
+                    const k = ({ Grade: "grade", Ticker: "ticker", Entry: "entry", Exit: "exit", Result: "result", "Left on table": "left" } as Record<string, "grade" | "ticker" | "entry" | "exit" | "result" | "left">)[h];
+                    const right = ["Result", "Left on table"].includes(h);
+                    return k ? (
+                      <SortTh key={h} k={k} label={h} sort={srt.sort} onClick={srt.click} right={right} text={k === "ticker"} className="px-3 py-2.5" />
+                    ) : (
+                      <th key={h} className="px-3 py-2.5">{h}</th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>

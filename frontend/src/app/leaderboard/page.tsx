@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { LoadMoreRow, ShowingCount, useShowMore } from "@/lib/useInfinite";
+import { SortTh, useSort } from "@/lib/useSort";
 import PublicShell from "@/components/PublicShell";
 import { api, del, post, put } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -15,7 +16,12 @@ export default function LeaderboardPage() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<"month" | "90d" | "all">("month");
   const [rows, setRows] = useState<Row[] | null>(null);
-  const page = useShowMore(rows, period); // 50 traders at a time, the next 50 on scroll
+  // default: best total R first; every numeric column sorts on click
+  const srt = useSort(rows, {
+    rank: (r: Row) => r.rank, name: (r: Row) => r.display_name, trades: (r: Row) => r.trades, win: (r: Row) => r.win_rate,
+    avg: (r: Row) => r.avg_r, total: (r: Row) => r.total_r, copiers: (r: Row) => r.followers,
+  }, "total");
+  const page = useShowMore(srt.sorted, `${period}|${srt.resetKey}`); // 50 traders at a time, the next 50 on scroll
   const [me, setMe] = useState<Me | null>(null);
   const [name, setName] = useState("");
   const [msg, setMsg] = useState("");
@@ -90,8 +96,16 @@ export default function LeaderboardPage() {
           <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-panel text-left text-[11px] uppercase tracking-wide text-muted">
-                <tr><th className="px-3 py-2.5">#</th><th className="px-3 py-2.5">Trader</th><th className="px-3 py-2.5 text-right">Trades</th><th className="px-3 py-2.5 text-right">Win rate</th>
-                  <th className="px-3 py-2.5 text-right">Avg</th><th className="px-3 py-2.5 text-right">Total</th><th className="px-3 py-2.5 text-right">Copiers</th><th className="px-3 py-2.5" /></tr>
+                <tr>
+                  <SortTh k="rank" label="#" sort={srt.sort} onClick={srt.click} text className="px-3 py-2.5" />
+                  <SortTh k="name" label="Trader" sort={srt.sort} onClick={srt.click} text className="px-3 py-2.5" />
+                  <SortTh k="trades" label="Trades" sort={srt.sort} onClick={srt.click} right className="px-3 py-2.5" />
+                  <SortTh k="win" label="Win rate" sort={srt.sort} onClick={srt.click} right className="px-3 py-2.5" />
+                  <SortTh k="avg" label="Avg" sort={srt.sort} onClick={srt.click} right className="px-3 py-2.5" />
+                  <SortTh k="total" label="Total" sort={srt.sort} onClick={srt.click} right className="px-3 py-2.5" />
+                  <SortTh k="copiers" label="Copiers" sort={srt.sort} onClick={srt.click} right className="px-3 py-2.5" />
+                  <th className="px-3 py-2.5" />
+                </tr>
               </thead>
               <tbody>
                 {rows === null && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted">Loading…</td></tr>}

@@ -118,7 +118,7 @@ def ideas(view: Literal["open", "closed", "all"] = "open", user: User = Depends(
     }
 
 
-_regen: dict = {"running": False, "started_at": None, "finished_at": None, "generated": None, "error": None}
+_regen: dict = {"running": False, "started_at": None, "finished_at": None, "generated": None, "scanned": None, "error": None}
 
 
 def _regenerate_job() -> None:
@@ -127,10 +127,22 @@ def _regenerate_job() -> None:
     from ..db import SessionLocal
 
     try:
+        from .. import market_data
+        from . import sepa
+
+        # Move Detector first: a fresh scan from the last close (RS, Trend Template, Bull / Bear scores)
+        market_data._tls.rebuilding = True
+        try:
+            sepa.invalidate_scan()
+            scanned = len(sepa.cached_scan())
+        finally:
+            market_data._tls.rebuilding = False
+        # then the ideas, with vnicornAI's ratings and its major-move probabilities (shown in Move Detector)
         with SessionLocal() as db:
             rows = run_ideas(db, force=True)
             refresh_statuses(db)
-        _regen.update(generated=len(rows), error=None)
+        market_data.mark_stale()
+        _regen.update(generated=len(rows), scanned=scanned, error=None)
     except Exception as e:
         import logging
 
@@ -142,7 +154,8 @@ def _regenerate_job() -> None:
 
 @router.post("/ideas/regenerate")
 def regenerate(_: User = Depends(admin_user)):
-    """Rebuild the latest batch in the background (it can take a few minutes over the whole universe)."""
+    """Admin: rebuild Move Detector and the latest ideas batch from the last completed close, in the background
+    (a few minutes over the whole universe). Users otherwise get them automatically after each close."""
     import threading
     from datetime import datetime, timezone
 
@@ -151,7 +164,7 @@ def regenerate(_: User = Depends(admin_user)):
     if not _data_ready():
         raise HTTPException(409, "Market data is still loading after a restart. Try again in a few minutes.")
     if not _regen["running"]:
-        _regen.update(running=True, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None, generated=None, error=None)
+        _regen.update(running=True, started_at=datetime.now(timezone.utc).isoformat(), finished_at=None, generated=None, scanned=None, error=None)
         threading.Thread(target=_regenerate_job, name="ideas-regenerate", daemon=True).start()
     return {"started": True, **_regen}
 

@@ -120,9 +120,12 @@ def scan(
     vcp_only: bool = False,
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    order: Literal["default", "ai", "bull", "bear", "rs", "tt", "change", "price", "pivot", "symbol"] = "default",
+    dir: Literal["asc", "desc"] = "desc",
     user: User = Depends(current_user),
 ):
-    """One page of the scan (50 by default), best first for the chosen tab."""
+    """One page of the scan (50 by default). Order: vnicornAI's major-move probability by default when the plan has it
+    (and the model has rated the stocks), otherwise the tab's score; any column can be chosen with `order`."""
     if not limits_for(user)["move_detector"]:
         raise HTTPException(403, "Move Detector and the scanner are available on Pro and Premium plans.")
     from .. import vnicorn_service
@@ -143,11 +146,26 @@ def scan(
         and (not template_only or r["template_passed"] == 8)
         and (not vcp_only or r["vcp"])
     ]
-    out.sort(key=lambda r: -(r[key] or 0))
+    col = {"ai": "ai_prob", "bull": "bull_score", "bear": "bear_score", "rs": "rs_rating", "tt": "template_passed",
+           "change": "change_pct", "price": "price", "pivot": "pivot_distance_pct", "symbol": "symbol"}
+    if order == "default":
+        rated = ai and sum(1 for r in out if r.get("ai_prob") is not None) >= max(1, len(out) // 2)
+        order, dir = ("ai" if rated else sort), "desc"
+    if order == "ai" and not ai:
+        order = sort
+    c = col[order]
+    has = [r for r in out if r.get(c) is not None]
+    out_missing = [r for r in out if r.get(c) is None]  # empty values always last
+    tie = lambda r: (r.get(key) or 0, r.get("rs_rating") or 0)  # noqa: E731 - ties: the tab's score, then RS
+    if c == "symbol":
+        has.sort(key=lambda r: r["symbol"], reverse=dir == "desc")
+    else:
+        has.sort(key=lambda r: (r[c], *tie(r)), reverse=dir == "desc")
+    out = has + sorted(out_missing, key=tie, reverse=True)
     # Pulse and the earnings badge only for the rows on this page
     page = [{**r, "pulse": pm.get(r["symbol"]), "earnings_in": market_data.earnings_in_days(r["symbol"])} for r in out[offset:offset + limit]]
     return {"provider": settings.data_provider, "count": len(out), "offset": offset, "has_more": offset + limit < len(out),
-            "results": page, "loading": market_data.loading()}
+            "results": page, "loading": market_data.loading(), "order": order, "dir": dir}
 
 
 @router.get("/pulse/leaders")
