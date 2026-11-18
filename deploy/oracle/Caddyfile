@@ -1,4 +1,12 @@
 # HTTPS for the app. Caddy gets and renews the certificate by itself (Let's Encrypt).
+{
+	# Prefer the certificate chain that ends in the long-established ISRG Root X1, which every browser and antivirus
+	# (some keep their own list of trusted roots, e.g. Bitdefender) already trusts; falls back to the default chain.
+	preferred_chains {
+		root_common_name "ISRG Root X1"
+	}
+}
+
 {$DOMAIN} {
 	encode gzip
 	reverse_proxy app:8000
